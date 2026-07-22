@@ -1,8 +1,8 @@
 import request from '@/config/axios'
 
 export interface StageVO {
-  stageId: string | number
-  projectId: string | number
+  stageId: string
+  projectId: string
   stageName: string
   stageCode?: string
   sortOrder?: number
@@ -22,11 +22,11 @@ export const updateStage = (data: StageVO) => {
   return request.put({ url: '/pms/project-stage/update', data })
 }
 
-export const deleteStage = (id: number) => {
+export const deleteStage = (id: string | number) => {
   return request.delete({ url: '/pms/project-stage/delete?id=' + id })
 }
 
-export const getStage = (id: number) => {
+export const getStage = (id: string | number) => {
   return request.get({ url: '/pms/project-stage/get?id=' + id })
 }
 

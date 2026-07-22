@@ -135,6 +135,18 @@ const configGantt = () => {
 
   // 右键菜单
   gantt.config.context_menu = true
+
+  // 初始化缩放扩展
+  if (gantt.ext && gantt.ext.zoom) {
+    gantt.ext.zoom.init({
+      levels: [
+        { name: 'day', scale_height: 50, min_column_width: 30, scales: [{ unit: 'day', step: 1, format: '%m-%d' }] },
+        { name: 'week', scale_height: 50, min_column_width: 50, scales: [{ unit: 'week', step: 1, format: '%W周' }] },
+        { name: 'month', scale_height: 50, min_column_width: 80, scales: [{ unit: 'month', step: 1, format: '%Y年%m月' }] },
+        { name: 'quarter', scale_height: 50, min_column_width: 120, scales: [{ unit: 'month', step: 3, format: (d: any) => d.getFullYear() + ' Q' + (Math.floor(d.getMonth() / 3) + 1) }] }
+      ]
+    })
+  }
 }
 
 const setScaleConfig = (s: string) => {
@@ -252,6 +264,9 @@ const buildGanttData = () => {
 }
 
 // ==================== 渲染 ====================
+let dragEventId: any = null
+let clickEventId: any = null
+
 const renderGantt = () => {
   if (!ganttRef.value) return
 
@@ -262,16 +277,16 @@ const renderGantt = () => {
   } else {
     gantt.clearAll()
     configGantt()
-    gantt.render()
   }
 
   const ganttData = buildGanttData()
   gantt.parse(ganttData)
 
-  // 拖拽事件
-  gantt.attachEvent('onAfterTaskDrag', async (id: any, mode: any, e: any) => {
+  // 拖拽事件 — 先分离旧的再绑定新的
+  if (dragEventId) gantt.detachEvent(dragEventId)
+  dragEventId = gantt.attachEvent('onAfterTaskDrag', async (id: any, mode: any, e: any) => {
     const task = gantt.getTask(id)
-    if (task.type === 'project') return // 阶段节点不可拖拽
+    if (task.type === 'project') return
     try {
       await updateTask({
         taskId: String(id),
@@ -283,12 +298,9 @@ const renderGantt = () => {
     }
   })
 
-  // 点击事件
-  gantt.attachEvent('onTaskClick', (id: any, e: any) => {
-    const task = gantt.getTask(id)
-    if (task.type !== 'project') {
-      // 触发任务详情
-    }
+  // 点击事件 — 先分离旧的再绑定新的
+  if (clickEventId) gantt.detachEvent(clickEventId)
+  clickEventId = gantt.attachEvent('onTaskClick', (id: any, e: any) => {
     return true
   })
 }

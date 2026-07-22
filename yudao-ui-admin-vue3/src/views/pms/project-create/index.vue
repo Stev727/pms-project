@@ -363,7 +363,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { getProjectList, getProject, createProject, ProjectVO } from '@/api/pms/project'
@@ -483,7 +483,7 @@ function getManagerName(id?: number): string {
 async function selectTemplate(id: number | string) {
   selectedTemplate.value = id
   try {
-    const tpl = await getProject(id as number)
+    const tpl = await getProject(String(id))
     previewTasks.value = (tpl as any)?.tasks || []
     // 同时加载阶段和任务到 adjustedTasks（保持原始 ID 类型，避免雪花 ID 精度丢失）
     await loadTemplateTasks(id)
@@ -795,6 +795,10 @@ onMounted(async () => {
       loadTemplateTasks(tpl.projectId).catch(() => {})
     }
   }
+})
+
+onUnmounted(() => {
+  stopAutoSaveDraft()
 })
 </script>
 

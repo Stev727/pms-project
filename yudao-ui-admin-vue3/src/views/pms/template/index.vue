@@ -521,7 +521,7 @@ const stageTreeData = computed(() => {
     return {
       ...stage,
       isStage: true,
-      taskName: stage.taskName,
+      taskName: stage.stageName,
       children
     }
   })
@@ -644,7 +644,7 @@ const saveEdit = async () => {
     // 4. 删除标记的任务
     for (const id of editDeletedTaskIds.value) {
       if (!String(id).startsWith('new_')) {
-        await deleteTask(Number(id))
+        await deleteTask(String(id))
       }
     }
 

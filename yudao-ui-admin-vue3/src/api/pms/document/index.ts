@@ -27,11 +27,11 @@ export const updateDocument = (data: DocumentVO) => {
   return request.put({ url: '/pms/document/update', data })
 }
 
-export const deleteDocument = (id: number) => {
+export const deleteDocument = (id: string | number) => {
   return request.delete({ url: '/pms/document/delete?id=' + id })
 }
 
-export const getDocument = (id: number) => {
+export const getDocument = (id: string | number) => {
   return request.get({ url: '/pms/document/get?id=' + id })
 }
 

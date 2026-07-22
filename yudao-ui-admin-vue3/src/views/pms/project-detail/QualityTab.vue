@@ -22,7 +22,7 @@
 
     <el-table :data="filteredList" border stripe v-loading="loading" @row-click="openDetail">
       <el-table-column prop="issueCode" label="编号" width="100" />
-      <el-table-column prop="description" label="问题描述" min-width="200" show-overflow-tooltip />
+      <el-table-column prop="issueDescription" label="问题描述" min-width="200" show-overflow-tooltip />
       <el-table-column label="严重程度" width="90" align="center">
         <template #default="{ row }">
           <el-tag size="small" :type="getSeverityType(row.severity)">{{ getSeverityLabel(row.severity) }}</el-tag>
@@ -73,9 +73,9 @@
           <el-descriptions-item label="责任人">{{ selected.responsiblePerson || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ getStatusLabel(selected.status) }}</el-descriptions-item>
           <el-descriptions-item label="发现日期">{{ formatDate(selected.foundDate) }}</el-descriptions-item>
-          <el-descriptions-item label="关闭日期">{{ formatDate(selected.closedDate) }}</el-descriptions-item>
-          <el-descriptions-item label="问题描述" :span="2">{{ selected.description || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="根因分析" :span="2">{{ selected.rootCause || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关闭日期">{{ formatDate(selected.closeTime) }}</el-descriptions-item>
+          <el-descriptions-item label="问题描述" :span="2">{{ selected.issueDescription || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="根因分析" :span="2">{{ selected.rootCauseDetail || '-' }}</el-descriptions-item>
           <el-descriptions-item label="解决方案" :span="2">{{ selected.solution || '-' }}</el-descriptions-item>
         </el-descriptions>
       </template>
@@ -154,8 +154,8 @@ function openDetail(row: any) { selected.value = row; drawerVisible.value = true
 
 async function closeIssue(row: any) {
   try {
-    await updateQualityIssue({ issueId: row.issueId, status: 'closed', closedDate: new Date().toISOString().split('T')[0] } as any)
-    row.status = 'closed'
+    await updateQualityIssue({ issueId: row.issueId, status: 'closed', closeTime: new Date().toISOString().split('T')[0] } as any)
+    await fetchList()
     ElMessage.success('问题已关闭')
   } catch (e) { console.error(e) }
 }
@@ -164,7 +164,16 @@ async function submitIssue() {
   if (!newIssue.description) { ElMessage.warning('请填写问题描述'); return }
   saving.value = true
   try {
-    await createQualityIssue({ ...newIssue, projectId: Number(props.projectId), status: 'open', foundDate: new Date().toISOString().split('T')[0] } as any)
+    await createQualityIssue({
+      issueDescription: newIssue.description,
+      severity: newIssue.severity,
+      rootCauseCategory: newIssue.category,
+      rootCauseDetail: newIssue.rootCause,
+      solution: newIssue.solution,
+      impactScope: newIssue.source,
+      projectId: props.projectId,
+      status: 'open'
+    } as any)
     ElMessage.success('问题已录入')
     showForm.value = false
     Object.assign(newIssue, { description: '', severity: 'minor', category: 'design', responsiblePerson: '', source: '', rootCause: '', solution: '' })

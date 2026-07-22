@@ -106,7 +106,7 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsDocument' })
 
-const { getUserName } = useUserNames()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const searchName = ref('')
 const currentPage = ref(1)
@@ -218,6 +218,7 @@ async function loadDocuments() {
 async function loadData() {
   try {
     projects.value = (await getProjectList()) as ProjectVO[]
+    await ensureUsersLoaded()
   } catch (e) {
     console.error(e)
   }

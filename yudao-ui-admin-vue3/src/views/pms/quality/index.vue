@@ -235,7 +235,7 @@ const fetchList = async () => {
       ...item,
       issueNo: item.issueCode || '',
       title: item.issueDescription || '',
-      owner: item.assigneeId ? getUserName(Number(item.assigneeId)) : (item.resolverId ? getUserName(Number(item.resolverId)) : '-'),
+      owner: item.assigneeId ? getUserName(item.assigneeId) : (item.resolverId ? getUserName(item.resolverId) : '-'),
       foundDate: item.createTime || '',
       phase: item.rootCauseCategory || '',
       description: item.impactScope || item.rootCauseDetail || '',
@@ -318,11 +318,10 @@ const submitCreate = async () => {
   saving.value = true
   try {
     await createQualityIssue({
-      projectId: Number(createForm.projectId),
+      projectId: createForm.projectId,
       issueDescription: createForm.title,
       severity: createForm.severity,
-      assigneeId: createForm.owner ? Number(createForm.owner) : undefined,
-      impactScope: createForm.description,
+      assigneeId: createForm.owner ? Number(createForm.owner) : undefined,      impactScope: createForm.description,
       status: 'new'
     } as QualityIssueVO)
     message.success('质量问题已创建')

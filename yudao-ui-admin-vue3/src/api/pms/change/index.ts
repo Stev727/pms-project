@@ -8,7 +8,7 @@ export interface ChangeRecordVO {
   changeReason?: string
   changeDescription?: string
   initiatorId?: number
-  approvalId?: number
+  approvalId?: string
   approverId?: number
   approvalStatus?: string
   affectedTasks?: string
@@ -26,11 +26,11 @@ export const updateChangeRecord = (data: ChangeRecordVO) => {
   return request.put({ url: '/pms/change-record/update', data })
 }
 
-export const deleteChangeRecord = (id: number) => {
+export const deleteChangeRecord = (id: string | number) => {
   return request.delete({ url: '/pms/change-record/delete?id=' + id })
 }
 
-export const getChangeRecord = (id: number) => {
+export const getChangeRecord = (id: string | number) => {
   return request.get({ url: '/pms/change-record/get?id=' + id })
 }
 

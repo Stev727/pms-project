@@ -65,13 +65,7 @@
     </el-row>
 
     <!-- 任务详情抽屉 -->
-    <TaskDetailDrawer
-      v-if="drawerVisible"
-      :task-id="currentTaskId"
-      :project-id="currentProjectId"
-      @close="drawerVisible = false"
-      @refresh="loadTasks"
-    />
+    <TaskDetailDrawer ref="taskDrawerRef" @refresh="loadTasks" />
   </div>
 </template>
 
@@ -82,19 +76,19 @@ import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { useCache } from '@/hooks/web/useCache'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsWorkbench' })
 
 const { wsCache } = useCache()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const TaskDetailDrawer = defineAsyncComponent(() => import('../project-detail/TaskDetailDrawer.vue'))
 
 const activeTab = ref('not_started')
 const allTasks = ref<TaskVO[]>([])
 const projects = ref<ProjectVO[]>([])
 const loading = ref(false)
-const drawerVisible = ref(false)
-const currentTaskId = ref('')
-const currentProjectId = ref('')
+const taskDrawerRef = ref()
 
 const completionChartRef = ref<HTMLElement>()
 const volumeChartRef = ref<HTMLElement>()
@@ -139,7 +133,7 @@ const filteredTasks = computed(() => {
 const groupedTasks = computed(() => {
   const tasks = filteredTasks.value
   if (activeTab.value === 'delayed') {
-    const sorted = [...tasks].sort((a, b) => calcDelayDays(b.planEndDate) - calcDelayDays(a.planEndDate))
+    const sorted = [...tasks].sort((a, b) => calcDelayDays(b.planEndDate, b.completeStatus) - calcDelayDays(a.planEndDate, a.completeStatus))
     return [{ title: `延期任务 (${sorted.length})`, items: sorted }]
   }
   const now = new Date()
@@ -186,9 +180,7 @@ function onTabChange() {
 }
 
 function openTaskDetail(task: TaskVO) {
-  currentTaskId.value = String(task.taskId)
-  currentProjectId.value = String(task.projectId)
-  drawerVisible.value = true
+  taskDrawerRef.value?.open(task)
 }
 
 function getProjectName(projectId: any): string {
@@ -199,10 +191,11 @@ async function loadTasks() {
   loading.value = true
   try {
     const userInfo = wsCache.get('userInfo')
-    const currentUserId = userInfo?.id || 1
+    const currentUserId = userInfo?.id
     const [taskRes, projectRes] = await Promise.all([getTaskList(), getProjectList()])
-    allTasks.value = (taskRes as TaskVO[]).filter(t => t.mainOwnerId === currentUserId)
+    allTasks.value = (taskRes as TaskVO[]).filter(t => String(t.mainOwnerId) === String(currentUserId))
     projects.value = projectRes as ProjectVO[]
+    await ensureUsersLoaded()
   } catch (e) {
     console.error('加载任务失败', e)
   } finally {
@@ -215,7 +208,7 @@ function initCharts() {
     completionChart = echarts.init(completionChartRef.value)
     const completed = allTasks.value.filter(t => t.completeStatus === 'completed').length
     const total = allTasks.value.length || 1
-    const onTime = allTasks.value.filter(t => t.completeStatus === 'completed' && calcDelayDays(t.planEndDate) === 0).length
+    const onTime = allTasks.value.filter(t => t.completeStatus === 'completed' && calcDelayDays(t.planEndDate, t.completeStatus) === 0).length
     completionChart.setOption({
       tooltip: { trigger: 'item' },
       series: [{

@@ -40,8 +40,8 @@
               <el-dropdown-menu>
                 <el-dropdown-item @click="handleExport" :disabled="true">导出项目</el-dropdown-item>
                 <el-dropdown-item @click="handleShareLink">分享链接</el-dropdown-item>
-                <el-dropdown-item @click="handleArchive" v-if="project.status !== 'archived'">归档项目</el-dropdown-item>
-                <el-dropdown-item divided @click="handleDelete">
+                <el-dropdown-item @click="handleArchive" v-if="project.status !== 'archived' && checkPermi(['pms:project:update'])">归档项目</el-dropdown-item>
+                <el-dropdown-item divided @click="handleDelete" v-if="checkPermi(['pms:project:delete'])">
                   <span style="color: #F53F3F">删除项目</span>
                 </el-dropdown-item>
               </el-dropdown-menu>
@@ -59,7 +59,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="实际开始">{{ formatDate(project.actualStartDate) }}</el-descriptions-item>
         <el-descriptions-item label="项目经理">{{ getManagerName(project) }}</el-descriptions-item>
-        <el-descriptions-item label="所属部门">{{ project.deptId || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="所属部门">{{ getDeptName(project.deptId) }}</el-descriptions-item>
         <el-descriptions-item label="项目预算">{{ project.budget ? `￥${project.budget}` : '-' }}</el-descriptions-item>
         <el-descriptions-item label="优先级">
           <el-tag :color="priorityMap[project.priority || 'normal']?.color" effect="plain" size="small">
@@ -480,7 +480,7 @@ const handleArchive = () => {
 const handleDelete = () => {
   message.delConfirm(`确认删除项目「${project.value?.projectName}」？此操作不可恢复！`).then(async () => {
     try {
-      await import('@/api/pms/project').then(m => m.deleteProject(project.value!.projectId as number))
+      await import('@/api/pms/project').then(m => m.deleteProject(project.value!.projectId))
       message.success('删除成功')
       goBack()
     } catch (e) { message.error('删除失败') }
@@ -489,8 +489,21 @@ const handleDelete = () => {
 
 const goBack = () => { back() }
 
-onMounted(() => {
+// 部门名称解析
+const deptList = ref<any[]>([])
+const getDeptName = (deptId?: number) => {
+  if (!deptId) return '-'
+  const dept = deptList.value.find(d => d.id === deptId)
+  return dept?.name || `部门${deptId}`
+}
+
+onMounted(async () => {
   ensureUsersLoaded()
+  try {
+    const { getSimpleDeptList } = await import('@/api/system/dept')
+    const depts = await getSimpleDeptList()
+    deptList.value = (depts as any[]) || []
+  } catch { /* ignore */ }
   loadProjectData()
 })
 </script>

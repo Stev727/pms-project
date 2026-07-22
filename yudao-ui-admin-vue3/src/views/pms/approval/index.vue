@@ -59,7 +59,7 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsApproval' })
 
-const { getUserName } = useUserNames()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const filters = reactive({ projectId: '' as '' | number, type: '', status: '' })
 const projects = ref<ProjectVO[]>([])
 const loading = ref(false)
@@ -117,6 +117,7 @@ async function loadData() {
       getApprovalRecordList()
     ])
     projects.value = projectRes as ProjectVO[]
+    await ensureUsersLoaded()
     tableData.value = (approvalRes as any[]) || []
   } catch (e) {
     console.error(e)

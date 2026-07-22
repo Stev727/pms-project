@@ -131,9 +131,12 @@ import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import * as echarts from 'echarts'
 import {
-  projectStatusMap, phaseColorMap, taskStatusMap,
+  phaseColorMap, taskStatusMap,
   formatDate, calcDelayDays
 } from '../pms-utils'
+import { useUserNames } from '@/hooks/pms/useUserNames'
+
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 defineOptions({ name: 'PmsDashboard' })
 
@@ -221,6 +224,7 @@ const loadData = async () => {
   projectList.value = projects || []
   taskList.value = tasks || []
   stageList.value = stages || []
+  await ensureUsersLoaded()
   nextTick(() => renderAllCharts())
 }
 
@@ -362,7 +366,7 @@ const renderDelayByUserChart = () => {
   const userDelayCount: Record<string, number> = {}
   taskList.value.forEach(t => {
     if (calcDelayDays(t.planEndDate, t.completeStatus) > 0 && t.mainOwnerId) {
-      const key = `用户${t.mainOwnerId}`
+      const key = t.mainOwnerId ? getUserName(t.mainOwnerId) : '未分配'
       userDelayCount[key] = (userDelayCount[key] || 0) + 1
     }
   })

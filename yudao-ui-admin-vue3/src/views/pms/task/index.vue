@@ -43,7 +43,7 @@
       </div>
 
       <!-- 表格视图 -->
-      <el-table v-if="viewMode === 'table'" :data="filteredList" v-loading="loading" stripe border style="width: 100%" @row-click="openDetail">
+      <el-table v-if="viewMode === 'table'" :data="pagedList" v-loading="loading" stripe border style="width: 100%" @row-click="openDetail">
         <el-table-column label="任务名称" prop="taskName" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click.stop="openDetail(row)">{{ row.taskName }}</el-link>
@@ -193,11 +193,6 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="里程碑">
-              <el-switch v-model="taskForm.isMilestone" active-text="是" inactive-text="否" />
-            </el-form-item>
-          </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
@@ -290,6 +285,11 @@ const filteredList = computed(() => {
     const proj = projectList.value.find(p => String(p.projectId) === String(t.projectId))
     return proj && proj.projectType !== 'standard_template'
   })
+})
+
+const pagedList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredList.value.slice(start, start + pageSize)
 })
 
 const availableProjects = computed(() => {

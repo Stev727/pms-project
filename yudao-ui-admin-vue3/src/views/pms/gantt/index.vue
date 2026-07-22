@@ -49,10 +49,12 @@ import { getTaskList, updateTask, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { calcDelayDays } from '../pms-utils'
 import { gantt } from 'dhtmlx-gantt'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsGantt' })
 
 const message = useMessage()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const selectedProjectId = ref<string | undefined>()
 const projectList = ref<ProjectVO[]>([])
 const allTasks = ref<TaskVO[]>([])
@@ -70,6 +72,7 @@ const loadProjects = async () => {
   const [tasks, stages] = await Promise.all([getTaskList(), getStageList()])
   allTasks.value = tasks || []
   allStages.value = stages || []
+  await ensureUsersLoaded()
 }
 
 const loadGanttData = () => {
@@ -219,7 +222,7 @@ const buildGanttData = () => {
       duration: task.cycle || 1,
       progress: (task.progress || 0) / 100,
       parent: parentStage?.id || 0,
-      owner: task.mainOwnerId ? `用户${task.mainOwnerId}` : '-',
+      owner: task.mainOwnerId ? getUserName(task.mainOwnerId) : '-',
       status: task.completeStatus,
       critical: task.isCriticalPath,
       delayed: isDelayed,

@@ -1,9 +1,9 @@
 import request from '@/config/axios'
 
 export interface QualityIssueVO {
-  issueId: string | number
-  projectId?: number
-  taskId?: number
+  issueId: string
+  projectId?: string
+  taskId?: string
   issueCode?: string
   issueDescription?: string
   severity?: string
@@ -30,11 +30,11 @@ export const updateQualityIssue = (data: QualityIssueVO) => {
   return request.put({ url: '/pms/quality-issue/update', data })
 }
 
-export const deleteQualityIssue = (id: number) => {
+export const deleteQualityIssue = (id: string | number) => {
   return request.delete({ url: '/pms/quality-issue/delete?id=' + id })
 }
 
-export const getQualityIssue = (id: number) => {
+export const getQualityIssue = (id: string | number) => {
   return request.get({ url: '/pms/quality-issue/get?id=' + id })
 }
 

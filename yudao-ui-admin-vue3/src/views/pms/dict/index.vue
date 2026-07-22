@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 defineOptions({ name: 'PmsDict' })
@@ -246,6 +246,7 @@ function handleDelete(key: string, row: any) {
   }).catch(() => {})
 }
 
+let saveTimer: any = null
 onMounted(() => {
   // 初始化时从 localStorage 加载（模拟数据库持久化）
   const saved = localStorage.getItem('pms_dict_data')
@@ -259,9 +260,15 @@ onMounted(() => {
     } catch { /* ignore */ }
   }
   // 监听变化自动保存
-  setInterval(() => {
+  saveTimer = setInterval(() => {
     localStorage.setItem('pms_dict_data', JSON.stringify(dictData.value))
   }, 5000)
+})
+
+onUnmounted(() => {
+  if (saveTimer) { clearInterval(saveTimer); saveTimer = null }
+  // 离开时保存一次
+  localStorage.setItem('pms_dict_data', JSON.stringify(dictData.value))
 })
 </script>
 

@@ -98,10 +98,7 @@
       />
     </ContentWrap>
 
-    <TaskDetailDrawer
-      v-if="drawerVisible" :task-id="currentTaskId" :project-id="currentProjectId"
-      @close="drawerVisible = false" @refresh="loadData"
-    />
+    <TaskDetailDrawer ref="taskDrawerRef" @refresh="loadData" />
   </div>
 </template>
 
@@ -124,9 +121,7 @@ const allTasks = ref<TaskVO[]>([])
 const projects = ref<ProjectVO[]>([])
 const stages = ref<StageVO[]>([])
 const loading = ref(false)
-const drawerVisible = ref(false)
-const currentTaskId = ref('')
-const currentProjectId = ref('')
+const taskDrawerRef = ref()
 
 const filterUser = ref('')
 const filterPhase = ref('')
@@ -196,9 +191,7 @@ function getProjectName(projectId: any): string {
 }
 
 function openTaskDetail(row: TaskVO) {
-  currentTaskId.value = String(row.taskId)
-  currentProjectId.value = String(row.projectId)
-  drawerVisible.value = true
+  taskDrawerRef.value?.open(row)
 }
 
 function filterList() { currentPage.value = 1 }

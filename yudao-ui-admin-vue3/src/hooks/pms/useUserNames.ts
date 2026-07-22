@@ -32,13 +32,13 @@ export function useUserNames() {
 
   /**
    * 根据用户ID获取昵称
+   * 注意：全程使用字符串比较，避免 Number() 转换雪花ID导致精度丢失
    */
   function getUserName(userId?: number | string): string {
-    if (userId === undefined || userId === null) return '未分配'
-    const id = typeof userId === 'string' ? Number(userId) : userId
-    if (isNaN(id)) return String(userId)
-    const user = userList.value.find((u: any) => u.id === id)
-    return user?.nickname || `用户${id}`
+    if (userId === undefined || userId === null || userId === '') return '未分配'
+    const idStr = String(userId)
+    const user = userList.value.find((u: any) => String(u.id) === idStr)
+    return user?.nickname || `用户${idStr}`
   }
 
   /**
@@ -54,7 +54,7 @@ export function useUserNames() {
    */
   function getUserNamesFromStr(idsStr?: string, separator = ', '): string {
     if (!idsStr) return '-'
-    const ids = idsStr.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n))
+    const ids = idsStr.split(',').map(s => s.trim()).filter(Boolean)
     return getUserNames(ids, separator)
   }
 

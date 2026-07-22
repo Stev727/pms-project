@@ -154,12 +154,14 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getChangeRecordList, createChangeRecord, updateChangeRecord, deleteChangeRecord, ChangeRecordVO } from '@/api/pms/change'
+import { getChangeRecordList, createChangeRecord, updateChangeRecord, ChangeRecordVO } from '@/api/pms/change'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsChange' })
 
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const loading = ref(false)
 const saving = ref(false)
 const filters = reactive({ number: '', projectId: '', type: '', status: '' })
@@ -217,8 +219,8 @@ const fetchList = async () => {
       projectName: getProjectName(item.projectId),
       type: item.changeType || '',
       status: item.approvalStatus || '',
-      applicant: item.initiatorId ? String(item.initiatorId) : '',
-      approver: item.approverId ? String(item.approverId) : '',
+      applicant: item.initiatorId ? getUserName(item.initiatorId) : '',
+      approver: item.approverId ? getUserName(item.approverId) : '',
       applyTime: item.createTime || '',
       urgent: item.scheduleImpact ? Number(item.scheduleImpact) > 0 : false,
       beforeContent: '',
@@ -250,7 +252,7 @@ async function submitChange() {
       changeDescription: newChange.title,
       changeType: newChange.type,
       changeReason: newChange.reason,
-      projectId: Number(newChange.projectId),
+      projectId: newChange.projectId,
       approvalStatus: 'pending'
     } as ChangeRecordVO)
     ElMessage.success('变更已提交')
@@ -299,6 +301,7 @@ async function loadData() {
   try {
     projects.value = (await getProjectList()) as ProjectVO[]
   } catch (e) { console.error(e) }
+  await ensureUsersLoaded()
   await fetchList()
 }
 onMounted(() => { loadData() })

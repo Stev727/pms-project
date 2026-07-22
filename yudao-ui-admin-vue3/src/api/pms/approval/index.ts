@@ -3,8 +3,8 @@ import request from '@/config/axios'
 export interface ApprovalRecordVO {
   approvalId: string
   projectId?: string
-  taskId?: number
-  changeId?: number
+  taskId?: string
+  changeId?: string
   approvalType?: string
   approvalNo?: string
   approvalStatus?: string
@@ -27,11 +27,11 @@ export const updateApprovalRecord = (data: ApprovalRecordVO) => {
   return request.put({ url: '/pms/approval-record/update', data })
 }
 
-export const deleteApprovalRecord = (id: number) => {
+export const deleteApprovalRecord = (id: string | number) => {
   return request.delete({ url: '/pms/approval-record/delete?id=' + id })
 }
 
-export const getApprovalRecord = (id: number) => {
+export const getApprovalRecord = (id: string | number) => {
   return request.get({ url: '/pms/approval-record/get?id=' + id })
 }
 

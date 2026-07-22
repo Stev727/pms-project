@@ -20,11 +20,11 @@ export const updateProjectMember = (data: ProjectMemberVO) => {
   return request.put({ url: '/pms/project-member/update', data })
 }
 
-export const deleteProjectMember = (id: number) => {
+export const deleteProjectMember = (id: string | number) => {
   return request.delete({ url: '/pms/project-member/delete?id=' + id })
 }
 
-export const getProjectMember = (id: number) => {
+export const getProjectMember = (id: string | number) => {
   return request.get({ url: '/pms/project-member/get?id=' + id })
 }
 

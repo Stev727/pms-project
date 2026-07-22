@@ -13,7 +13,9 @@
         </el-form-item>
         <el-form-item label="阶段">
           <el-select v-model="queryParams.currentStage" placeholder="全部" clearable style="width: 120px">
-            <el-option v-for="(v, k) in phaseColorMap" :key="k" :label="v.label" :value="k" v-if="!['立项','设计','开发','测试','验收','结项'].includes(k as string)" />
+            <template v-for="(v, k) in phaseColorMap" :key="k">
+              <el-option v-if="!['立项','设计','开发','测试','验收','结项'].includes(k as string)" :label="v.label" :value="k" />
+            </template>
           </el-select>
         </el-form-item>
         <el-form-item label="类型">
@@ -259,19 +261,19 @@ const filteredList = computed(() => {
   // 快捷筛选
   if (quickFilter.value === 'mine') {
     if (currentUserId.value) {
-      list = list.filter(p => Number(p.projectManagerId) === currentUserId.value)
+      list = list.filter(p => String(p.projectManagerId) === String(currentUserId.value))
     }
   } else if (quickFilter.value === 'involved') {
     if (currentUserId.value) {
       // 筛选当前用户参与的项目（项目经理或有任务分配给该用户）
       const involvedProjectIds = new Set<string>()
       taskList.value.forEach(t => {
-        if (Number(t.mainOwnerId) === currentUserId.value && t.projectId) {
+        if (String(t.mainOwnerId) === String(currentUserId.value) && t.projectId) {
           involvedProjectIds.add(String(t.projectId))
         }
       })
       list = list.filter(p => {
-        if (Number(p.projectManagerId) === currentUserId.value) return true
+        if (String(p.projectManagerId) === String(currentUserId.value)) return true
         return involvedProjectIds.has(String(p.projectId))
       })
     }
@@ -401,7 +403,7 @@ const handleEdit = (project: ProjectVO) => {
 
 const handleDelete = (project: ProjectVO) => {
   message.delConfirm(`确认删除项目「${project.projectName}」吗？`).then(async () => {
-    await import('@/api/pms/project').then(m => m.deleteProject(project.projectId as number))
+    await import('@/api/pms/project').then(m => m.deleteProject(project.projectId))
     message.success('删除成功')
     loadList()
   }).catch(() => {})
