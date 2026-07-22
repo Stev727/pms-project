@@ -1,8 +1,8 @@
 import request from '@/config/axios'
 
 export interface DocumentVO {
-  documentId: string | number
-  projectId?: number
+  documentId: string
+  projectId?: string
   taskId?: number
   fileName?: string
   fileType?: string

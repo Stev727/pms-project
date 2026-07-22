@@ -4,6 +4,13 @@
     <ContentWrap v-if="project">
       <div class="detail-header">
         <div class="header-left">
+          <!-- 面包屑导航 -->
+          <div class="breadcrumb">
+            <el-breadcrumb separator=">">
+              <el-breadcrumb-item :to="{ path: '/pms/project' }">项目管理</el-breadcrumb-item>
+              <el-breadcrumb-item>{{ project.projectName }}</el-breadcrumb-item>
+            </el-breadcrumb>
+          </div>
           <h2 class="project-title">
             {{ project.projectName }}
             <el-tag v-if="project.isKeyProject" type="danger" size="small" effect="dark">重点</el-tag>
@@ -21,6 +28,9 @@
           </div>
         </div>
         <div class="header-right">
+          <el-button @click="handleCopyProject" v-if="checkPermi(['pms:project:create'])">
+            <Icon icon="ep:copy-document" class="mr-5px" />复制项目
+          </el-button>
           <el-button @click="handleEdit" v-if="checkPermi(['pms:project:update'])">
             <Icon icon="ep:edit" class="mr-5px" />编辑
           </el-button>
@@ -29,6 +39,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item @click="handleExport">导出项目</el-dropdown-item>
+                <el-dropdown-item @click="handleShareLink">分享链接</el-dropdown-item>
                 <el-dropdown-item @click="handleArchive" v-if="project.status !== 'archived'">归档项目</el-dropdown-item>
                 <el-dropdown-item divided @click="handleDelete">
                   <span style="color: #F53F3F">删除项目</span>
@@ -39,41 +50,6 @@
           <el-button @click="goBack"><Icon icon="ep:back" class="mr-5px" />返回</el-button>
         </div>
       </div>
-
-      <!-- 统计卡片 -->
-      <el-row :gutter="16" class="mt-16px">
-        <el-col :span="6">
-          <div class="stat-box">
-            <div class="stat-label">总进度</div>
-            <div class="stat-value">{{ project.progress || 0 }}%</div>
-            <el-progress :percentage="project.progress || 0" :stroke-width="6" :show-text="false" :color="getProgressColor(project)" />
-          </div>
-        </el-col>
-        <el-col :span="6">
-          <div class="stat-box">
-            <div class="stat-label">任务完成</div>
-            <div class="stat-value">{{ taskStats.completed }} / {{ taskStats.total }}</div>
-            <div class="stat-sub" style="color: #00B42A">{{ taskStats.completionRate }}% 完成</div>
-          </div>
-        </el-col>
-        <el-col :span="6">
-          <div class="stat-box">
-            <div class="stat-label">延期任务</div>
-            <div class="stat-value" :class="{ 'text-danger': taskStats.delayed > 0 }">
-              {{ taskStats.delayed }}
-              <Icon v-if="taskStats.delayed > 0" icon="ep:warning-filled" class="ml-4px" style="color: #F53F3F" />
-            </div>
-            <div class="stat-sub" v-if="taskStats.delayed > 0" style="color: #F53F3F">需关注</div>
-          </div>
-        </el-col>
-        <el-col :span="6">
-          <div class="stat-box">
-            <div class="stat-label">质量问题</div>
-            <div class="stat-value">{{ taskStats.qualityIssues }}</div>
-            <div class="stat-sub" style="color: #86909C">待关闭 {{ taskStats.pendingIssues }}</div>
-          </div>
-        </el-col>
-      </el-row>
 
       <!-- 项目基本信息 -->
       <el-descriptions :column="4" border class="mt-16px" size="small">
@@ -98,10 +74,18 @@
     <!-- Tab 容器 -->
     <ContentWrap class="mt-16px">
       <el-tabs v-model="activeTab" type="card" @tab-change="handleTabChange">
+        <!-- 概览 Tab (NEW - FATAL+SEVERE 修复) -->
+        <el-tab-pane label="概览" name="overview">
+          <template v-if="activeTab === 'overview'">
+            <OverviewTab :tasks="projectTasks" :stages="projectStages" :project="project" />
+          </template>
+        </el-tab-pane>
+
         <!-- 任务列表 Tab -->
         <el-tab-pane label="任务列表" name="tasks">
           <template v-if="activeTab === 'tasks'">
-            <TaskListTab :project-id="projectId" :tasks="projectTasks" :stages="projectStages" @task-click="openTaskDrawer" @refresh="loadProjectData" @create-task="openCreateTaskDialog" />
+            <TaskListTab :project-id="projectId" :tasks="projectTasks" :stages="projectStages"
+              @task-click="openTaskDrawer" @refresh="loadProjectData" @create-task="openCreateTaskDialog" />
           </template>
         </el-tab-pane>
 
@@ -142,24 +126,38 @@
           </template>
         </el-tab-pane>
 
-        <!-- 文档 Tab -->
+        <!-- 成员 Tab (NEW - FATAL-1 修复) -->
+        <el-tab-pane label="成员" name="members">
+          <template v-if="activeTab === 'members'">
+            <MembersTab :project-id="projectId" ref="membersTabRef" />
+          </template>
+        </el-tab-pane>
+
+        <!-- 文档 Tab (NEW - FATAL-4 修复) -->
         <el-tab-pane label="文档" name="documents">
           <template v-if="activeTab === 'documents'">
-            <el-empty description="文档管理功能开发中" />
+            <DocumentsTab :project-id="projectId" ref="documentsTabRef" />
+          </template>
+        </el-tab-pane>
+
+        <!-- 审批 Tab (NEW - FATAL-2 修复) -->
+        <el-tab-pane label="审批记录" name="approvals">
+          <template v-if="activeTab === 'approvals'">
+            <ApprovalTab :project-id="projectId" ref="approvalTabRef" />
           </template>
         </el-tab-pane>
 
         <!-- 质量 Tab -->
         <el-tab-pane label="质量" name="quality">
           <template v-if="activeTab === 'quality'">
-            <el-empty description="质量管理功能开发中" />
+            <QualityTab :project-id="projectId" ref="qualityTabRef" />
           </template>
         </el-tab-pane>
 
-        <!-- 变更 Tab -->
-        <el-tab-pane label="变更" name="changes">
+        <!-- 变更 Tab (NEW - SEVERE-4 修复) -->
+        <el-tab-pane label="变更记录" name="changes">
           <template v-if="activeTab === 'changes'">
-            <el-empty description="变更管理功能开发中" />
+            <ChangesTab :project-id="projectId" ref="changesTabRef" />
           </template>
         </el-tab-pane>
       </el-tabs>
@@ -189,25 +187,30 @@
           <el-col :span="12">
             <el-form-item label="任务类型" prop="taskType">
               <el-select v-model="taskForm.taskType" placeholder="请选择" class="w-full">
-                <el-option label="设计" value="design" />
-                <el-option label="评审" value="review" />
-                <el-option label="测试" value="testing" />
-                <el-option label="采购" value="procurement" />
-                <el-option label="打样" value="prototyping" />
-                <el-option label="文档" value="documentation" />
-                <el-option label="审批" value="approval" />
-                <el-option label="供方协同" value="supplier_synergy" />
-                <el-option label="其他" value="other" />
+                <el-option v-for="opt in taskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="优先级" prop="priority">
               <el-select v-model="taskForm.priority" placeholder="请选择" class="w-full">
-                <el-option label="普通" value="normal" />
-                <el-option label="高" value="high" />
-                <el-option label="紧急" value="urgent" />
-                <el-option label="低" value="low" />
+                <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="责任人" prop="mainOwnerId">
+              <el-select v-model="taskForm.mainOwnerId" filterable placeholder="请选择" class="w-full">
+                <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="协助人">
+              <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选" class="w-full">
+                <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -255,12 +258,19 @@
 import { getProject, ProjectVO } from '@/api/pms/project'
 import { getTaskList, createTask, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
+import { getSimpleUserList } from '@/api/system/user'
 import GanttTab from './GanttTab.vue'
 import TaskListTab from './TaskListTab.vue'
 import TaskDetailDrawer from './TaskDetailDrawer.vue'
+import OverviewTab from './OverviewTab.vue'
+import MembersTab from './MembersTab.vue'
+import DocumentsTab from './DocumentsTab.vue'
+import ApprovalTab from './ApprovalTab.vue'
+import ChangesTab from './ChangesTab.vue'
+import QualityTab from './QualityTab.vue'
 import {
   projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
-  taskStatusMap, formatDate, calcDuration, calcDelayDays
+  taskTypeOptions, priorityOptions, taskStatusMap, formatDate, calcDuration, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 
@@ -271,13 +281,21 @@ const { push, back } = useRouter()
 const message = useMessage()
 
 const loading = ref(false)
-const activeTab = ref('tasks')
+const activeTab = ref('overview')
 const project = ref<ProjectVO>()
 const projectId = computed(() => route.params.id as string)
 const projectTasks = ref<TaskVO[]>([])
 const projectStages = ref<StageVO[]>([])
 const taskDependencies = ref<any[]>([])
 const taskDrawerRef = ref()
+const membersTabRef = ref()
+const documentsTabRef = ref()
+const approvalTabRef = ref()
+const qualityTabRef = ref()
+const changesTabRef = ref()
+
+// 用户列表（用于责任人选择）
+const userList = ref<any[]>([])
 
 // ==================== 任务创建弹窗 ====================
 const createTaskDialogVisible = ref(false)
@@ -291,6 +309,7 @@ const taskForm = reactive({
   planStartDate: '',
   planEndDate: '',
   mainOwnerId: undefined as number | undefined,
+  helperIds: [] as number[],
   isMilestone: false,
   description: '',
   outputRequirement: ''
@@ -313,14 +332,11 @@ const taskStats = computed(() => {
     return calcDelayDays(t.planEndDate, t.completeStatus) > 0
   }).length
   return {
-    total,
-    completed,
-    delayed,
+    total, completed, delayed,
     inProgress: tasks.filter(t => t.completeStatus === 'in_progress').length,
     notStarted: tasks.filter(t => t.completeStatus === 'not_started').length,
     completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-    qualityIssues: 0,
-    pendingIssues: 0
+    qualityIssues: 0, pendingIssues: 0
   }
 })
 
@@ -344,12 +360,7 @@ const kanbanColumns = computed(() => {
       }
       return false
     })
-    return {
-      key: status,
-      title: config?.label || status,
-      color: config?.borderColor || '#86909C',
-      tasks
-    }
+    return { key: status, title: config?.label || status, color: config?.borderColor || '#86909C', tasks }
   })
 })
 
@@ -373,7 +384,12 @@ const loadProjectData = async () => {
 }
 
 const handleTabChange = (tab: string) => {
-  // 懒加载，首次切换时触发渲染
+  // 懒加载 — 首次切换时刷新子组件数据
+  if (tab === 'members') { nextTick(() => membersTabRef.value?.refresh?.()) }
+  if (tab === 'documents') { nextTick(() => documentsTabRef.value?.refresh?.()) }
+  if (tab === 'approvals') { nextTick(() => approvalTabRef.value?.refresh?.()) }
+  if (tab === 'quality') { nextTick(() => qualityTabRef.value?.refresh?.()) }
+  if (tab === 'changes') { nextTick(() => changesTabRef.value?.refresh?.()) }
 }
 
 // ==================== 辅助函数 ====================
@@ -385,7 +401,11 @@ const getPhaseTagStyle = (stage?: string) => {
 const getStatusType = (status: string) => projectStatusMap[status]?.type || 'info'
 const getStatusLabel = (status: string) => projectStatusMap[status]?.label || status
 const getProjectTypeLabel = (type?: string) => projectTypeOptions.find(o => o.value === type)?.label || type || '-'
-const getManagerName = (item: any) => item?.projectManagerId ? `用户${item.projectManagerId}` : (item?.mainOwnerId ? `用户${item.mainOwnerId}` : '未分配')
+const getManagerName = (item: any) => {
+  if (item?.projectManagerId) return userList.value.find(u => u.id === item.projectManagerId)?.nickname || `用户${item.projectManagerId}`
+  if (item?.mainOwnerId) return userList.value.find(u => u.id === item.mainOwnerId)?.nickname || `用户${item.mainOwnerId}`
+  return '未分配'
+}
 const getProgressColor = (proj: ProjectVO) => {
   if (proj.status === 'completed') return '#00B42A'
   if (proj.status === 'delayed') return '#F53F3F'
@@ -400,17 +420,10 @@ const openTaskDrawer = (task: TaskVO) => {
 const openCreateTaskDialog = () => {
   taskFormRef.value?.resetFields?.()
   Object.assign(taskForm, {
-    taskName: '',
-    stageId: projectStages.value[0]?.stageId,
-    taskType: 'design',
-    priority: 'normal',
-    cycle: 5,
-    planStartDate: '',
-    planEndDate: '',
-    mainOwnerId: undefined,
-    isMilestone: false,
-    description: '',
-    outputRequirement: ''
+    taskName: '', stageId: projectStages.value[0]?.stageId, taskType: 'design',
+    priority: 'normal', cycle: 5, planStartDate: '', planEndDate: '',
+    mainOwnerId: undefined, helperIds: [], isMilestone: false,
+    description: '', outputRequirement: ''
   })
   createTaskDialogVisible.value = true
 }
@@ -432,169 +445,110 @@ const submitCreateTask = async () => {
     await loadProjectData()
   } catch (e: any) {
     message.error(e?.message || '任务创建失败')
-  } finally {
-    submittingTask.value = false
-  }
+  } finally { submittingTask.value = false }
 }
 
-const handleEdit = () => {
-  push({ name: 'PmsProject', query: { edit: projectId.value } })
+const handleEdit = () => { push({ name: 'PmsProject', query: { edit: projectId.value } }) }
+
+const handleCopyProject = () => {
+  message.info('复制项目功能开发中')
+  // TODO: 跳转创建向导并预填数据
 }
 
 const handleExport = () => message.info('导出功能开发中')
-const handleArchive = () => {
-  message.confirm(`确认归档项目「${project.value?.projectName}」？`).then(() => {
-    message.success('归档成功')
-  }).catch(() => {})
+
+const handleShareLink = () => {
+  const url = `${window.location.origin}/pms/project-detail/${projectId.value}`
+  navigator.clipboard.writeText(url).then(() => {
+    message.success('项目链接已复制到剪贴板')
+  }).catch(() => {
+    message.info(`项目链接: ${url}`)
+  })
 }
-const handleDelete = () => {
-  message.delConfirm(`确认删除项目「${project.value?.projectName}」？此操作不可恢复！`).then(() => {
-    message.success('删除成功')
-    goBack()
+
+const handleArchive = () => {
+  message.confirm(`确认归档项目「${project.value?.projectName}」？`).then(async () => {
+    try {
+      await import('@/api/pms/project').then(m => m.updateProject({ ...project.value!, archived: true, status: 'archived' } as any))
+      message.success('归档成功')
+      loadProjectData()
+    } catch (e) { message.error('归档失败') }
   }).catch(() => {})
 }
 
-const goBack = () => {
-  back()
+const handleDelete = () => {
+  message.delConfirm(`确认删除项目「${project.value?.projectName}」？此操作不可恢复！`).then(async () => {
+    try {
+      await import('@/api/pms/project').then(m => m.deleteProject(project.value!.projectId as number))
+      message.success('删除成功')
+      goBack()
+    } catch (e) { message.error('删除失败') }
+  }).catch(() => {})
+}
+
+const goBack = () => { back() }
+
+// 加载用户列表
+const loadUsers = async () => {
+  try {
+    const users = await getSimpleUserList()
+    userList.value = (users as any[]) || []
+  } catch (e) { console.error('加载用户列表失败', e) }
 }
 
 onMounted(() => {
+  loadUsers()
   loadProjectData()
 })
 </script>
 
 <style scoped>
 .detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  display: flex; justify-content: space-between; align-items: flex-start;
 }
+.breadcrumb { margin-bottom: 8px; }
 .project-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1D2129;
-  margin: 0 0 8px 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-size: 20px; font-weight: 600; color: #1D2129; margin: 0 0 8px 0;
+  display: flex; align-items: center; gap: 8px;
 }
 .project-sub {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  color: #4E5969;
+  display: flex; align-items: center; font-size: 13px; color: #4E5969;
 }
-.sub-item {
-  font-size: 13px;
-}
+.sub-item { font-size: 13px; }
 .header-right {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  display: flex; gap: 8px; align-items: center;
 }
-.stat-box {
-  background: #F7F8FA;
-  border-radius: 6px;
-  padding: 16px;
-  text-align: center;
-}
-.stat-label {
-  font-size: 13px;
-  color: #86909C;
-  margin-bottom: 8px;
-}
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1D2129;
-  margin-bottom: 4px;
-}
-.stat-sub {
-  font-size: 12px;
-  color: #86909C;
-}
-.text-danger {
-  color: #F53F3F !important;
-}
-.mt-16px {
-  margin-top: 16px;
-}
+.mt-16px { margin-top: 16px; }
 
 /* 看板 */
 .kanban-board {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  min-height: 400px;
+  display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; min-height: 400px;
 }
 .kanban-column {
-  flex: 0 0 260px;
-  background: #F7F8FA;
-  border-radius: 6px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 260px; background: #F7F8FA; border-radius: 6px; padding: 12px;
+  display: flex; flex-direction: column;
 }
 .kanban-column-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #E5E6EB;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #E5E6EB;
 }
 .column-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1D2129;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  font-size: 14px; font-weight: 600; color: #1D2129;
+  display: flex; align-items: center; gap: 6px;
 }
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.kanban-cards {
-  flex: 1;
-  overflow-y: auto;
-}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.kanban-cards { flex: 1; overflow-y: auto; }
 .kanban-card {
-  background: #FFF;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  border: 1px solid #E5E6EB;
-  transition: all 0.2s;
+  background: #FFF; border-radius: 4px; padding: 12px; margin-bottom: 8px;
+  cursor: pointer; border: 1px solid #E5E6EB; transition: all 0.2s;
 }
-.kanban-card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  border-color: #2468F2;
-}
+.kanban-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-color: #2468F2; }
 .kanban-card .card-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #1D2129;
-  margin-bottom: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 14px; font-weight: 500; color: #1D2129; margin-bottom: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .kanban-card .card-info {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #86909C;
-  margin-bottom: 4px;
+  display: flex; justify-content: space-between; font-size: 12px; color: #86909C; margin-bottom: 4px;
 }
-.kanban-empty {
-  text-align: center;
-  color: #C9CDD4;
-  font-size: 13px;
-  padding: 40px 0;
-}
+.kanban-empty { text-align: center; color: #C9CDD4; font-size: 13px; padding: 40px 0; }
 </style>

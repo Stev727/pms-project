@@ -1,8 +1,8 @@
 import request from '@/config/axios'
 
 export interface ChangeRecordVO {
-  changeId: string | number
-  projectId?: number
+  changeId: string
+  projectId?: string
   changeCode?: string
   changeType?: string
   changeReason?: string

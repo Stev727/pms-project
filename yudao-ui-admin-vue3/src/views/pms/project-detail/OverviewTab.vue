@@ -1,0 +1,284 @@
+<template>
+  <div class="overview-tab">
+    <!-- 统计卡片 -->
+    <el-row :gutter="16" class="mb-16px">
+      <el-col :span="6">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #DCE7FF"><Icon icon="ep:list" color="#2468F2" :size="22" /></div>
+          <div class="stat-info">
+            <div class="stat-label">总任务数</div>
+            <div class="stat-value">{{ stats.total }}</div>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="6">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #E8FFEA"><Icon icon="ep:circle-check" color="#00B42A" :size="22" /></div>
+          <div class="stat-info">
+            <div class="stat-label">已完成</div>
+            <div class="stat-value" style="color: #00B42A">{{ stats.completed }}</div>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="6">
+        <div class="stat-card">
+          <div class="stat-icon" style="background: #DCE7FF"><Icon icon="ep:loading" color="#2468F2" :size="22" /></div>
+          <div class="stat-info">
+            <div class="stat-label">进行中</div>
+            <div class="stat-value" style="color: #2468F2">{{ stats.inProgress }}</div>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="6">
+        <div class="stat-card" :class="{ 'stat-card-danger': stats.delayed > 0 }">
+          <div class="stat-icon" :style="{ background: stats.delayed > 0 ? '#FFECE8' : '#F2F3F5' }">
+            <Icon icon="ep:warning" :color="stats.delayed > 0 ? '#F53F3F' : '#86909C'" :size="22" />
+          </div>
+          <div class="stat-info">
+            <div class="stat-label">已延期</div>
+            <div class="stat-value" :style="{ color: stats.delayed > 0 ? '#F53F3F' : '#86909C' }">{{ stats.delayed }}</div>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <!-- 完成率环 + 阶段进度 -->
+    <el-row :gutter="16">
+      <el-col :span="8">
+        <div class="progress-ring-card">
+          <div class="card-title">整体完成率</div>
+          <div class="ring-container">
+            <el-progress type="circle" :percentage="stats.completionRate" :width="140" :stroke-width="12"
+              :color="stats.completionRate === 100 ? '#00B42A' : '#2468F2'" />
+          </div>
+          <div class="ring-detail">
+            <span>{{ stats.completed }}/{{ stats.total }} 任务</span>
+            <span v-if="stats.delayed > 0" style="color: #F53F3F">{{ stats.delayed }} 延期</span>
+          </div>
+        </div>
+      </el-col>
+      <el-col :span="16">
+        <div class="phase-timeline-card">
+          <div class="card-title">阶段进度</div>
+          <div class="phase-timeline">
+            <div v-for="(phase, index) in phaseProgress" :key="phase.stageId" class="phase-item">
+              <div class="phase-node" :class="{ active: phase.isActive, completed: phase.isCompleted }">
+                <Icon v-if="phase.isCompleted" icon="ep:check" :size="14" color="#fff" />
+                <span v-else>{{ index + 1 }}</span>
+              </div>
+              <div v-if="index < phaseProgress.length - 1" class="phase-line" :class="{ active: phase.isCompleted }" />
+              <div class="phase-label">{{ phase.stageName }}</div>
+              <div class="phase-stats">{{ phase.completedTasks }}/{{ phase.totalTasks }}</div>
+              <el-progress v-if="phase.totalTasks > 0" :percentage="phase.percentage" :stroke-width="4" :show-text="false"
+                :color="phase.isCompleted ? '#00B42A' : '#2468F2'" style="width: 80px" />
+            </div>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <!-- 里程碑状态 -->
+    <div class="milestone-card mt-16px" v-if="milestones.length > 0">
+      <div class="card-title">里程碑</div>
+      <el-timeline>
+        <el-timeline-item
+          v-for="ms in milestones"
+          :key="ms.taskId"
+          :timestamp="formatDate(ms.planEndDate)"
+          placement="top"
+          :type="ms.completeStatus === 'completed' ? 'success' : ms.isDelayed ? 'danger' : 'primary'"
+          :hollow="ms.completeStatus !== 'completed'"
+        >
+          <div class="milestone-item">
+            <span class="milestone-name">{{ ms.taskName }}</span>
+            <el-tag v-if="ms.completeStatus === 'completed'" size="small" type="success">已完成</el-tag>
+            <el-tag v-else-if="ms.isDelayed" size="small" type="danger">已延期</el-tag>
+            <el-tag v-else size="small" type="primary">进行中</el-tag>
+          </div>
+        </el-timeline-item>
+      </el-timeline>
+    </div>
+
+    <!-- 最近动态 -->
+    <div class="activity-card mt-16px">
+      <div class="card-title">最近动态</div>
+      <el-timeline v-if="recentActivities.length > 0">
+        <el-timeline-item
+          v-for="(activity, index) in recentActivities"
+          :key="index"
+          :timestamp="activity.time"
+          placement="top"
+          :type="activity.type"
+        >
+          {{ activity.content }}
+        </el-timeline-item>
+      </el-timeline>
+      <el-empty v-else description="暂无最近动态" :image-size="60" />
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+import { TaskVO } from '@/api/pms/task'
+import { StageVO } from '@/api/pms/stage'
+import { formatDate, calcDelayDays } from '../pms-utils'
+
+defineOptions({ name: 'OverviewTab' })
+
+const props = defineProps<{
+  tasks: TaskVO[]
+  stages: StageVO[]
+  project: any
+}>()
+
+// ==================== 任务统计 ====================
+const stats = computed(() => {
+  const tasks = props.tasks
+  const total = tasks.length
+  const completed = tasks.filter(t => t.completeStatus === 'completed').length
+  const inProgress = tasks.filter(t => t.completeStatus === 'in_progress').length
+  const notStarted = tasks.filter(t => t.completeStatus === 'not_started').length
+  const delayed = tasks.filter(t => {
+    if (t.completeStatus === 'completed' || t.completeStatus === 'cancelled') return false
+    return calcDelayDays(t.planEndDate, t.completeStatus) > 0
+  }).length
+  return {
+    total, completed, inProgress, notStarted, delayed,
+    completionRate: total > 0 ? Math.round((completed / total) * 100) : 0
+  }
+})
+
+// ==================== 阶段进度 ====================
+const phaseProgress = computed(() => {
+  return props.stages.map(stage => {
+    const stageTasks = props.tasks.filter(t => String(t.stageId) === String(stage.stageId))
+    const completedTasks = stageTasks.filter(t => t.completeStatus === 'completed').length
+    const totalTasks = stageTasks.length
+    const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+    const isCompleted = totalTasks > 0 && completedTasks === totalTasks
+    const isActive = totalTasks > 0 && completedTasks < totalTasks
+    return {
+      ...stage,
+      completedTasks,
+      totalTasks,
+      percentage,
+      isCompleted,
+      isActive
+    }
+  })
+})
+
+// ==================== 里程碑 ====================
+const milestones = computed(() => {
+  return props.tasks
+    .filter(t => t.isMilestone)
+    .map(t => ({
+      ...t,
+      isDelayed: calcDelayDays(t.planEndDate, t.completeStatus) > 0
+    }))
+    .sort((a, b) => {
+      if (!a.planEndDate) return 1
+      if (!b.planEndDate) return -1
+      return String(a.planEndDate).localeCompare(String(b.planEndDate))
+    })
+})
+
+// ==================== 最近动态（基于任务状态变化模拟） ====================
+const recentActivities = computed(() => {
+  const activities: any[] = []
+  const recent = [...props.tasks]
+    .filter(t => t.completeStatus === 'completed' && t.actualCompleteDate)
+    .sort((a, b) => {
+      if (!a.actualCompleteDate) return 1
+      if (!b.actualCompleteDate) return -1
+      return String(b.actualCompleteDate).localeCompare(String(a.actualCompleteDate))
+    })
+    .slice(0, 5)
+
+  for (const task of recent) {
+    activities.push({
+      content: `任务「${task.taskName}」已完成`,
+      time: formatDate(task.actualCompleteDate, 'MM-DD HH:mm'),
+      type: 'success'
+    })
+  }
+
+  const delayed = props.tasks
+    .filter(t => calcDelayDays(t.planEndDate, t.completeStatus) > 0)
+    .slice(0, 3)
+  for (const task of delayed) {
+    activities.push({
+      content: `任务「${task.taskName}」已延期 ${calcDelayDays(task.planEndDate, task.completeStatus)} 天`,
+      time: formatDate(new Date(), 'MM-DD HH:mm'),
+      type: 'danger'
+    })
+  }
+
+  if (activities.length === 0) {
+    activities.push({ content: '项目创建成功', time: formatDate(props.project?.createTime), type: 'primary' })
+  }
+
+  return activities.slice(0, 8)
+})
+</script>
+
+<style scoped>
+.overview-tab { }
+.mb-16px { margin-bottom: 16px; }
+.mt-16px { margin-top: 16px; }
+
+.stat-card {
+  display: flex; align-items: center; gap: 12px; background: #F7F8FA; border-radius: 8px;
+  padding: 16px; transition: all 0.2s;
+}
+.stat-card:hover { background: #EDEFF2; }
+.stat-card-danger { background: #FFECE8; }
+.stat-icon {
+  width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+}
+.stat-label { font-size: 13px; color: #86909C; margin-bottom: 4px; }
+.stat-value { font-size: 24px; font-weight: 700; color: #1D2129; }
+
+.card-title { font-size: 15px; font-weight: 600; color: #1D2129; margin-bottom: 16px; }
+
+.progress-ring-card {
+  background: #F7F8FA; border-radius: 8px; padding: 20px; text-align: center; height: 100%;
+}
+.ring-container { margin: 12px 0; display: flex; justify-content: center; }
+.ring-detail { display: flex; justify-content: center; gap: 16px; font-size: 13px; color: #4E5969; }
+
+.phase-timeline-card {
+  background: #F7F8FA; border-radius: 8px; padding: 20px;
+}
+.phase-timeline {
+  display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 12px;
+}
+.phase-item {
+  display: flex; flex-direction: column; align-items: center; min-width: 90px; position: relative;
+}
+.phase-node {
+  width: 30px; height: 30px; border-radius: 50%; background: #E5E6EB; color: #86909C;
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600;
+  z-index: 1; transition: all 0.3s;
+}
+.phase-node.active { background: #2468F2; color: #fff; }
+.phase-node.completed { background: #00B42A; color: #fff; }
+.phase-line {
+  position: absolute; top: 15px; left: 60px; width: calc(100% - 30px); height: 2px;
+  background: #E5E6EB; z-index: 0;
+}
+.phase-line.active { background: #00B42A; }
+.phase-label { font-size: 12px; font-weight: 600; color: #1D2129; margin-top: 8px; white-space: nowrap; }
+.phase-stats { font-size: 11px; color: #86909C; margin-top: 2px; }
+
+.milestone-card {
+  background: #F7F8FA; border-radius: 8px; padding: 20px;
+}
+.milestone-item { display: flex; align-items: center; gap: 8px; }
+.milestone-name { font-size: 14px; color: #1D2129; }
+
+.activity-card {
+  background: #F7F8FA; border-radius: 8px; padding: 20px;
+}
+</style>

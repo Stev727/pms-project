@@ -1,9 +1,9 @@
 import request from '@/config/axios'
 
 export interface TaskVO {
-  taskId: string | number
-  projectId: string | number
-  stageId?: number
+  taskId: string
+  projectId: string
+  stageId?: string
   parentTaskId?: number
   taskCode?: string
   taskName: string
@@ -38,11 +38,11 @@ export const updateTask = (data: TaskVO) => {
   return request.put({ url: '/pms/task/update', data })
 }
 
-export const deleteTask = (id: number) => {
+export const deleteTask = (id: string) => {
   return request.delete({ url: '/pms/task/delete?id=' + id })
 }
 
-export const getTask = (id: number) => {
+export const getTask = (id: string) => {
   return request.get({ url: '/pms/task/get?id=' + id })
 }
 

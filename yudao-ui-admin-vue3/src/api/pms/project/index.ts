@@ -1,7 +1,7 @@
 import request from '@/config/axios'
 
 export interface ProjectVO {
-  projectId: string | number
+  projectId: string
   projectCode: string
   projectName: string
   projectType?: string
@@ -33,11 +33,11 @@ export const updateProject = (data: ProjectVO) => {
   return request.put({ url: '/pms/project/update', data })
 }
 
-export const deleteProject = (id: number) => {
+export const deleteProject = (id: string) => {
   return request.delete({ url: '/pms/project/delete?id=' + id })
 }
 
-export const getProject = (id: number) => {
+export const getProject = (id: string) => {
   return request.get({ url: '/pms/project/get?id=' + id })
 }
 

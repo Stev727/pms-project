@@ -31,12 +31,25 @@
     <!-- 工具栏 -->
     <ContentWrap>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px">
-        <div>
+        <div style="display: flex; gap: 8px; align-items: center">
           <el-button type="primary" @click="handleCreate" v-hasPermi="['pms:project:create']">
             <Icon icon="ep:plus" class="mr-5px" />新建项目
           </el-button>
+          <!-- 快捷筛选 (MINOR-3 修复) -->
+          <el-radio-group v-model="quickFilter" size="small" @change="handleQuickFilter">
+            <el-radio-button label="all">全部</el-radio-button>
+            <el-radio-button label="mine">我负责的</el-radio-button>
+            <el-radio-button label="involved">我参与的</el-radio-button>
+            <el-radio-button label="archived">已归档</el-radio-button>
+          </el-radio-group>
         </div>
         <div style="display: flex; align-items: center; gap: 12px">
+          <el-button size="small" @click="handleBatchArchive" :disabled="selectedProjects.length === 0" v-if="checkPermi(['pms:project:update'])">
+            <Icon icon="ep:box" class="mr-4px" />批量归档
+          </el-button>
+          <el-button size="small" @click="handleExport" v-if="checkPermi(['pms:project:export'])">
+            <Icon icon="ep:download" class="mr-4px" />导出Excel
+          </el-button>
           <span style="color: #86909C; font-size: 14px">共 {{ filteredList.length }} 个项目</span>
           <el-radio-group v-model="viewMode" size="small">
             <el-radio-button label="card"><Icon icon="ep:grid" /></el-radio-button>
@@ -103,7 +116,11 @@
           </el-col>
         </el-row>
         <div v-if="pagedCardList.length === 0 && !loading" class="empty-state">
-          <el-empty description="暂无项目" />
+          <el-empty description="暂无项目">
+            <template #default>
+              <el-button type="primary" @click="handleCreate">新建第一个项目</el-button>
+            </template>
+          </el-empty>
         </div>
         <div style="display: flex; justify-content: flex-end; margin-top: 16px" v-if="filteredList.length > cardPageSize">
           <el-pagination
@@ -117,7 +134,9 @@
       </div>
 
       <!-- 列表视图 -->
-      <el-table v-else :data="filteredList" v-loading="loading" stripe style="width: 100%" @row-click="goDetail">
+      <el-table v-else :data="filteredList" v-loading="loading" stripe style="width: 100%" @row-click="goDetail"
+        @selection-change="handleTableSelection">
+        <el-table-column type="selection" width="40" />
         <el-table-column label="项目名称" prop="projectName" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click.stop="goDetail(row)">{{ row.projectName }}</el-link>
@@ -140,6 +159,19 @@
         <el-table-column label="进度" width="160">
           <template #default="{ row }">
             <el-progress :percentage="row.progress || 0" :stroke-width="8" :color="getProgressColor(row)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="完成率" width="100" align="center">
+          <template #default="{ row }">
+            <span :style="{ color: getCompletionColor(row) }">{{ getCompletionRate(row) }}%</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="延期任务" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="getDelayCount(row) > 0" type="danger" size="small" effect="plain">
+              {{ getDelayCount(row) }}
+            </el-tag>
+            <span v-else style="color: #86909C">0</span>
           </template>
         </el-table-column>
         <el-table-column label="负责人" width="100">
@@ -181,8 +213,10 @@ const { push } = useRouter()
 const message = useMessage()
 const loading = ref(false)
 const viewMode = ref<'card' | 'list'>('card')
+const quickFilter = ref('all')
 const projectList = ref<ProjectVO[]>([])
 const taskList = ref<any[]>([])
+const selectedProjects = ref<ProjectVO[]>([])
 const projectFormRef = ref()
 
 const queryParams = reactive({
@@ -210,6 +244,21 @@ const filteredList = computed(() => {
   if (queryParams.projectType) {
     list = list.filter(p => p.projectType === queryParams.projectType)
   }
+  // 快捷筛选 (MINOR-3 修复)
+  if (quickFilter.value === 'mine') {
+    // TODO: 当前用户ID比对
+  } else if (quickFilter.value === 'involved') {
+    // TODO: 当前用户参与的项目
+  } else if (quickFilter.value === 'archived') {
+    list = list.filter(p => p.archived || p.status === 'archived')
+  } else {
+    list = list.filter(p => !p.archived && p.status !== 'archived')
+  }
+  // 补充延期任务数 (SEVERE-2 修复)
+  list = list.map(p => ({
+    ...p,
+    delayCount: getDelayCountForProject(p)
+  }))
   return list
 })
 
@@ -250,6 +299,56 @@ const getProgressColor = (project: ProjectVO) => {
   if (project.status === 'completed') return '#00B42A'
   if (project.status === 'delayed') return '#F53F3F'
   return '#2468F2'
+}
+
+const getCompletionRate = (project: ProjectVO) => {
+  const tasks = taskList.value.filter(t => String(t.projectId) === String(project.projectId))
+  if (tasks.length === 0) return 0
+  const completed = tasks.filter(t => t.completeStatus === 'completed').length
+  return Math.round((completed / tasks.length) * 100)
+}
+
+const getCompletionColor = (project: ProjectVO) => {
+  const rate = getCompletionRate(project)
+  if (rate === 100) return '#00B42A'
+  if (rate >= 60) return '#2468F2'
+  return '#FF7D00'
+}
+
+const getDelayCount = (project: ProjectVO) => {
+  return getDelayCountForProject(project)
+}
+
+const getDelayCountForProject = (project: ProjectVO) => {
+  const tasks = taskList.value.filter(t => String(t.projectId) === String(project.projectId))
+  return tasks.filter(t => {
+    if (t.completeStatus === 'completed' || t.completeStatus === 'cancelled') return false
+    return calcDelayDays(t.planEndDate, t.completeStatus) > 0
+  }).length
+}
+
+const handleTableSelection = (rows: ProjectVO[]) => {
+  selectedProjects.value = rows
+}
+
+const handleQuickFilter = () => { cardCurrentPage.value = 1 }
+
+const handleBatchArchive = () => {
+  if (selectedProjects.value.length === 0) return
+  message.confirm(`确认归档 ${selectedProjects.value.length} 个项目？`).then(async () => {
+    const updateModule = await import('@/api/pms/project')
+    for (const p of selectedProjects.value) {
+      await updateModule.updateProject({ ...p, archived: true, status: 'archived' } as any)
+    }
+    message.success('批量归档成功')
+    selectedProjects.value = []
+    loadList()
+  }).catch(() => {})
+}
+
+const handleExport = () => {
+  message.info('导出Excel功能开发中')
+  // TODO: 调用导出API
 }
 
 const getManagerName = (project: ProjectVO) => {

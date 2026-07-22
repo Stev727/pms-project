@@ -1,8 +1,8 @@
 import request from '@/config/axios'
 
 export interface ProjectMemberVO {
-  memberId: string | number
-  projectId?: number
+  memberId: string
+  projectId?: string
   userId?: number
   roleCode?: string
   isExternal?: boolean

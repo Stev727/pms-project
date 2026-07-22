@@ -122,6 +122,30 @@ export function calcDuration(startDate?: any, endDate?: any): number {
 }
 
 // ==================== 字典选项 ====================
+// 注意：这些硬编码选项是 fallback，优先从字典管理页面维护的数据加载。
+// 字典数据存储在 localStorage `pms_dict_data` 中，通过 PmsDict 页面维护。
+export function loadDictOptions(dictKey: string): { value: string; label: string; color?: string }[] {
+  try {
+    const saved = localStorage.getItem('pms_dict_data')
+    if (saved) {
+      const dictData = JSON.parse(saved)
+      if (dictData[dictKey] && Array.isArray(dictData[dictKey])) {
+        return dictData[dictKey]
+          .filter((item: any) => item.status === 0)
+          .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+          .map((item: any) => ({ value: item.value, label: item.label, color: item.color }))
+      }
+    }
+  } catch { /* fallback to hardcoded */ }
+  return []
+}
+
+// 获取字典选项（优先从维护数据，fallback 到硬编码）
+export function getDictOptions(dictKey: string, fallback: { value: string; label: string; color?: string }[]): { value: string; label: string; color?: string }[] {
+  const dynamic = loadDictOptions(dictKey)
+  return dynamic.length > 0 ? dynamic : fallback
+}
+
 export const projectTypeOptions = [
   { value: 'new_dev', label: '新研发项目' },
   { value: 'modification', label: '改型项目' },
@@ -147,3 +171,16 @@ export const priorityOptions = [
   { value: 'normal', label: '普通' },
   { value: 'low', label: '低' },
 ]
+
+// ==================== 动态字典选项（支持字典维护） ====================
+export function getDynamicTaskTypeOptions() {
+  return getDictOptions('pms_task_type', taskTypeOptions)
+}
+
+export function getDynamicProjectTypeOptions() {
+  return getDictOptions('pms_project_type', projectTypeOptions)
+}
+
+export function getDynamicPriorityOptions() {
+  return getDictOptions('pms_priority', priorityOptions)
+}

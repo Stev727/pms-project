@@ -145,6 +145,43 @@
 
       <!-- 步骤3: 调整任务 -->
       <div v-if="currentStep === 2" class="step-content">
+        <!-- 批量操作栏 (FATAL-3 修复) -->
+        <div class="batch-toolbar">
+          <div class="batch-actions">
+            <span class="batch-label">批量操作：</span>
+            <el-select v-model="batchStage" placeholder="选择阶段" size="small" style="width: 130px" clearable>
+              <el-option v-for="s in stageList" :key="s.stageName" :label="s.stageName" :value="s.stageName" />
+            </el-select>
+            <el-select v-model="batchAction" size="small" style="width: 130px" placeholder="选择操作">
+              <el-option label="偏移日期" value="offset_date" />
+              <el-option label="批量设责任人" value="set_owner" />
+              <el-option label="批量设优先级" value="set_priority" />
+              <el-option label="批量设工期" value="set_cycle" />
+            </el-select>
+            <template v-if="batchAction === 'offset_date'">
+              <el-input-number v-model="batchOffsetDays" :min="-365" :max="365" size="small" style="width: 100px" />
+              <span style="font-size: 13px; color: #86909C">天（正数延后，负数提前）</span>
+            </template>
+            <template v-if="batchAction === 'set_owner'">
+              <el-select v-model="batchOwner" filterable placeholder="选择责任人" size="small" style="width: 150px">
+                <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+              </el-select>
+            </template>
+            <template v-if="batchAction === 'set_priority'">
+              <el-select v-model="batchPriority" size="small" style="width: 100px">
+                <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+              </el-select>
+            </template>
+            <template v-if="batchAction === 'set_cycle'">
+              <el-input-number v-model="batchCycle" :min="1" :max="365" size="small" style="width: 100px" />
+              <span style="font-size: 13px; color: #86909C">天</span>
+            </template>
+            <el-button type="primary" size="small" @click="applyBatchAction" :disabled="!batchStage || !batchAction">
+              应用
+            </el-button>
+          </div>
+        </div>
+
         <div class="task-toolbar">
           <span class="task-summary">基于模板已生成 <b>{{ adjustedTasks.length }}</b> 个任务</span>
           <el-button type="primary" size="small" @click="showAddTask = true">
@@ -162,6 +199,16 @@
             </template>
           </el-table-column>
           <el-table-column prop="roleName" label="负责角色" width="120" />
+          <el-table-column label="责任人" width="100">
+            <template #default="{ row }">
+              <span v-if="!row.isStage">{{ row.ownerName || row.roleName || '未指定' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="计划开始" width="110">
+            <template #default="{ row }">
+              <span v-if="!row.isStage" style="font-size: 12px">{{ row.planStartDate || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="cycle" label="工期(天)" width="90" align="center" />
           <el-table-column prop="priority" label="优先级" width="80">
             <template #default="{ row }">
@@ -478,7 +525,19 @@ function nextStep() {
 }
 
 function prevStep() {
-  currentStep.value--
+  // 模板切换警告 (MINOR-2 修复)
+  if (currentStep.value === 2 && adjustedTasks.value.length > 0) {
+    ElMessageBox.confirm(
+      '返回上一步更换模板将丢失当前所有任务调整，是否继续？',
+      '警告',
+      { confirmButtonText: '继续返回', cancelButtonText: '取消', type: 'warning' }
+    ).then(() => {
+      adjustedTasks.value = []
+      currentStep.value--
+    }).catch(() => {})
+  } else {
+    currentStep.value--
+  }
 }
 
 function goBack() {
@@ -531,6 +590,118 @@ function confirmAddTask() {
   })
 }
 
+// 批量操作 (FATAL-3 修复)
+const batchStage = ref('')
+const batchAction = ref('')
+const batchOffsetDays = ref(0)
+const batchOwner = ref<number>()
+const batchPriority = ref('normal')
+const batchCycle = ref(5)
+
+function applyBatchAction() {
+  if (!batchStage.value || !batchAction.value) {
+    ElMessage.warning('请选择阶段和操作')
+    return
+  }
+  const stageTasks = adjustedTasks.value.filter(t => t.stageName === batchStage.value)
+  if (stageTasks.length === 0) {
+    ElMessage.warning(`阶段「${batchStage.value}」下没有任务`)
+    return
+  }
+
+  const addDays = (dateStr: string, days: number): string => {
+    if (!dateStr) return ''
+    const d = new Date(dateStr)
+    d.setDate(d.getDate() + days)
+    return d.toISOString().split('T')[0]
+  }
+
+  switch (batchAction.value) {
+    case 'offset_date':
+      for (const t of stageTasks) {
+        if (t.planStartDate) t.planStartDate = addDays(t.planStartDate, batchOffsetDays.value)
+        if (t.planEndDate) t.planEndDate = addDays(t.planEndDate, batchOffsetDays.value)
+      }
+      ElMessage.success(`已偏移 ${stageTasks.length} 个任务`)
+      break
+    case 'set_owner':
+      if (!batchOwner.value) { ElMessage.warning('请选择责任人'); return }
+      const ownerName = userList.value.find(u => u.id === batchOwner.value)?.nickname || `用户${batchOwner.value}`
+      for (const t of stageTasks) {
+        t.mainOwnerId = batchOwner.value
+        t.ownerName = ownerName
+      }
+      ElMessage.success(`已设置 ${stageTasks.length} 个任务的责任人`)
+      break
+    case 'set_priority':
+      for (const t of stageTasks) t.priority = batchPriority.value
+      ElMessage.success(`已设置 ${stageTasks.length} 个任务的优先级`)
+      break
+    case 'set_cycle':
+      for (const t of stageTasks) t.cycle = batchCycle.value
+      ElMessage.success(`已设置 ${stageTasks.length} 个任务的工期`)
+      break
+  }
+
+  // 重置批量操作
+  batchAction.value = ''
+}
+
+// 草稿保存 (MINOR-13 修复)
+const DRAFT_KEY = 'pms_project_create_draft'
+
+function saveDraft() {
+  const draft = {
+    currentStep: currentStep.value,
+    projectForm: { ...projectForm },
+    selectedTemplate: selectedTemplate.value,
+    adjustedTasks: adjustedTasks.value,
+    savedAt: new Date().toISOString()
+  }
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+}
+
+function loadDraft(): boolean {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return false
+    const draft = JSON.parse(raw)
+    if (!draft.savedAt) return false
+    // 24小时内有效
+    if (Date.now() - new Date(draft.savedAt).getTime() > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(DRAFT_KEY)
+      return false
+    }
+    return true
+  } catch { return false }
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return
+    const draft = JSON.parse(raw)
+    currentStep.value = draft.currentStep || 0
+    Object.assign(projectForm, draft.projectForm || {})
+    selectedTemplate.value = draft.selectedTemplate
+    adjustedTasks.value = draft.adjustedTasks || []
+    ElMessage.success('已恢复未完成的创建')
+  } catch { /* ignore */ }
+}
+
+function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY)
+}
+
+// 自动保存草稿（每30秒和关键步骤切换时）
+let draftTimer: any = null
+function startAutoSaveDraft() {
+  draftTimer = setInterval(saveDraft, 30000)
+}
+function stopAutoSaveDraft() {
+  if (draftTimer) { clearInterval(draftTimer); draftTimer = null }
+}
+
 async function submitCreate() {
   submitting.value = true
   try {
@@ -541,8 +712,9 @@ async function submitCreate() {
       status: 'initiating'
     }
     const res = await createProject(projectData)
+    clearDraft() // 创建成功后清除草稿
     ElMessage.success('项目创建成功！')
-    // 跳转项目详情页
+    // 跳转项目详情页 (MINOR-4 修复)
     const projectId = (res as any)?.projectId || (res as any)
     router.push(`/pms/project-detail/${projectId}`)
   } catch (e) {
@@ -555,6 +727,26 @@ async function submitCreate() {
 
 // 加载初始数据
 onMounted(async () => {
+  // 草稿检测 (MINOR-13 修复)
+  if (loadDraft()) {
+    ElMessageBox.confirm(
+      '检测到未完成的创建草稿，是否继续？',
+      '恢复草稿',
+      { confirmButtonText: '继续创建', cancelButtonText: '重新开始', type: 'info' }
+    ).then(() => {
+      restoreDraft()
+      // 恢复模板预览
+      if (selectedTemplate.value) {
+        selectTemplate(selectedTemplate.value)
+      }
+    }).catch(() => {
+      clearDraft()
+    })
+  }
+
+  // 启动自动保存
+  startAutoSaveDraft()
+
   try {
     const projects = await getProjectList()
     templateList.value = ((projects as ProjectVO[]) || []).filter(

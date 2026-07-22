@@ -1,8 +1,8 @@
 import request from '@/config/axios'
 
 export interface ApprovalRecordVO {
-  approvalId: string | number
-  projectId?: number
+  approvalId: string
+  projectId?: string
   taskId?: number
   changeId?: number
   approvalType?: string

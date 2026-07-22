@@ -43,7 +43,22 @@ const service: AxiosInstance = axios.create({
   // 自定义参数序列化函数
   paramsSerializer: (params) => {
     return qs.stringify(params, { allowDots: true })
-  }
+  },
+  // JS 精度修复：将超出安全范围的数字转为字符串 (SEVERE-10 修复)
+  transformResponse: [
+    (data) => {
+      if (typeof data === 'string') {
+        try {
+          // 替换 JSON 中超过安全整数范围的数字为字符串
+          // 雪花ID为19位 > JS安全整数 9007199254740991 (16位)
+          return data.replace(/:(\d{16,})/g, ':"$1"')
+        } catch {
+          return data
+        }
+      }
+      return data
+    }
+  ]
 })
 
 // request拦截器
