@@ -178,10 +178,24 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
+            <el-form-item label="协助人">
+              <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选协助人" class="w-full">
+                <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
             <el-form-item label="优先级" prop="priority">
               <el-select v-model="taskForm.priority" placeholder="请选择" class="w-full">
                 <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="里程碑">
+              <el-switch v-model="taskForm.isMilestone" active-text="是" inactive-text="否" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -233,18 +247,18 @@ import {
   taskStatusMap, priorityMap, taskTypeOptions, formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
-import * as UserApi from '@/api/system/user'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 import type { FormInstance, FormRules } from 'element-plus'
 
 defineOptions({ name: 'PmsTask' })
 
 const message = useMessage()
+const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const loading = ref(false)
 const viewMode = ref<'table' | 'card'>('table')
 const taskList = ref<TaskVO[]>([])
 const projectList = ref<ProjectVO[]>([])
 const stageList = ref<StageVO[]>([])
-const userList = ref<any[]>([])
 const taskDrawerRef = ref()
 
 const currentPage = ref(1)
@@ -291,16 +305,15 @@ const stagesForSelectedProject = computed(() => {
 const loadList = async () => {
   loading.value = true
   try {
-    const [tasks, projects, stages, users] = await Promise.all([
+    const [tasks, projects, stages] = await Promise.all([
       getTaskList(),
       getProjectList(),
-      getStageList().catch(() => []),
-      UserApi.getSimpleUserList().catch(() => [])
+      getStageList().catch(() => [])
     ])
     taskList.value = tasks || []
     projectList.value = projects || []
     stageList.value = stages || []
-    userList.value = users || []
+    await ensureUsersLoaded()
   } catch (e) {
     console.error('加载任务列表失败', e)
   } finally {
@@ -315,9 +328,7 @@ const getProjectName = (projectId?: string | number) => {
 }
 
 const getOwnerName = (task: TaskVO) => {
-  if (!task.mainOwnerId) return '未分配'
-  const user = userList.value.find(u => u.id === task.mainOwnerId)
-  return user?.nickname || `用户${task.mainOwnerId}`
+  return getUserName(task.mainOwnerId)
 }
 
 const getStatusStyle = (status?: string) => {
@@ -356,7 +367,7 @@ const taskFormRef = ref<FormInstance>()
 const submitting = ref(false)
 const isEdit = ref(false)
 
-const taskForm = reactive<TaskVO & { projectId?: string | number }>({
+const taskForm = reactive<TaskVO & { projectId?: string | number; helperIds?: number[] }>({
   taskId: undefined,
   projectId: undefined,
   stageId: undefined,
@@ -367,6 +378,7 @@ const taskForm = reactive<TaskVO & { projectId?: string | number }>({
   planStartDate: '',
   planEndDate: '',
   mainOwnerId: undefined,
+  helperIds: [] as number[],
   description: '',
   outputRequirement: '',
   isMilestone: false,
@@ -396,6 +408,7 @@ const resetTaskForm = () => {
     planStartDate: '',
     planEndDate: '',
     mainOwnerId: undefined,
+    helperIds: [] as number[],
     description: '',
     outputRequirement: '',
     isMilestone: false,
@@ -428,6 +441,7 @@ const handleEdit = (task: TaskVO) => {
     planStartDate: formatDate(task.planStartDate, 'YYYY-MM-DD'),
     planEndDate: formatDate(task.planEndDate, 'YYYY-MM-DD'),
     mainOwnerId: task.mainOwnerId,
+    helperIds: task.helperIds ? task.helperIds.split(',').filter(Boolean).map(Number) : [],
     description: task.description || '',
     outputRequirement: task.outputRequirement || '',
     isMilestone: task.isMilestone || false,
@@ -443,7 +457,11 @@ const submitTask = async () => {
 
   submitting.value = true
   try {
-    const data = { ...taskForm }
+    const data: any = { ...taskForm }
+    // 序列化协助人ID为逗号分隔字符串
+    if (Array.isArray(data.helperIds)) {
+      data.helperIds = data.helperIds.join(',')
+    }
     if (isEdit.value) {
       await updateTask(data)
       message.success('任务更新成功')

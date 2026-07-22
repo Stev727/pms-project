@@ -823,6 +823,32 @@ const remainingRouter: AppRouteRecordRaw[] = [
         ]
       }
     ]
+  },
+  {
+    path: '/pms',
+    component: Layout,
+    name: 'PmsRouter',
+    meta: { hidden: true },
+    children: [
+      {
+        path: 'project-detail/:id',
+        component: () => import('@/views/pms/project-detail/index.vue'),
+        name: 'PmsProjectDetail',
+        meta: { title: '项目详情', noCache: true, hidden: true, canTo: true, activeMenu: '/pms/project' }
+      },
+      {
+        path: 'project-create',
+        component: () => import('@/views/pms/project-create/index.vue'),
+        name: 'PmsProjectCreate',
+        meta: { title: '新建项目', noCache: true, hidden: true, canTo: true, activeMenu: '/pms/project' }
+      },
+      {
+        path: 'dict',
+        component: () => import('@/views/pms/dict/index.vue'),
+        name: 'PmsDict',
+        meta: { title: '字典管理', noCache: true, hidden: true, canTo: true, activeMenu: '/pms/project' }
+      }
+    ]
   }
 ]
 

@@ -284,6 +284,22 @@
                 </el-form-item>
               </el-col>
             </el-row>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="责任人">
+                  <el-select v-model="taskForm.mainOwnerId" filterable placeholder="选择责任人" class="w-full" clearable>
+                    <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="协助人">
+                  <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选协助人" class="w-full">
+                    <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+            </el-row>
             <el-form-item label="任务描述">
               <el-input v-model="taskForm.description" type="textarea" :rows="2" />
             </el-form-item>
@@ -419,6 +435,8 @@ const taskForm = reactive({
   cycle: 5,
   priority: 'normal',
   isMilestone: false,
+  mainOwnerId: undefined as number | undefined,
+  helperIds: [] as number[],
   description: '',
   outputRequirement: '',
   roleName: ''
@@ -553,6 +571,8 @@ function editTask(row: any, _index: number) {
     cycle: row.cycle || 5,
     priority: row.priority || 'normal',
     isMilestone: row.isMilestone || false,
+    mainOwnerId: row.mainOwnerId || undefined,
+    helperIds: row.helperIds || [],
     description: row.description || '',
     outputRequirement: row.outputRequirement || ''
   })
@@ -586,7 +606,8 @@ function confirmAddTask() {
   // 重置表单
   Object.assign(taskForm, {
     taskName: '', stageName: '', taskType: 'design', cycle: 5,
-    priority: 'normal', isMilestone: false, description: '', outputRequirement: ''
+    priority: 'normal', isMilestone: false, mainOwnerId: undefined, helperIds: [],
+    description: '', outputRequirement: ''
   })
 }
 

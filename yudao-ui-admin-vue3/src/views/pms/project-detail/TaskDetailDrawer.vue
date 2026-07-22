@@ -207,17 +207,18 @@ import {
   formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'TaskDetailDrawer' })
 
 const emit = defineEmits<{ refresh: [] }>()
 const message = useMessage()
+const { getUserName, getUserNamesFromStr } = useUserNames()
 
 const drawerVisible = ref(false)
 const activeTab = ref('info')
 const task = ref<TaskVO | null>(null)
 const showProgressDialog = ref(false)
-const isEditing = ref(false)
 
 // 模拟数据
 const progressList = ref<any[]>([])
@@ -269,12 +270,8 @@ const getStatusStyle = (status?: string) => {
 }
 
 const getStatusLabel = (status?: string) => taskStatusMap[status || '']?.label || '-'
-const getOwnerName = (t?: TaskVO) => t?.mainOwnerId ? `用户${t.mainOwnerId}` : '未分配'
-const getHelperNames = (t?: TaskVO) => {
-  if (!t?.helperIds) return '-'
-  const ids = t.helperIds.split(',').filter(Boolean)
-  return ids.length > 0 ? ids.map(id => `用户${id}`).join(', ') : '-'
-}
+const getOwnerName = (t?: TaskVO) => getUserName(t?.mainOwnerId)
+const getHelperNames = (t?: TaskVO) => getUserNamesFromStr(t?.helperIds)
 const getTaskTypeLabel = (type?: string) => taskTypeOptions.find(o => o.value === type)?.label || type || '-'
 const getChangeTypeLabel = (type: string) => ({ schedule: '工期变更', scope: '范围变更', cost: '成本变更' }[type] || type)
 const getChangeStatusLabel = (status: string) => ({ pending: '待审批', approved: '已通过', rejected: '已驳回' }[status] || status)
@@ -287,7 +284,9 @@ const formatFileSize = (bytes?: number) => {
 }
 
 // ==================== 操作 ====================
-const handleEdit = () => { isEditing.value = true }
+const handleEdit = () => {
+  message.info('请前往任务列表页面进行编辑操作')
+}
 
 const handleReportProgress = () => {
   progressForm.progress = task.value?.progress || 0
@@ -312,7 +311,9 @@ const submitProgress = async () => {
   }
 }
 
-const handleCreateChange = () => message.info('变更管理功能开发中')
+const handleCreateChange = () => {
+  message.info('请在项目详情「变更记录」Tab中发起变更')
+}
 
 const handlePause = () => {
   message.confirm('确认暂停此任务？').then(async () => {
@@ -340,16 +341,37 @@ const handleComplete = () => {
   }).catch(() => {})
 }
 
-const handleUpload = () => message.info('文件上传功能开发中')
+const handleUpload = () => {
+  message.info('请在项目详情「文档」Tab中上传文件并关联到此任务')
+}
 
-const handleSubmitReview = () => {
+const handleSubmitReview = async () => {
   if (!reviewForm.result) {
     message.warning('请选择审核结果')
     return
   }
-  message.success('审核已提交')
-  reviewForm.result = ''
-  reviewForm.opinion = ''
+  if (!task.value) return
+  try {
+    const statusMap: Record<string, string> = {
+      approved: 'completed',
+      rejected: 'in_progress',
+      modify: 'in_progress'
+    }
+    await updateTask({
+      ...task.value,
+      completeStatus: statusMap[reviewForm.result] || task.value.completeStatus,
+      description: task.value.description
+        ? `${task.value.description}\n[审核意见] ${reviewForm.result === 'approved' ? '通过' : reviewForm.result === 'rejected' ? '驳回' : '需修改'}: ${reviewForm.opinion || ''}`
+        : `[审核意见] ${reviewForm.result === 'approved' ? '通过' : reviewForm.result === 'rejected' ? '驳回' : '需修改'}: ${reviewForm.opinion || ''}`
+    })
+    message.success('审核已提交')
+    reviewForm.result = ''
+    reviewForm.opinion = ''
+    emit('refresh')
+  } catch (e) {
+    console.error('审核提交失败', e)
+    message.error('审核提交失败')
+  }
 }
 
 defineExpose({ open })

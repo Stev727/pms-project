@@ -42,10 +42,12 @@
 
 <script setup lang="ts">
 import { TaskVO } from '@/api/pms/task'
+import { updateTask } from '@/api/pms/task'
 import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { gantt } from 'dhtmlx-gantt'
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'GanttTab' })
 
@@ -56,6 +58,7 @@ const props = defineProps<{
   dependencies?: any[]
 }>()
 
+const { getUserName } = useUserNames()
 const ganttRef = ref<HTMLElement>()
 const scale = ref('week')
 const showCritical = ref(true)
@@ -210,7 +213,7 @@ const buildGanttData = () => {
       duration: task.cycle || 1,
       progress: (task.progress || 0) / 100,
       parent: parentStage?.id || 0,
-      owner: task.mainOwnerId ? `用户${task.mainOwnerId}` : '-',
+      owner: task.mainOwnerId ? getUserName(task.mainOwnerId) : '-',
       status: task.completeStatus,
       critical: task.isCriticalPath,
       delayed: isDelayed,
@@ -266,12 +269,18 @@ const renderGantt = () => {
   gantt.parse(ganttData)
 
   // 拖拽事件
-  gantt.attachEvent('onAfterTaskDrag', (id: any, mode: any, e: any) => {
+  gantt.attachEvent('onAfterTaskDrag', async (id: any, mode: any, e: any) => {
     const task = gantt.getTask(id)
     if (task.type === 'project') return // 阶段节点不可拖拽
-    // 触发更新
-    console.log('Task dragged:', id, task.start_date, task.duration)
-    // TODO: 调用 API 更新任务日期
+    try {
+      await updateTask({
+        taskId: String(id),
+        planStartDate: task.start_date ? new Date(task.start_date).toISOString().split('T')[0] : undefined,
+        cycle: task.duration || 1
+      } as TaskVO)
+    } catch (err) {
+      console.error('甘特图拖拽保存失败', err)
+    }
   })
 
   // 点击事件

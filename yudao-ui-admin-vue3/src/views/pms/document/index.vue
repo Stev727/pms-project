@@ -45,7 +45,9 @@
               <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
             </el-table-column>
             <el-table-column prop="fileType" label="类型" width="70" align="center" />
-            <el-table-column prop="uploadBy" label="上传人" width="80" />
+            <el-table-column label="上传人" width="80">
+              <template #default="{ row }">{{ getUserName(row.uploadBy) }}</template>
+            </el-table-column>
             <el-table-column label="上传时间" width="120">
               <template #default="{ row }">{{ formatDate(row.uploadTime) }}</template>
             </el-table-column>
@@ -79,7 +81,7 @@
           <el-descriptions-item label="版本">v{{ previewDocData.versionNo }}</el-descriptions-item>
           <el-descriptions-item label="大小">{{ formatSize(previewDocData.fileSize) }}</el-descriptions-item>
           <el-descriptions-item label="文件类型">{{ previewDocData.fileType }}</el-descriptions-item>
-          <el-descriptions-item label="上传人">{{ previewDocData.uploadBy }}</el-descriptions-item>
+          <el-descriptions-item label="上传人">{{ getUserName(previewDocData.uploadBy) }}</el-descriptions-item>
           <el-descriptions-item label="上传时间">{{ formatDate(previewDocData.uploadTime) }}</el-descriptions-item>
           <el-descriptions-item label="下载次数">{{ previewDocData.downloadCount || 0 }}</el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">{{ previewDocData.description || '-' }}</el-descriptions-item>
@@ -100,8 +102,11 @@ import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getDocumentList, createDocument, updateDocument, deleteDocument } from '@/api/pms/document'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsDocument' })
+
+const { getUserName } = useUserNames()
 
 const searchName = ref('')
 const currentPage = ref(1)

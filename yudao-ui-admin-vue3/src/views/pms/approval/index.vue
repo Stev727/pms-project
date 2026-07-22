@@ -29,7 +29,7 @@
           <template #default="{ row }"><el-tag size="small" :type="getTypeTag(row.approvalType)">{{ getTypeLabel(row.approvalType) }}</el-tag></template>
         </el-table-column>
         <el-table-column label="申请人" width="80">
-          <template #default="{ row }">{{ row.initiatorId || '-' }}</template>
+          <template #default="{ row }">{{ getUserName(row.initiatorId) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }"><el-tag size="small" :color="getStatusColor(row.approvalStatus)" effect="dark">{{ getStatusLabel(row.approvalStatus) }}</el-tag></template>
@@ -50,14 +50,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getApprovalRecordList, createApprovalRecord, updateApprovalRecord, deleteApprovalRecord } from '@/api/pms/approval'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsApproval' })
 
+const { getUserName } = useUserNames()
 const filters = reactive({ projectId: '' as '' | number, type: '', status: '' })
 const projects = ref<ProjectVO[]>([])
 const loading = ref(false)
@@ -84,6 +86,11 @@ function getStatusLabel(s: string): string { return { pending: '待审批', appr
 
 async function doApprove(row: any, approve: boolean) {
   try {
+    await ElMessageBox.confirm(
+      `确认${approve ? '通过' : '驳回'}该审批？`,
+      '提示',
+      { confirmButtonText: `确认${approve ? '通过' : '驳回'}`, cancelButtonText: '取消', type: 'warning' }
+    )
     await updateApprovalRecord({
       ...row,
       approvalStatus: approve ? 'approved' : 'rejected'
@@ -91,12 +98,16 @@ async function doApprove(row: any, approve: boolean) {
     row.approvalStatus = approve ? 'approved' : 'rejected'
     ElMessage.success(`已${approve ? '通过' : '驳回'}`)
   } catch (e) {
-    console.error(e)
-    ElMessage.error('操作失败')
+    if (e !== 'cancel') {
+      console.error(e)
+      ElMessage.error('操作失败')
+    }
   }
 }
 
-function viewDetail(row: any) { ElMessage.info(`查看审批详情：${row.approvalNo}`) }
+function viewDetail(row: any) {
+  ElMessage.info(`审批编号：${row.approvalNo || '-'}\n类型：${getTypeLabel(row.approvalType)}\n状态：${getStatusLabel(row.approvalStatus)}\n审批人：${row.approverName || '-'}`)
+}
 
 async function loadData() {
   loading.value = true

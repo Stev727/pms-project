@@ -172,6 +172,7 @@ import { getDocumentList } from '@/api/pms/document'
 import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'TaskListTab' })
 
@@ -189,6 +190,7 @@ const emit = defineEmits<{
 }>()
 
 const message = useMessage()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const searchKeyword = ref('')
 const filterStage = ref<string | undefined>()
 const filterStatus = ref('')
@@ -329,7 +331,7 @@ function handleChangeRequest(row: TreeRow) {
 
 // ==================== 辅助函数 ====================
 const getOwnerName = (task: TaskVO) => {
-  return task.mainOwnerId ? `用户${task.mainOwnerId}` : '未分配'
+  return getUserName(task.mainOwnerId)
 }
 const getTaskStatusStyle = (status?: string) => {
   const s = taskStatusMap[status || '']

@@ -28,7 +28,7 @@
           </div>
         </div>
         <div class="header-right">
-          <el-button @click="handleCopyProject" v-if="checkPermi(['pms:project:create'])">
+          <el-button @click="handleCopyProject" v-if="checkPermi(['pms:project:create'])" :disabled="true">
             <Icon icon="ep:copy-document" class="mr-5px" />复制项目
           </el-button>
           <el-button @click="handleEdit" v-if="checkPermi(['pms:project:update'])">
@@ -38,7 +38,7 @@
             <el-button>更多<Icon icon="ep:arrow-down" class="ml-5px" /></el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="handleExport">导出项目</el-dropdown-item>
+                <el-dropdown-item @click="handleExport" :disabled="true">导出项目</el-dropdown-item>
                 <el-dropdown-item @click="handleShareLink">分享链接</el-dropdown-item>
                 <el-dropdown-item @click="handleArchive" v-if="project.status !== 'archived'">归档项目</el-dropdown-item>
                 <el-dropdown-item divided @click="handleDelete">
@@ -258,7 +258,6 @@
 import { getProject, ProjectVO } from '@/api/pms/project'
 import { getTaskList, createTask, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
-import { getSimpleUserList } from '@/api/system/user'
 import GanttTab from './GanttTab.vue'
 import TaskListTab from './TaskListTab.vue'
 import TaskDetailDrawer from './TaskDetailDrawer.vue'
@@ -273,12 +272,14 @@ import {
   taskTypeOptions, priorityOptions, taskStatusMap, formatDate, calcDuration, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsProjectDetail' })
 
 const route = useRoute()
 const { push, back } = useRouter()
 const message = useMessage()
+const { userList, getUserName, getUserNamesFromStr, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const loading = ref(false)
 const activeTab = ref('overview')
@@ -293,9 +294,6 @@ const documentsTabRef = ref()
 const approvalTabRef = ref()
 const qualityTabRef = ref()
 const changesTabRef = ref()
-
-// 用户列表（用于责任人选择）
-const userList = ref<any[]>([])
 
 // ==================== 任务创建弹窗 ====================
 const createTaskDialogVisible = ref(false)
@@ -347,15 +345,18 @@ const projectDuration = computed(() => {
 
 // ==================== 看板 ====================
 const kanbanColumns = computed(() => {
-  const statuses = ['not_started', 'in_progress', 'completed', 'delayed', 'paused']
+  const statuses = ['not_started', 'in_progress', 'pending_review', 'completed', 'delayed', 'paused']
   return statuses.map(status => {
     const config = taskStatusMap[status]
     const tasks = projectTasks.value.filter(t => {
+      const isDelayed = calcDelayDays(t.planEndDate, t.completeStatus) > 0 && t.completeStatus !== 'completed'
       if (status === 'delayed') {
-        return calcDelayDays(t.planEndDate, t.completeStatus) > 0 && t.completeStatus !== 'completed'
+        // 已延期的：排除已完成和已取消的
+        return isDelayed
       }
-      if (status === 'completed' || status === 'in_progress' || status === 'not_started' || status === 'paused') {
-        if (calcDelayDays(t.planEndDate, t.completeStatus) > 0 && t.completeStatus !== 'completed') return false
+      if (status === 'completed' || status === 'in_progress' || status === 'not_started' || status === 'paused' || status === 'pending_review') {
+        // 如果任务已延期，不应出现在正常状态列中
+        if (isDelayed) return false
         return t.completeStatus === status
       }
       return false
@@ -369,7 +370,7 @@ const loadProjectData = async () => {
   loading.value = true
   try {
     const [proj, tasks, stages] = await Promise.all([
-      getProject(Number(projectId.value)),
+      getProject(projectId.value),
       getTaskList(),
       getStageList()
     ])
@@ -402,8 +403,8 @@ const getStatusType = (status: string) => projectStatusMap[status]?.type || 'inf
 const getStatusLabel = (status: string) => projectStatusMap[status]?.label || status
 const getProjectTypeLabel = (type?: string) => projectTypeOptions.find(o => o.value === type)?.label || type || '-'
 const getManagerName = (item: any) => {
-  if (item?.projectManagerId) return userList.value.find(u => u.id === item.projectManagerId)?.nickname || `用户${item.projectManagerId}`
-  if (item?.mainOwnerId) return userList.value.find(u => u.id === item.mainOwnerId)?.nickname || `用户${item.mainOwnerId}`
+  if (item?.projectManagerId) return getUserName(item.projectManagerId)
+  if (item?.mainOwnerId) return getUserName(item.mainOwnerId)
   return '未分配'
 }
 const getProgressColor = (proj: ProjectVO) => {
@@ -488,16 +489,8 @@ const handleDelete = () => {
 
 const goBack = () => { back() }
 
-// 加载用户列表
-const loadUsers = async () => {
-  try {
-    const users = await getSimpleUserList()
-    userList.value = (users as any[]) || []
-  } catch (e) { console.error('加载用户列表失败', e) }
-}
-
 onMounted(() => {
-  loadUsers()
+  ensureUsersLoaded()
   loadProjectData()
 })
 </script>

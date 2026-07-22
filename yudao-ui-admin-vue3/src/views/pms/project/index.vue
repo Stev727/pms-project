@@ -47,7 +47,7 @@
           <el-button size="small" @click="handleBatchArchive" :disabled="selectedProjects.length === 0" v-if="checkPermi(['pms:project:update'])">
             <Icon icon="ep:box" class="mr-4px" />批量归档
           </el-button>
-          <el-button size="small" @click="handleExport" v-if="checkPermi(['pms:project:export'])">
+          <el-button size="small" @click="handleExport" v-if="checkPermi(['pms:project:export'])" :disabled="true">
             <Icon icon="ep:download" class="mr-4px" />导出Excel
           </el-button>
           <span style="color: #86909C; font-size: 14px">共 {{ filteredList.length }} 个项目</span>
@@ -206,11 +206,15 @@ import {
   formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useAppStore } from '@/store/modules/app'
 
 defineOptions({ name: 'PmsProject' })
 
 const { push } = useRouter()
 const message = useMessage()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const appStore = useAppStore()
 const loading = ref(false)
 const viewMode = ref<'card' | 'list'>('card')
 const quickFilter = ref('all')
@@ -230,6 +234,14 @@ const queryParams = reactive({
 const cardCurrentPage = ref(1)
 const cardPageSize = 12
 
+// 获取当前用户ID
+const currentUserId = computed(() => {
+  try {
+    const userInfo = appStore.getUserInfo
+    return userInfo?.id
+  } catch { return undefined }
+})
+
 const filteredList = computed(() => {
   let list = projectList.value.filter(p => p.projectType !== 'standard_template')
   if (queryParams.projectName) {
@@ -244,17 +256,31 @@ const filteredList = computed(() => {
   if (queryParams.projectType) {
     list = list.filter(p => p.projectType === queryParams.projectType)
   }
-  // 快捷筛选 (MINOR-3 修复)
+  // 快捷筛选
   if (quickFilter.value === 'mine') {
-    // TODO: 当前用户ID比对
+    if (currentUserId.value) {
+      list = list.filter(p => Number(p.projectManagerId) === currentUserId.value)
+    }
   } else if (quickFilter.value === 'involved') {
-    // TODO: 当前用户参与的项目
+    if (currentUserId.value) {
+      // 筛选当前用户参与的项目（项目经理或有任务分配给该用户）
+      const involvedProjectIds = new Set<string>()
+      taskList.value.forEach(t => {
+        if (Number(t.mainOwnerId) === currentUserId.value && t.projectId) {
+          involvedProjectIds.add(String(t.projectId))
+        }
+      })
+      list = list.filter(p => {
+        if (Number(p.projectManagerId) === currentUserId.value) return true
+        return involvedProjectIds.has(String(p.projectId))
+      })
+    }
   } else if (quickFilter.value === 'archived') {
     list = list.filter(p => p.archived || p.status === 'archived')
   } else {
     list = list.filter(p => !p.archived && p.status !== 'archived')
   }
-  // 补充延期任务数 (SEVERE-2 修复)
+  // 补充延期任务数
   list = list.map(p => ({
     ...p,
     delayCount: getDelayCountForProject(p)
@@ -352,8 +378,7 @@ const handleExport = () => {
 }
 
 const getManagerName = (project: ProjectVO) => {
-  // TODO: 从用户列表获取姓名，暂用ID
-  return project.projectManagerId ? `用户${project.projectManagerId}` : '未分配'
+  return getUserName(project.projectManagerId)
 }
 
 // ==================== 操作 ====================
@@ -395,6 +420,7 @@ const goDetail = (project: ProjectVO) => {
 }
 
 onMounted(() => {
+  ensureUsersLoaded()
   loadList()
 })
 </script>

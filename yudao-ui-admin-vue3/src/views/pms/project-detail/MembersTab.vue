@@ -11,7 +11,7 @@
     <el-table :data="memberList" border stripe v-loading="loading">
       <el-table-column prop="userId" label="成员" min-width="120">
         <template #default="{ row }">
-          <span>{{ getUserName(row.userId) }}</span>
+          <span>{{ getUserNameLocal(row.userId) }}</span>
           <el-tag v-if="row.isExternal" size="small" type="warning" style="margin-left: 6px">外部</el-tag>
         </template>
       </el-table-column>
@@ -47,7 +47,7 @@
     <el-dialog v-model="showDialog" :title="editing ? '编辑成员' : '添加成员'" width="480px">
       <el-form label-width="80px">
         <el-form-item label="成员" required>
-          <el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full">
+          <el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full" :disabled="!!editing">
             <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
           </el-select>
         </el-form-item>
@@ -84,9 +84,10 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectMemberList, createProjectMember, updateProjectMember, deleteProjectMember } from '@/api/pms/member'
-import { getSimpleUserList } from '@/api/system/user'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
+import { getDictOptions } from '../pms-utils'
 
 defineOptions({ name: 'MembersTab' })
 
@@ -94,9 +95,9 @@ const props = defineProps<{
   projectId: string
 }>()
 
+const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const loading = ref(false)
 const memberList = ref<any[]>([])
-const userList = ref<any[]>([])
 const showDialog = ref(false)
 const editing = ref<any>(null)
 
@@ -119,9 +120,8 @@ function getRoleTagType(role: string): string {
   const map: Record<string, string> = { pm: 'danger', tech_lead: 'warning', hw_engineer: 'primary', sw_engineer: 'primary', qa_engineer: 'success', mech_engineer: 'info', procurement: '' }
   return map[role] || 'info'
 }
-function getUserName(userId?: number): string {
-  if (!userId) return '-'
-  return userList.value.find(u => u.id === userId)?.nickname || `用户${userId}`
+function getUserNameLocal(userId?: number): string {
+  return getUserName(userId)
 }
 
 function handleAdd() {
@@ -188,15 +188,8 @@ async function loadMembers() {
   finally { loading.value = false }
 }
 
-async function loadUsers() {
-  try {
-    const res = await getSimpleUserList()
-    userList.value = (res as any[]) || []
-  } catch (e) { console.error(e) }
-}
-
 onMounted(() => {
-  loadUsers()
+  ensureUsersLoaded()
   loadMembers()
 })
 

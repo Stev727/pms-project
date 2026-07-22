@@ -153,7 +153,9 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="负责人">
-          <el-input v-model="createForm.owner" placeholder="请输入负责人" />
+          <el-select v-model="createForm.owner" filterable clearable placeholder="请选择负责人" style="width: 100%">
+            <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+          </el-select>
         </el-form-item>
         <el-form-item label="问题描述" required>
           <el-input v-model="createForm.description" type="textarea" :rows="4" placeholder="请描述质量问题详情" />
@@ -174,10 +176,12 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getQualityIssueList, createQualityIssue, updateQualityIssue, deleteQualityIssue, QualityIssueVO } from '@/api/pms/quality'
 import { formatDate, taskStatusMap, phaseColorMap } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsQuality' })
 
 const message = useMessage()
+const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const loading = ref(false)
 const saving = ref(false)
 const projectList = ref<ProjectVO[]>([])
@@ -231,7 +235,7 @@ const fetchList = async () => {
       ...item,
       issueNo: item.issueCode || '',
       title: item.issueDescription || '',
-      owner: item.assigneeId ? String(item.assigneeId) : (item.resolverId ? String(item.resolverId) : ''),
+      owner: item.assigneeId ? getUserName(Number(item.assigneeId)) : (item.resolverId ? getUserName(Number(item.resolverId)) : '-'),
       foundDate: item.createTime || '',
       phase: item.rootCauseCategory || '',
       description: item.impactScope || item.rootCauseDetail || '',
@@ -349,6 +353,7 @@ const getProjectName = (projectId?: string | number) =>
 
 // ==================== 初始化 ====================
 onMounted(async () => {
+  await ensureUsersLoaded()
   fetchList()
   try {
     projectList.value = (await getProjectList()) as ProjectVO[]
