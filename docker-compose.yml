@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # ==================== MySQL 8.0 ====================
+  mysql:
+    image: mysql:8.0
+    container_name: rdpms-mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "Rdpms@2026!"
+      MYSQL_DATABASE: "ruoyi-vue-pro"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - mysql_conf:/etc/mysql/conf.d
+      - mysql_log:/var/log/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --max-connections=500
+      --innodb-buffer-pool-size=2G
+      --lower-case-table-names=1
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pRdpms@2026!"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - rdpms-net
+
+  # ==================== Redis 7 ====================
+  redis:
+    image: redis:7-alpine
+    container_name: rdpms-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    environment:
+      TZ: "Asia/Shanghai"
+    volumes:
+      - redis_data:/data
+    command: redis-server --requirepass "Rdpms@2026!" --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "Rdpms@2026!", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - rdpms-net
+
+  # ==================== MinIO ====================
+  minio:
+    image: minio/minio:latest
+    container_name: rdpms-minio
+    restart: always
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: "rdpms"
+      MINIO_ROOT_PASSWORD: "Rdpms@2026!"
+      TZ: "Asia/Shanghai"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks:
+      - rdpms-net
+
+volumes:
+  mysql_data:
+  mysql_conf:
+  mysql_log:
+  redis_data:
+  minio_data:
+
+networks:
+  rdpms-net:
+    driver: bridge

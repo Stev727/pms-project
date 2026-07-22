@@ -1,0 +1,365 @@
+<template>
+  <div class="p-20px">
+    <!-- 搜索栏 -->
+    <ContentWrap>
+      <el-form :model="queryParams" :inline="true" class="mb-0">
+        <el-form-item label="项目名称">
+          <el-input v-model="queryParams.projectName" placeholder="请输入项目名称" clearable style="width: 200px" @keyup.enter="handleSearch" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="queryParams.status" placeholder="全部" clearable style="width: 120px">
+            <el-option v-for="(v, k) in projectStatusMap" :key="k" :label="v.label" :value="k" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="阶段">
+          <el-select v-model="queryParams.currentStage" placeholder="全部" clearable style="width: 120px">
+            <el-option v-for="(v, k) in phaseColorMap" :key="k" :label="v.label" :value="k" v-if="!['立项','设计','开发','测试','验收','结项'].includes(k as string)" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="queryParams.projectType" placeholder="全部" clearable style="width: 120px">
+            <el-option v-for="opt in projectTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch"><Icon icon="ep:search" class="mr-5px" />查询</el-button>
+          <el-button @click="handleReset"><Icon icon="ep:refresh" class="mr-5px" />重置</el-button>
+        </el-form-item>
+      </el-form>
+    </ContentWrap>
+
+    <!-- 工具栏 -->
+    <ContentWrap>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px">
+        <div>
+          <el-button type="primary" @click="handleCreate" v-hasPermi="['pms:project:create']">
+            <Icon icon="ep:plus" class="mr-5px" />新建项目
+          </el-button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="color: #86909C; font-size: 14px">共 {{ filteredList.length }} 个项目</span>
+          <el-radio-group v-model="viewMode" size="small">
+            <el-radio-button label="card"><Icon icon="ep:grid" /></el-radio-button>
+            <el-radio-button label="list"><Icon icon="ep:list" /></el-radio-button>
+          </el-radio-group>
+        </div>
+      </div>
+
+      <!-- 卡片视图 -->
+      <div v-if="viewMode === 'card'" v-loading="loading">
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12" :md="8" :lg="6" v-for="project in pagedCardList" :key="project.projectId" style="margin-bottom: 16px">
+            <el-card class="project-card" shadow="hover" @click="goDetail(project)">
+              <div class="card-header">
+                <span class="card-title" :title="project.projectName">{{ project.projectName }}</span>
+                <el-dropdown trigger="click" @click.stop>
+                  <el-icon class="card-more"><Icon icon="ep:more-filled" /></el-icon>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item @click="goDetail(project)">查看详情</el-dropdown-item>
+                      <el-dropdown-item @click="handleEdit(project)" v-if="checkPermi(['pms:project:update'])">编辑</el-dropdown-item>
+                      <el-dropdown-item @click="handleArchive(project)" v-if="checkPermi(['pms:project:update'])">归档</el-dropdown-item>
+                      <el-dropdown-item divided @click="handleDelete(project)" v-if="checkPermi(['pms:project:delete'])">
+                        <span style="color: #F53F3F">删除</span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+
+              <div class="card-phase">
+                <el-tag :style="getPhaseTagStyle(project.currentStage)" size="small" effect="light">
+                  {{ getPhaseLabel(project.currentStage) }}
+                </el-tag>
+                <el-tag v-if="project.isKeyProject" type="danger" size="small" effect="dark" style="margin-left: 4px">重点</el-tag>
+              </div>
+
+              <div class="card-progress">
+                <div class="progress-info">
+                  <span style="font-size: 13px; color: #4E5969">进度</span>
+                  <span style="font-size: 16px; font-weight: 600; color: #1D2129">{{ project.progress || 0 }}%</span>
+                </div>
+                <el-progress :percentage="project.progress || 0" :stroke-width="6" :show-text="false" :color="getProgressColor(project)" />
+              </div>
+
+              <div class="card-meta">
+                <div class="meta-row">
+                  <Icon icon="ep:user" class="meta-icon" />
+                  <span>{{ getManagerName(project) }}</span>
+                </div>
+                <div class="meta-row">
+                  <Icon icon="ep:calendar" class="meta-icon" />
+                  <span>{{ formatDate(project.planStartDate) }} ~ {{ formatDate(project.planEndDate) }}</span>
+                </div>
+                <div class="meta-row">
+                  <Icon icon="ep:document" class="meta-icon" />
+                  <span>任务统计</span>
+                  <el-tag v-if="project.delayCount > 0" type="danger" size="small" effect="plain" style="margin-left: auto">
+                    {{ project.delayCount }} 延期
+                  </el-tag>
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+        <div v-if="pagedCardList.length === 0 && !loading" class="empty-state">
+          <el-empty description="暂无项目" />
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 16px" v-if="filteredList.length > cardPageSize">
+          <el-pagination
+            v-model:current-page="cardCurrentPage"
+            :page-size="cardPageSize"
+            :total="filteredList.length"
+            layout="prev, pager, next"
+            background
+          />
+        </div>
+      </div>
+
+      <!-- 列表视图 -->
+      <el-table v-else :data="filteredList" v-loading="loading" stripe style="width: 100%" @row-click="goDetail">
+        <el-table-column label="项目名称" prop="projectName" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-link type="primary" @click.stop="goDetail(row)">{{ row.projectName }}</el-link>
+            <el-tag v-if="row.isKeyProject" type="danger" size="small" effect="dark" style="margin-left: 6px">重点</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="项目编号" prop="projectCode" width="140" />
+        <el-table-column label="阶段" width="100">
+          <template #default="{ row }">
+            <el-tag :style="getPhaseTagStyle(row.currentStage)" size="small" effect="light">
+              {{ getPhaseLabel(row.currentStage) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)" size="small">{{ getStatusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="进度" width="160">
+          <template #default="{ row }">
+            <el-progress :percentage="row.progress || 0" :stroke-width="8" :color="getProgressColor(row)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="负责人" width="100">
+          <template #default="{ row }">{{ getManagerName(row) }}</template>
+        </el-table-column>
+        <el-table-column label="计划周期" width="200">
+          <template #default="{ row }">
+            <span style="font-size: 13px">{{ formatDate(row.planStartDate) }} ~ {{ formatDate(row.planEndDate) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
+            <el-button link type="primary" @click.stop="handleEdit(row)" v-if="checkPermi(['pms:project:update'])">编辑</el-button>
+            <el-button link type="danger" @click.stop="handleDelete(row)" v-if="checkPermi(['pms:project:delete'])">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </ContentWrap>
+
+    <!-- 项目表单弹窗 -->
+    <ProjectForm ref="projectFormRef" @success="loadList" />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { getProjectList, ProjectVO } from '@/api/pms/project'
+import { getTaskList } from '@/api/pms/task'
+import ProjectForm from './ProjectForm.vue'
+import {
+  projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
+  formatDate, calcDelayDays
+} from '../pms-utils'
+import { checkPermi } from '@/utils/permission'
+
+defineOptions({ name: 'PmsProject' })
+
+const { push } = useRouter()
+const message = useMessage()
+const loading = ref(false)
+const viewMode = ref<'card' | 'list'>('card')
+const projectList = ref<ProjectVO[]>([])
+const taskList = ref<any[]>([])
+const projectFormRef = ref()
+
+const queryParams = reactive({
+  projectName: '',
+  status: '',
+  currentStage: '',
+  projectType: ''
+})
+
+// 卡片分页
+const cardCurrentPage = ref(1)
+const cardPageSize = 12
+
+const filteredList = computed(() => {
+  let list = projectList.value.filter(p => p.projectType !== 'standard_template')
+  if (queryParams.projectName) {
+    list = list.filter(p => p.projectName?.includes(queryParams.projectName))
+  }
+  if (queryParams.status) {
+    list = list.filter(p => p.status === queryParams.status)
+  }
+  if (queryParams.currentStage) {
+    list = list.filter(p => p.currentStage === queryParams.currentStage)
+  }
+  if (queryParams.projectType) {
+    list = list.filter(p => p.projectType === queryParams.projectType)
+  }
+  return list
+})
+
+const pagedCardList = computed(() => {
+  const start = (cardCurrentPage.value - 1) * cardPageSize
+  return filteredList.value.slice(start, start + cardPageSize)
+})
+
+const loadList = async () => {
+  loading.value = true
+  try {
+    const [projects, tasks] = await Promise.all([getProjectList(), getTaskList()])
+    projectList.value = projects || []
+    taskList.value = tasks || []
+  } catch (e) {
+    console.error('加载项目列表失败', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// ==================== 辅助函数 ====================
+const getPhaseLabel = (stage?: string) => {
+  if (!stage) return '未开始'
+  return phaseColorMap[stage]?.label || stage
+}
+
+const getPhaseTagStyle = (stage?: string) => {
+  const p = phaseColorMap[stage || '']
+  if (!p) return ''
+  return `color: ${p.color}; background: ${p.bg}; border-color: ${p.border};`
+}
+
+const getStatusType = (status: string) => projectStatusMap[status]?.type || 'info'
+const getStatusLabel = (status: string) => projectStatusMap[status]?.label || status
+
+const getProgressColor = (project: ProjectVO) => {
+  if (project.status === 'completed') return '#00B42A'
+  if (project.status === 'delayed') return '#F53F3F'
+  return '#2468F2'
+}
+
+const getManagerName = (project: ProjectVO) => {
+  // TODO: 从用户列表获取姓名，暂用ID
+  return project.projectManagerId ? `用户${project.projectManagerId}` : '未分配'
+}
+
+// ==================== 操作 ====================
+const handleSearch = () => { cardCurrentPage.value = 1 }
+const handleReset = () => {
+  queryParams.projectName = ''
+  queryParams.status = ''
+  queryParams.currentStage = ''
+  queryParams.projectType = ''
+  cardCurrentPage.value = 1
+}
+
+const handleCreate = () => {
+  push('/pms/project-create')
+}
+
+const handleEdit = (project: ProjectVO) => {
+  projectFormRef.value?.open('update', project)
+}
+
+const handleDelete = (project: ProjectVO) => {
+  message.delConfirm(`确认删除项目「${project.projectName}」吗？`).then(async () => {
+    await import('@/api/pms/project').then(m => m.deleteProject(project.projectId as number))
+    message.success('删除成功')
+    loadList()
+  }).catch(() => {})
+}
+
+const handleArchive = (project: ProjectVO) => {
+  message.confirm(`确认归档项目「${project.projectName}」吗？`).then(async () => {
+    await import('@/api/pms/project').then(m => m.updateProject({ ...project, archived: true, status: 'archived' }))
+    message.success('归档成功')
+    loadList()
+  }).catch(() => {})
+}
+
+const goDetail = (project: ProjectVO) => {
+  push({ name: 'PmsProjectDetail', params: { id: project.projectId } })
+}
+
+onMounted(() => {
+  loadList()
+})
+</script>
+
+<style scoped>
+.project-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 6px;
+}
+.project-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1D2129;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.card-more {
+  cursor: pointer;
+  color: #86909C;
+  font-size: 18px;
+}
+.card-phase {
+  margin-bottom: 12px;
+}
+.card-progress {
+  margin-bottom: 16px;
+}
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.card-meta {
+  border-top: 1px solid #F2F3F5;
+  padding-top: 12px;
+}
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #4E5969;
+  margin-bottom: 6px;
+}
+.meta-icon {
+  font-size: 14px;
+  color: #86909C;
+}
+.empty-state {
+  padding: 60px 0;
+  text-align: center;
+}
+</style>
