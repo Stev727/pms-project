@@ -153,8 +153,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Close } from '@element-plus/icons-vue'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getChangeRecordList, createChangeRecord, updateChangeRecord, ChangeRecordVO } from '@/api/pms/change'
+import { getChangeRecordList, createChangeRecord, updateChangeRecord, deleteChangeRecord, ChangeRecordVO } from '@/api/pms/change'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'

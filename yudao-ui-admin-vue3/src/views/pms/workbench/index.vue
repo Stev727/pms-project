@@ -6,7 +6,7 @@
         <el-card shadow="hover" class="stat-card" :class="{ active: activeTab === card.key }" @click="switchTab(card.key)">
           <div class="stat-content">
             <div class="stat-icon" :style="{ background: card.bg, color: card.color }">
-              <el-icon :size="24"><component :is="card.icon" /></el-icon>
+              <Icon :icon="card.iconRef" :size="24" />
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ card.value }}</div>
@@ -72,6 +72,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
 import * as echarts from 'echarts'
+import { ArrowRight } from '@element-plus/icons-vue'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
@@ -107,10 +108,10 @@ const tabConfig = [
 const statCards = computed(() => {
   const myTasks = allTasks.value
   return [
-    { key: 'not_started', label: '待办', value: myTasks.filter(t => t.completeStatus === 'not_started').length, sub: '本月新增 ' + myTasks.filter(t => t.completeStatus === 'not_started').length, icon: 'Clock', color: '#4E5969', bg: '#F2F3F5' },
-    { key: 'in_progress', label: '进行中', value: myTasks.filter(t => t.completeStatus === 'in_progress').length, sub: '平均进度 ' + Math.round(avgProgress(myTasks, 'in_progress')) + '%', icon: 'Loading', color: '#2468F2', bg: '#DCE7FF' },
-    { key: 'delayed', label: '延期', value: myTasks.filter(t => t.completeStatus === 'delayed').length, sub: '最长延期 ' + maxDelay(myTasks) + ' 天', icon: 'Warning', color: '#F53F3F', bg: '#FFECE8' },
-    { key: 'completed', label: '已完成', value: myTasks.filter(t => t.completeStatus === 'completed').length, sub: '本月完成', icon: 'CircleCheck', color: '#00B42A', bg: '#E8FFEA' }
+    { key: 'not_started', label: '待办', value: myTasks.filter(t => t.completeStatus === 'not_started').length, sub: '本月新增 ' + myTasks.filter(t => t.completeStatus === 'not_started').length, iconRef: 'ep:clock', color: '#4E5969', bg: '#F2F3F5' },
+    { key: 'in_progress', label: '进行中', value: myTasks.filter(t => t.completeStatus === 'in_progress').length, sub: '平均进度 ' + Math.round(avgProgress(myTasks, 'in_progress')) + '%', iconRef: 'ep:loading', color: '#2468F2', bg: '#DCE7FF' },
+    { key: 'delayed', label: '延期', value: myTasks.filter(t => t.completeStatus === 'delayed').length, sub: '最长延期 ' + maxDelay(myTasks) + ' 天', iconRef: 'ep:warning', color: '#F53F3F', bg: '#FFECE8' },
+    { key: 'completed', label: '已完成', value: myTasks.filter(t => t.completeStatus === 'completed').length, sub: '本月完成', iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' }
   ]
 })
 

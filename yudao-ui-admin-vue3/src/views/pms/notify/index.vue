@@ -133,6 +133,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { checkPermi } from '@/utils/permission'
 import { getNotifyRuleList, createNotifyRule, updateNotifyRule, deleteNotifyRule } from '@/api/pms/notify'
 
@@ -146,7 +147,8 @@ const ruleList = ref<any[]>([])
 
 const form = reactive({
   ruleName: '', triggerEvent: '', channels: ['dingtalk'],
-  notifyTarget: 'main_owner,helper', timeRule: '',
+  notifyTargets: ['main_owner', 'helper'], timeRule: '',
+  doNotDisturb: false, dndStartTime: '', dndEndTime: '',
   escalationFlag: false, escalationCondition: '', escalationTarget: '',
   templateTitle: '', templateContent: '', status: 'enabled'
 })
@@ -196,7 +198,7 @@ function openForm(row?: any) {
     Object.assign(form, {
       ruleName: row.ruleName, triggerEvent: row.triggerEvent,
       channels: parseChannels(row.notifyChannel),
-      notifyTarget: row.notifyTarget || 'main_owner,helper',
+      notifyTargets: parseChannels(row.notifyTarget || 'main_owner,helper'),
       timeRule: row.timeRule || '',
       escalationFlag: row.escalationFlag || false,
       escalationCondition: row.escalationCondition || '',
@@ -208,7 +210,8 @@ function openForm(row?: any) {
   } else {
     Object.assign(form, {
       ruleName: '', triggerEvent: '', channels: ['dingtalk'],
-      notifyTarget: 'main_owner,helper', timeRule: '',
+      notifyTargets: ['main_owner', 'helper'], timeRule: '',
+      doNotDisturb: false, dndStartTime: '', dndEndTime: '',
       escalationFlag: false, escalationCondition: '', escalationTarget: '',
       templateTitle: '', templateContent: '', status: 'enabled'
     })
@@ -226,7 +229,7 @@ async function saveRule() {
     ruleName: form.ruleName,
     triggerEvent: form.triggerEvent,
     notifyChannel: form.channels.join(','),
-    notifyTarget: form.notifyTarget,
+    notifyTarget: form.notifyTargets ? form.notifyTargets.join(',') : '',
     timeRule: form.timeRule,
     escalationFlag: form.escalationFlag,
     escalationCondition: form.escalationFlag ? form.escalationCondition : null,

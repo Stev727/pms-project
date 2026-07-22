@@ -85,7 +85,8 @@
         <el-tab-pane label="任务列表" name="tasks">
           <template v-if="activeTab === 'tasks'">
             <TaskListTab :project-id="projectId" :tasks="projectTasks" :stages="projectStages"
-              @task-click="openTaskDrawer" @refresh="loadProjectData" @create-task="openCreateTaskDialog" />
+              @task-click="openTaskDrawer" @refresh="loadProjectData" @create-task="openCreateTaskDialog"
+              @start-change="handleStartChange" />
           </template>
         </el-tab-pane>
 
@@ -450,6 +451,11 @@ const submitCreateTask = async () => {
 }
 
 const handleEdit = () => { push({ name: 'PmsProject', query: { edit: projectId.value } }) }
+
+const handleStartChange = () => {
+  activeTab.value = 'changes'
+  nextTick(() => changesTabRef.value?.refresh?.())
+}
 
 const handleCopyProject = () => {
   message.info('复制项目功能开发中')

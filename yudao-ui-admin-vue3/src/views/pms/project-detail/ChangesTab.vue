@@ -171,8 +171,11 @@ import { getChangeRecordList, createChangeRecord, updateChangeRecord, ChangeReco
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'ChangesTab' })
+
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const props = defineProps<{
   projectId: string

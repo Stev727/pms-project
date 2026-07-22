@@ -19,7 +19,7 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon" :style="{ background: card.bg, color: card.color }">
-              <el-icon :size="24"><component :is="card.icon" /></el-icon>
+              <Icon :icon="card.iconRef" :size="24" />
             </div>
             <div class="stat-info">
               <div class="stat-value" :style="{ color: card.color }">{{ card.value }}</div>
@@ -179,10 +179,10 @@ const statCards = computed(() => {
     ? completed.reduce((sum, t) => sum + (t.cycle || 0), 0) / completed.length
     : 0
   return [
-    { key: 'total', label: '任务总量', value: tasks.length, icon: 'List', color: '#2468F2', bg: '#DCE7FF' },
-    { key: 'onTime', label: '按时完成率', value: (onTimeRate * 100).toFixed(1) + '%', icon: 'CircleCheck', color: '#00B42A', bg: '#E8FFEA' },
-    { key: 'avgDuration', label: '平均完成时长', value: avgDuration.toFixed(1) + '天', icon: 'Timer', color: '#FF7D00', bg: '#FFF7E8' },
-    { key: 'users', label: '参与人数', value: users, icon: 'User', color: '#722ED1', bg: '#F0E8FF' }
+    { key: 'total', label: '任务总量', value: tasks.length, iconRef: 'ep:list', color: '#2468F2', bg: '#DCE7FF' },
+    { key: 'onTime', label: '按时完成率', value: (onTimeRate * 100).toFixed(1) + '%', iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' },
+    { key: 'avgDuration', label: '平均完成时长', value: avgDuration.toFixed(1) + '天', iconRef: 'ep:timer', color: '#FF7D00', bg: '#FFF7E8' },
+    { key: 'users', label: '参与人数', value: users, iconRef: 'ep:user', color: '#722ED1', bg: '#F0E8FF' }
   ]
 })
 

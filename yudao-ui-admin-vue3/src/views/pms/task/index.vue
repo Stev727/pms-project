@@ -239,7 +239,7 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import {
-  taskStatusMap, priorityMap, taskTypeOptions, formatDate, calcDelayDays
+  taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'

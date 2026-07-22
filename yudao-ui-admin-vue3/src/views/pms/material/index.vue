@@ -31,7 +31,7 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon" :style="{ background: card.bg, color: card.color }">
-              <el-icon :size="24"><component :is="card.icon" /></el-icon>
+              <Icon :icon="card.iconRef" :size="24" />
             </div>
             <div>
               <div class="stat-value" :style="{ color: card.color }">{{ card.value }}</div>
@@ -194,8 +194,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Plus, Close } from '@element-plus/icons-vue'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getMaterialTrackList, createMaterialTrack, updateMaterialTrack, deleteMaterialTrack } from '@/api/pms/material'
+import { getMaterialTrackList, createMaterialTrack } from '@/api/pms/material'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 
@@ -232,10 +233,10 @@ const filteredData = computed(() => {
 const statCards = computed(() => {
   const data = tableData.value
   return [
-    { key: 'total', label: '总物料数', value: data.length, icon: 'Box', color: '#2468F2', bg: '#DCE7FF' },
-    { key: 'normal', label: '正常', value: data.filter(m => m.warningStatus === 'normal').length, icon: 'CircleCheck', color: '#00B42A', bg: '#E8FFEA' },
-    { key: 'warning', label: '预警中', value: data.filter(m => m.warningStatus === 'warning').length, icon: 'Warning', color: '#FF7D00', bg: '#FFF7E8' },
-    { key: 'urgent', label: '紧急', value: data.filter(m => m.warningStatus === 'urgent').length, icon: 'CircleClose', color: '#F53F3F', bg: '#FFECE8' }
+    { key: 'total', label: '总物料数', value: data.length, iconRef: 'ep:box', color: '#2468F2', bg: '#DCE7FF' },
+    { key: 'normal', label: '正常', value: data.filter(m => m.warningStatus === 'normal').length, iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' },
+    { key: 'warning', label: '预警中', value: data.filter(m => m.warningStatus === 'warning').length, iconRef: 'ep:warning', color: '#FF7D00', bg: '#FFF7E8' },
+    { key: 'urgent', label: '紧急', value: data.filter(m => m.warningStatus === 'urgent').length, iconRef: 'ep:circle-close', color: '#F53F3F', bg: '#FFECE8' }
   ]
 })
 

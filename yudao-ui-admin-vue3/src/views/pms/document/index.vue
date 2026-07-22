@@ -98,6 +98,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Upload, Document } from '@element-plus/icons-vue'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { getProjectList, ProjectVO } from '@/api/pms/project'

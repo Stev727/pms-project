@@ -21,7 +21,7 @@
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
             <div class="stat-icon" :style="{ background: card.bg, color: card.color }">
-              <el-icon :size="24"><component :is="card.icon" /></el-icon>
+              <Icon :icon="card.iconRef" :size="24" />
             </div>
             <div class="stat-info">
               <div class="stat-value" :style="{ color: card.color }">{{ card.value }}</div>
@@ -108,8 +108,8 @@ import * as echarts from 'echarts'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
-import { taskStatusMap, phaseColorMap, formatDate, calcDelayDays, getDelaySeverity } from '../pms-utils'
-import { checkPermi } from '@/utils/permission'
+import { phaseColorMap, formatDate, calcDelayDays, getDelaySeverity } from '../pms-utils'
+import { Download } from '@element-plus/icons-vue'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsDelayAnalysis' })
@@ -171,10 +171,10 @@ const statCards = computed(() => {
   const severe = delays.filter(d => d > 7).length
   const total = allTasks.value.length || 1
   return [
-    { key: 'total', label: '延期任务总数', value: tasks.length, sub: '全部项目', icon: 'Warning', color: '#F53F3F', bg: '#FFECE8' },
-    { key: 'avg', label: '平均延期天数', value: avgDelay + '天', sub: '所有延期任务', icon: 'Timer', color: '#FF7D00', bg: '#FFF7E8' },
-    { key: 'rate', label: '延期率', value: ((tasks.length / total) * 100).toFixed(1) + '%', sub: `${tasks.length}/${total}`, icon: 'PieChart', color: '#722ED1', bg: '#F0E8FF' },
-    { key: 'severe', label: '严重延期(>7天)', value: severe, sub: '需立即处理', icon: 'CircleClose', color: '#CB2634', bg: '#FFECE8' }
+    { key: 'total', label: '延期任务总数', value: tasks.length, sub: '全部项目', iconRef: 'ep:warning', color: '#F53F3F', bg: '#FFECE8' },
+    { key: 'avg', label: '平均延期天数', value: avgDelay + '天', sub: '所有延期任务', iconRef: 'ep:timer', color: '#FF7D00', bg: '#FFF7E8' },
+    { key: 'rate', label: '延期率', value: ((tasks.length / total) * 100).toFixed(1) + '%', sub: `${tasks.length}/${total}`, iconRef: 'ep:pie-chart', color: '#722ED1', bg: '#F0E8FF' },
+    { key: 'severe', label: '严重延期(>7天)', value: severe, sub: '需立即处理', iconRef: 'ep:circle-close', color: '#CB2634', bg: '#FFECE8' }
   ]
 })
 

@@ -366,6 +366,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { Document, CircleCheckFilled, ArrowRight, ArrowLeft, Plus, Folder, Star, Check } from '@element-plus/icons-vue'
 import { getProjectList, getProject, createProject, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { getTaskList, TaskVO } from '@/api/pms/task'
