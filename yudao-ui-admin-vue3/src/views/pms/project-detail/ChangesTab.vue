@@ -191,11 +191,10 @@ const autoAdjust = ref(true)
 const tasks = ref<TaskVO[]>([])
 
 const changeTypes: Record<string, { label: string; color: string }> = {
-  schedule: { label: '工期变更', color: '#2468F2' },
-  content: { label: '内容变更', color: '#722ED1' },
-  material: { label: '物料变更', color: '#FF7D00' },
-  personnel: { label: '人员变更', color: '#0FC6C2' },
-  cost: { label: '成本变更', color: '#00B42A' }
+  requirement: { label: '需求变更', color: '#2468F2' },
+  technical: { label: '技术变更', color: '#722ED1' },
+  schedule: { label: '计划变更', color: '#FF7D00' },
+  personnel: { label: '人员变更', color: '#0FC6C2' }
 }
 
 const changeStatusMap: Record<string, { label: string; color: string }> = {
@@ -233,8 +232,8 @@ async function fetchList() {
         title: item.changeDescription || '',
         type: item.changeType || '',
         status: item.approvalStatus || '',
-        applicant: item.initiatorId ? String(item.initiatorId) : '',
-        approver: item.approverId ? String(item.approverId) : '',
+        applicant: item.initiatorId ? getUserName(item.initiatorId) : '',
+        approver: item.approverId ? getUserName(item.approverId) : '',
         applyTime: item.createTime || '',
         urgent: item.scheduleImpact ? Number(item.scheduleImpact) > 0 : false,
         beforeContent: '',

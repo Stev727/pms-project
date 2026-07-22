@@ -43,16 +43,27 @@
         </el-table-column>
         <el-table-column prop="userName" label="姓名" width="100" />
         <el-table-column prop="deptName" label="部门" width="100" />
-        <el-table-column prop="totalTasks" label="任务数" width="80" align="center" />
-        <el-table-column prop="completedTasks" label="完成" width="70" align="center" />
-        <el-table-column label="按时率" width="100" align="center">
+        <el-table-column prop="totalTasks" label="负责任务数" width="90" align="center" />
+        <el-table-column prop="completedTasks" label="已完成" width="70" align="center" />
+        <el-table-column prop="delayedTasks" label="延期任务数" width="90" align="center">
+          <template #default="{ row }">
+            <span :style="{ color: row.delayedTasks > 0 ? '#F53F3F' : '#86909C' }">{{ row.delayedTasks || 0 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="totalDelayDays" label="延期天数合计" width="100" align="center">
+          <template #default="{ row }">
+            <span :style="{ color: row.totalDelayDays > 0 ? '#FF7D00' : '#86909C' }">{{ row.totalDelayDays || 0 }}天</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="按时完成率" width="100" align="center">
           <template #default="{ row }">
             <el-progress :percentage="Math.round(row.onTimeRate * 100)" :stroke-width="14" :text-inside="true" :color="getProgressColor(row.onTimeRate)" />
           </template>
         </el-table-column>
-        <el-table-column label="完成率" width="100" align="center">
+        <el-table-column prop="assistTasks" label="协助任务数" width="90" align="center" />
+        <el-table-column prop="assistDelayedTasks" label="协助延期数" width="90" align="center">
           <template #default="{ row }">
-            <el-progress :percentage="Math.round(row.completionRate * 100)" :stroke-width="14" :text-inside="true" :color="getProgressColor(row.completionRate)" />
+            <span :style="{ color: (row.assistDelayedTasks || 0) > 0 ? '#F53F3F' : '#86909C' }">{{ row.assistDelayedTasks || 0 }}</span>
           </template>
         </el-table-column>
         <el-table-column label="综合分" width="100" align="center">
@@ -140,10 +151,10 @@ function disabledDate(time: Date): boolean {
 // 按月份和部门筛选后的任务
 const filteredTasks = computed(() => {
   let tasks = allTasks.value
-  // 按月份筛选（基于任务创建时间或计划开始时间）
+  // 按月份筛选（基于实际完成日期，统计当月绩效）
   if (selectedMonth.value) {
     tasks = tasks.filter(t => {
-      const dateStr = t.planStartDate || t.createTime || ''
+      const dateStr = t.actualCompleteDate || ''
       return dateStr.startsWith(selectedMonth.value)
     })
   }
@@ -185,14 +196,42 @@ const rankingData = computed(() => {
         userId: uid,
         userName: getUserName(t.mainOwnerId),
         deptName: '-',
-        totalTasks: 0, completedTasks: 0, onTimeTasks: 0, totalDuration: 0
+        totalTasks: 0, completedTasks: 0, onTimeTasks: 0, totalDuration: 0,
+        delayedTasks: 0, totalDelayDays: 0,
+        assistTasks: 0, assistDelayedTasks: 0
       }
     }
     userStats[uid].totalTasks++
     if (t.completeStatus === 'completed') {
       userStats[uid].completedTasks++
       userStats[uid].totalDuration += (t.cycle || 0)
-      if (calcDelayDays(t.planEndDate, t.completeStatus) === 0) userStats[uid].onTimeTasks++
+      if (calcDelayDays(t.planEndDate, t.completeStatus) === 0) {
+        userStats[uid].onTimeTasks++
+      } else {
+        userStats[uid].delayedTasks++
+        userStats[uid].totalDelayDays += calcDelayDays(t.planEndDate, t.completeStatus)
+      }
+    } else if (calcDelayDays(t.planEndDate, t.completeStatus) > 0) {
+      userStats[uid].delayedTasks++
+      userStats[uid].totalDelayDays += calcDelayDays(t.planEndDate, t.completeStatus)
+    }
+    // 协助人统计
+    if (t.helperIds) {
+      const helperIds = t.helperIds.split(',').filter(Boolean)
+      for (const hid of helperIds) {
+        if (!userStats[hid]) {
+          userStats[hid] = {
+            userId: hid, userName: getUserName(hid), deptName: '-',
+            totalTasks: 0, completedTasks: 0, onTimeTasks: 0, totalDuration: 0,
+            delayedTasks: 0, totalDelayDays: 0,
+            assistTasks: 0, assistDelayedTasks: 0
+          }
+        }
+        userStats[hid].assistTasks++
+        if (calcDelayDays(t.planEndDate, t.completeStatus) > 0) {
+          userStats[hid].assistDelayedTasks++
+        }
+      }
     }
   })
   // 填充部门信息

@@ -142,9 +142,8 @@
               <el-form label-width="80px">
                 <el-form-item label="审核结果">
                   <el-radio-group v-model="reviewForm.result">
-                    <el-radio label="approved">通过</el-radio>
-                    <el-radio label="rejected">驳回</el-radio>
-                    <el-radio label="modify">需修改</el-radio>
+                  <el-radio label="approved">通过</el-radio>
+                  <el-radio label="rejected">驳回</el-radio>
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item label="审核意见">
@@ -166,14 +165,14 @@
         <el-button @click="handleReportProgress" v-if="canReportProgress">
           <Icon icon="ep:edit" class="mr-4px" />进度填报
         </el-button>
-        <el-button @click="handleCreateChange">
+        <el-button @click="handleCreateChange" v-if="task?.completeStatus === 'completed'">
           <Icon icon="ep:edit-pen" class="mr-4px" />发起变更
         </el-button>
-        <el-button @click="handlePause" v-if="task?.completeStatus === 'in_progress'">
+        <el-button @click="handlePause" v-if="task?.completeStatus === 'in_progress' && checkPermi(['pms:task:update'])">
           <Icon icon="ep:video-pause" class="mr-4px" />暂停任务
         </el-button>
-        <el-button type="success" @click="handleComplete" v-if="task?.completeStatus !== 'completed' && task?.completeStatus !== 'cancelled'">
-          <Icon icon="ep:circle-check" class="mr-4px" />完成任务
+        <el-button type="success" @click="handleSubmitComplete" v-if="task?.completeStatus === 'in_progress' || task?.completeStatus === 'delayed'">
+          <Icon icon="ep:circle-check" class="mr-4px" />提交完成
         </el-button>
       </div>
     </div>
@@ -185,7 +184,7 @@
         <el-form-item label="填报进度">
           <el-slider v-model="progressForm.progress" :min="task?.progress || 0" :max="100" show-input />
         </el-form-item>
-        <el-form-item label="剩余工时">
+        <el-form-item label="剩余工期">
           <el-input-number v-model="progressForm.remainingDays" :min="0" />天
         </el-form-item>
         <el-form-item label="填报说明">
@@ -198,10 +197,33 @@
       </template>
     </el-dialog>
   </el-drawer>
+
+  <!-- 提交完成确认弹窗 -->
+  <el-dialog v-model="showSubmitDialog" title="提交完成确认" width="480px" append-to-body>
+    <el-alert
+      v-if="!hasDeliverable"
+      title="请先上传输出物文件"
+      type="warning"
+      :closable="false"
+      show-icon
+      description="根据流程要求，提交完成前必须至少关联一个输出物文件。"
+      class="mb-16px"
+    />
+    <el-form label-width="90px">
+      <el-form-item label="完成说明">
+        <el-input v-model="submitForm.completionNote" type="textarea" :rows="3" placeholder="请描述完成情况" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="showSubmitDialog = false">取消</el-button>
+      <el-button type="primary" :disabled="!hasDeliverable" @click="confirmSubmitComplete">确认提交</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { TaskVO, updateTask } from '@/api/pms/task'
+import { getDocumentList } from '@/api/pms/document'
 import {
   taskStatusMap, priorityMap, taskTypeOptions,
   formatDate, calcDelayDays
@@ -296,11 +318,11 @@ const handleReportProgress = () => {
 const submitProgress = async () => {
   if (!task.value) return
   try {
+    // 进度填报不自动完成，必须走提交完成→待审核流程
     await updateTask({
-      ...task.value,
+      taskId: task.value.taskId,
       progress: progressForm.progress,
-      completeStatus: progressForm.progress >= 100 ? 'completed' : 'in_progress',
-      actualCompleteDate: progressForm.progress >= 100 ? new Date().toISOString().split('T')[0] : undefined
+      completeStatus: progressForm.progress >= 100 ? 'pending_review' : task.value.completeStatus
     })
     message.success('进度填报成功')
     showProgressDialog.value = false
@@ -308,6 +330,7 @@ const submitProgress = async () => {
     if (task.value) task.value.progress = progressForm.progress
   } catch (e) {
     console.error('进度填报失败', e)
+    message.error('进度填报失败')
   }
 }
 
@@ -318,27 +341,50 @@ const handleCreateChange = () => {
 const handlePause = () => {
   message.confirm('确认暂停此任务？').then(async () => {
     if (!task.value) return
-    await updateTask({ ...task.value, completeStatus: 'paused' })
+    await updateTask({ taskId: task.value.taskId, completeStatus: 'paused' })
     message.success('任务已暂停')
     task.value.completeStatus = 'paused'
     emit('refresh')
   }).catch(() => {})
 }
 
-const handleComplete = () => {
-  message.confirm('确认完成此任务？请确保所有输出物已上传。').then(async () => {
-    if (!task.value) return
+// 提交完成 — 走待审核流程，需校验输出物
+const showSubmitDialog = ref(false)
+const submitForm = reactive({ completionNote: '' })
+const hasDeliverable = ref(false)
+
+const handleSubmitComplete = async () => {
+  if (!task.value) return
+  // 校验输出物
+  try {
+    const docs = await getDocumentList()
+    const taskDocs = ((docs as any[]) || []).filter(d => String(d.taskId) === String(task.value!.taskId))
+    hasDeliverable.value = taskDocs.length > 0
+  } catch { hasDeliverable.value = false }
+  submitForm.completionNote = ''
+  showSubmitDialog.value = true
+}
+
+const confirmSubmitComplete = async () => {
+  if (!task.value) return
+  if (!hasDeliverable.value) {
+    message.warning('请先上传输出物文件后再提交完成')
+    return
+  }
+  try {
     await updateTask({
-      ...task.value,
-      completeStatus: 'completed',
-      progress: 100,
-      actualCompleteDate: new Date().toISOString().split('T')[0]
+      taskId: task.value.taskId,
+      completeStatus: 'pending_review',
+      progress: 100
     })
-    message.success('任务已完成')
-    task.value.completeStatus = 'completed'
-    task.value.progress = 100
+    message.success('已提交完成，等待项目经理审核')
+    showSubmitDialog.value = false
+    task.value.completeStatus = 'pending_review'
     emit('refresh')
-  }).catch(() => {})
+  } catch (e) {
+    console.error('提交完成失败', e)
+    message.error('提交失败')
+  }
 }
 
 const handleUpload = () => {
@@ -354,17 +400,19 @@ const handleSubmitReview = async () => {
   try {
     const statusMap: Record<string, string> = {
       approved: 'completed',
-      rejected: 'in_progress',
-      modify: 'in_progress'
+      rejected: 'in_progress'
     }
-    await updateTask({
-      ...task.value,
-      completeStatus: statusMap[reviewForm.result] || task.value.completeStatus,
-      description: task.value.description
-        ? `${task.value.description}\n[审核意见] ${reviewForm.result === 'approved' ? '通过' : reviewForm.result === 'rejected' ? '驳回' : '需修改'}: ${reviewForm.opinion || ''}`
-        : `[审核意见] ${reviewForm.result === 'approved' ? '通过' : reviewForm.result === 'rejected' ? '驳回' : '需修改'}: ${reviewForm.opinion || ''}`
-    })
-    message.success('审核已提交')
+    const updateData: any = {
+      taskId: task.value.taskId,
+      completeStatus: statusMap[reviewForm.result] || task.value.completeStatus
+    }
+    // 审核通过时设置实际完成日期为当前时间（PM审核通过时间）
+    if (reviewForm.result === 'approved') {
+      updateData.actualCompleteDate = new Date().toISOString().split('T')[0]
+      updateData.progress = 100
+    }
+    await updateTask(updateData)
+    message.success(`审核已${reviewForm.result === 'approved' ? '通过' : '驳回'}`)
     reviewForm.result = ''
     reviewForm.opinion = ''
     emit('refresh')

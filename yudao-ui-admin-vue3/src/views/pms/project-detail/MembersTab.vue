@@ -54,12 +54,12 @@
         <el-form-item label="项目角色" required>
           <el-select v-model="form.roleCode" class="w-full">
             <el-option label="项目经理" value="pm" />
-            <el-option label="技术负责人" value="tech_lead" />
-            <el-option label="硬件工程师" value="hw_engineer" />
-            <el-option label="软件工程师" value="sw_engineer" />
-            <el-option label="测试工程师" value="qa_engineer" />
-            <el-option label="结构工程师" value="mech_engineer" />
-            <el-option label="采购" value="procurement" />
+            <el-option label="部门负责人" value="dept_head" />
+            <el-option label="主责任人" value="main_owner" />
+            <el-option label="协助人" value="helper" />
+            <el-option label="管理层" value="management" />
+            <el-option label="外部成员" value="external" />
+            <el-option label="系统管理员" value="admin" />
           </el-select>
         </el-form-item>
         <el-form-item label="是否外部">
@@ -110,14 +110,13 @@ const form = reactive({
 })
 
 const roleLabelMap: Record<string, string> = {
-  pm: '项目经理', tech_lead: '技术负责人', hw_engineer: '硬件工程师',
-  sw_engineer: '软件工程师', qa_engineer: '测试工程师',
-  mech_engineer: '结构工程师', procurement: '采购'
+  pm: '项目经理', dept_head: '部门负责人', main_owner: '主责任人',
+  helper: '协助人', management: '管理层', external: '外部成员', admin: '系统管理员'
 }
 
 function getRoleLabel(code: string): string { return roleLabelMap[code] || code || '-' }
 function getRoleTagType(role: string): string {
-  const map: Record<string, string> = { pm: 'danger', tech_lead: 'warning', hw_engineer: 'primary', sw_engineer: 'primary', qa_engineer: 'success', mech_engineer: 'info', procurement: '' }
+  const map: Record<string, string> = { pm: 'danger', dept_head: 'warning', main_owner: 'primary', helper: 'info', management: 'success', external: 'info', admin: 'danger' }
   return map[role] || 'info'
 }
 function getUserNameLocal(userId?: number): string {

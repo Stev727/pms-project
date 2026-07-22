@@ -4,14 +4,16 @@
       <span class="toolbar-title">质量问题 ({{ filteredList.length }})</span>
       <div style="display: flex; gap: 8px">
         <el-select v-model="filterSeverity" placeholder="严重程度" clearable size="small" style="width: 110px">
-          <el-option label="致命" value="fatal" />
-          <el-option label="严重" value="severe" />
-          <el-option label="一般" value="minor" />
-          <el-option label="建议" value="suggestion" />
+          <el-option label="致命(9-10)" value="fatal" />
+          <el-option label="严重(6-8)" value="severe" />
+          <el-option label="一般(3-5)" value="minor" />
+          <el-option label="建议(1-2)" value="suggestion" />
         </el-select>
         <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
-          <el-option label="待处理" value="open" />
-          <el-option label="处理中" value="in_progress" />
+          <el-option label="新建" value="new" />
+          <el-option label="已指派" value="assigned" />
+          <el-option label="处理中" value="processing" />
+          <el-option label="待验证" value="pending_verify" />
           <el-option label="已关闭" value="closed" />
         </el-select>
         <el-button type="primary" size="small" @click="showForm = true" v-if="checkPermi(['pms:quality:create'])">

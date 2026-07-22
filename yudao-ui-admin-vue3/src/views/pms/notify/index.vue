@@ -51,11 +51,19 @@
         <el-form-item label="触发事件" required>
           <el-select v-model="form.triggerEvent" placeholder="请选择" class="w-full">
             <el-option label="任务即将到期(T-3)" value="task_t_minus_3" />
-            <el-option label="任务已延期" value="task_overdue" />
+            <el-option label="任务即将到期(T-1)" value="task_t_minus_1" />
+            <el-option label="任务已延期(D+1)" value="task_d_plus_1" />
+            <el-option label="任务延期超3天" value="task_overdue_3" />
+            <el-option label="任务延期超7天" value="task_overdue_7" />
+            <el-option label="任务派发" value="task_dispatched" />
+            <el-option label="任务提交完成" value="task_submitted" />
+            <el-option label="任务审核通过" value="task_approved" />
+            <el-option label="任务审核驳回" value="task_rejected" />
             <el-option label="阶段即将开始" value="stage_starting" />
             <el-option label="项目里程碑达成" value="milestone_reached" />
             <el-option label="质量问题创建" value="quality_created" />
             <el-option label="变更待审批" value="change_pending" />
+            <el-option label="月度绩效推送" value="monthly_performance" />
           </el-select>
         </el-form-item>
         <el-form-item label="通知渠道">
@@ -67,11 +75,29 @@
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="通知对象">
-          <el-input v-model="form.notifyTarget" placeholder="如：main_owner,helper" />
+          <el-select v-model="form.notifyTargets" multiple placeholder="选择通知对象" class="w-full">
+            <el-option label="主责任人" value="main_owner" />
+            <el-option label="协助人" value="helper" />
+            <el-option label="项目经理" value="pm" />
+            <el-option label="部门负责人" value="dept_head" />
+            <el-option label="技术总监" value="director" />
+            <el-option label="管理层+HR" value="management_hr" />
+          </el-select>
         </el-form-item>
         <el-form-item label="时间规则">
           <el-input v-model="form.timeRule" placeholder="如：计划完成日期前3个工作日" />
         </el-form-item>
+        <el-divider content-position="left">免打扰设置</el-divider>
+        <el-form-item label="免打扰">
+          <el-switch v-model="form.doNotDisturb" />
+        </el-form-item>
+        <template v-if="form.doNotDisturb">
+          <el-form-item label="免打扰时段">
+            <el-time-picker v-model="form.dndStartTime" placeholder="开始时间" format="HH:mm" value-format="HH:mm" style="width: 120px" />
+            <span style="margin: 0 8px">至</span>
+            <el-time-picker v-model="form.dndEndTime" placeholder="结束时间" format="HH:mm" value-format="HH:mm" style="width: 120px" />
+          </el-form-item>
+        </template>
         <el-divider content-position="left">升级规则</el-divider>
         <el-form-item label="启用升级">
           <el-switch v-model="form.escalationFlag" />

@@ -247,16 +247,32 @@ function getProjectName(projectId?: number): string {
 
 function getStatusColor(m: any): string {
   if (!m) return '#86909C'
-  if (m.warningStatus === 'urgent') return '#F53F3F'
-  if (m.warningStatus === 'warning') return '#FF7D00'
+  const status = calcWarningStatus(m)
+  if (status === 'urgent') return '#F53F3F'
+  if (status === 'warning') return '#FF7D00'
   return '#00B42A'
 }
 
 function getStatusLabel(m: any): string {
   if (!m) return '-'
-  if (m.warningStatus === 'urgent') return '紧急'
-  if (m.warningStatus === 'warning') return '预警中'
+  const status = calcWarningStatus(m)
+  if (status === 'urgent') return '紧急(已超期)'
+  if (status === 'warning') return '预警(≤7天)'
   return '正常'
+}
+
+// 自动计算预警状态：正常 / 预警(≤7天) / 紧急(已超期)
+function calcWarningStatus(m: any): string {
+  if (m.actualDeliveryDate) return 'normal' // 已到货
+  const targetDate = m.planOrderDate || m.latestOrderDate
+  if (!targetDate) return 'normal'
+  const now = new Date()
+  const target = new Date(targetDate)
+  if (isNaN(target.getTime())) return 'normal'
+  const diff = Math.floor((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  if (diff < 0) return 'urgent'  // 已超期
+  if (diff <= 7) return 'warning' // 7天内
+  return 'normal'
 }
 
 function getRemainingDays(m: any): string {

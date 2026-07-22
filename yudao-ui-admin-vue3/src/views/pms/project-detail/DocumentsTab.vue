@@ -179,6 +179,8 @@ function previewDoc(row: any) { previewDocData.value = row; previewVisible.value
 function downloadDoc(row: any) {
   if (row.storagePath) {
     window.open(row.storagePath, '_blank')
+    // 更新下载次��（前端模拟日志）
+    row.downloadCount = (row.downloadCount || 0) + 1
     ElMessage.success(`正在下载：${row.fileName}`)
   } else {
     ElMessage.warning('该文档没有可用的下载路径')
@@ -197,24 +199,40 @@ function removeDoc(row: any) {
 
 function handleBatchDownload() {
   if (selectedRows.value.length === 0) return
-  ElMessage.info(`准备下载 ${selectedRows.value.length} 个文档（批量下载功能开发中）`)
+  // 逐个触发下载
+  let count = 0
+  for (const doc of selectedRows.value) {
+    if (doc.storagePath) {
+      window.open(doc.storagePath, '_blank')
+      count++
+    }
+  }
+  ElMessage.success(`已开始下载 ${count} 个文档`)
 }
 
-async function handleUploadSuccess(response: any) {
+async function handleUploadSuccess(response: any, uploadFile: any) {
   try {
     const fileUrl = response?.data || response
-    const fileName = fileUrl?.split('/').pop() || '未命名文档'
+    const fileName = uploadFile?.name || fileUrl?.split('/').pop() || '未命名文档'
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
+    const fileSize = uploadFile?.size || 0
+    // 检查同名文档是否存在，自动递增版本号
+    const existing = documentList.value.find(d => d.fileName === fileName)
+    let versionNo = '1.0'
+    if (existing) {
+      const prevVersion = parseFloat(existing.versionNo || '1.0')
+      versionNo = (prevVersion + 0.1).toFixed(1)
+    }
     await createDocument({
       fileName,
       fileType: ext,
       category: filterCategory.value || 'project_doc',
-      projectId: Number(props.projectId),
+      projectId: props.projectId,
       storagePath: fileUrl,
-      versionNo: '1.0',
-      fileSize: 0
+      versionNo,
+      fileSize
     } as DocumentVO)
-    ElMessage.success('文档上传成功')
+    ElMessage.success(`文档上传成功（版本 v${versionNo}）`)
     await loadDocuments()
   } catch (e) { console.error(e); ElMessage.error('文档保存失败') }
 }

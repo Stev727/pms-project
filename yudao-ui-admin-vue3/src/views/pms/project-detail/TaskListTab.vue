@@ -91,7 +91,11 @@
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
-            <!-- 状态流转按钮 (SEVERE-1 修复) -->
+            <!-- 状态流转按钮 -->
+            <el-button
+              v-if="canTransition(row, 'dispatch')"
+              link type="primary" size="small" @click.stop="handleTransition(row, 'dispatch')"
+            >派发</el-button>
             <el-button
               v-if="canTransition(row, 'accept')"
               link type="primary" size="small" @click.stop="handleTransition(row, 'accept')"
@@ -101,9 +105,9 @@
               link type="danger" size="small" @click.stop="handleTransition(row, 'reject')"
             >拒绝</el-button>
             <el-button
-              v-if="canTransition(row, 'start')"
-              link type="primary" size="small" @click.stop="handleTransition(row, 'start')"
-            >开始</el-button>
+              v-if="canTransition(row, 'redispatch')"
+              link type="primary" size="small" @click.stop="handleTransition(row, 'redispatch')"
+            >重新派发</el-button>
             <el-button
               v-if="canTransition(row, 'submit')"
               link type="success" size="small" @click.stop="handleTransition(row, 'submit')"
@@ -162,6 +166,23 @@
         <el-button type="primary" :disabled="!hasDeliverable" @click="confirmSubmit">确认提交</el-button>
       </template>
     </el-dialog>
+
+    <!-- 延期填写弹窗（异常原因+改善方案） -->
+    <el-dialog v-model="delayFormVisible" title="延期处理" width="500px">
+      <el-alert title="任务已标记为延期，请填写异常原因和改善方案" type="warning" :closable="false" show-icon class="mb-16px" />
+      <el-form label-width="100px">
+        <el-form-item label="异常原因" required>
+          <el-input v-model="delayForm.exceptionReason" type="textarea" :rows="3" placeholder="请说明延期原因" />
+        </el-form-item>
+        <el-form-item label="改善方案" required>
+          <el-input v-model="delayForm.improvementPlan" type="textarea" :rows="3" placeholder="请填写改善方案和预计恢复时间" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="delayFormVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmDelay">确认</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -196,6 +217,11 @@ const filterStage = ref<string | undefined>()
 const filterStatus = ref('')
 const filterAssignee = ref('')
 const expandAll = ref(true)
+
+// 延期填写
+const delayFormVisible = ref(false)
+const delayTarget = ref<any>(null)
+const delayForm = reactive({ exceptionReason: '', improvementPlan: '' })
 const expandedRowKeys = ref<string[]>([])
 
 // 提交完成
@@ -262,9 +288,10 @@ const filteredTreeData = computed<TreeRow[]>(() => {
 
 // ==================== 状态流转逻辑 ====================
 const transitionRules: Record<string, { from: string[]; to: string; label: string; roles: string[] }> = {
-  accept: { from: ['not_started'], to: 'in_progress', label: '接收任务', roles: ['assignee'] },
-  reject: { from: ['not_started'], to: 'rejected', label: '拒绝任务', roles: ['assignee'] },
-  start: { from: ['not_started'], to: 'in_progress', label: '开始任务', roles: ['assignee', 'pm'] },
+  dispatch: { from: ['not_started'], to: 'pending_accept', label: '派发任务', roles: ['pm'] },
+  accept: { from: ['pending_accept'], to: 'in_progress', label: '接收任务', roles: ['assignee'] },
+  reject: { from: ['pending_accept'], to: 'rejected', label: '拒绝任务', roles: ['assignee'] },
+  redispatch: { from: ['rejected'], to: 'pending_accept', label: '重新派发', roles: ['pm'] },
   submit: { from: ['in_progress', 'delayed'], to: 'pending_review', label: '提交完成', roles: ['assignee'] },
   approve: { from: ['pending_review'], to: 'completed', label: '审核通过', roles: ['pm', 'reviewer'] },
   reject_review: { from: ['pending_review'], to: 'in_progress', label: '驳回', roles: ['pm', 'reviewer'] },
@@ -297,12 +324,40 @@ async function handleTransition(row: TreeRow, action: string) {
     return
   }
 
+  // 延期标记 — 弹出异常原因+改善方案填写
+  if (action === 'mark_delayed') {
+    delayTarget.value = row
+    delayForm.exceptionReason = ''
+    delayForm.improvementPlan = ''
+    delayFormVisible.value = true
+    return
+  }
+
   try {
     await updateTask({
       taskId: row.taskId,
       completeStatus: rule.to
     } as TaskVO)
     message.success(`任务已${rule.label}`)
+    emit('refresh')
+  } catch (e: any) {
+    message.error(e?.message || '操作失败')
+  }
+}
+
+async function confirmDelay() {
+  if (!delayForm.exceptionReason) { message.warning('请填写异常原因'); return }
+  if (!delayForm.improvementPlan) { message.warning('请填写改善方案'); return }
+  if (!delayTarget.value) return
+  try {
+    await updateTask({
+      taskId: delayTarget.value.taskId,
+      completeStatus: 'delayed',
+      exceptionReason: delayForm.exceptionReason,
+      improvementPlan: delayForm.improvementPlan
+    } as TaskVO)
+    message.success('延期已记录')
+    delayFormVisible.value = false
     emit('refresh')
   } catch (e: any) {
     message.error(e?.message || '操作失败')

@@ -23,11 +23,12 @@ export const phaseColorMap: Record<string, { color: string; bg: string; border: 
 // ==================== 任务状态色板 ====================
 export const taskStatusMap: Record<string, { textColor: string; bgColor: string; borderColor: string; label: string; type: string }> = {
   not_started: { textColor: '#4E5969', bgColor: '#F2F3F5', borderColor: '#E5E6EB', label: '未开始', type: 'info' },
+  pending_accept: { textColor: '#D25F00', bgColor: '#FFF7E8', borderColor: '#FF7D00', label: '待接收', type: 'warning' },
   in_progress: { textColor: '#1A56DB', bgColor: '#DCE7FF', borderColor: '#2468F2', label: '进行中', type: 'primary' },
-  reported: { textColor: '#722ED1', bgColor: '#F0E8FF', borderColor: '#722ED1', label: '已填报', type: 'primary' },
+  pending_review: { textColor: '#722ED1', bgColor: '#F0E8FF', borderColor: '#722ED1', label: '待审核', type: 'primary' },
   completed: { textColor: '#009A29', bgColor: '#E8FFEA', borderColor: '#00B42A', label: '已完成', type: 'success' },
   delayed: { textColor: '#CB2634', bgColor: '#FFECE8', borderColor: '#F53F3F', label: '已延期', type: 'danger' },
-  closed: { textColor: '#86909C', bgColor: '#F7F8FA', borderColor: '#C9CDD4', label: '已关闭', type: 'info' },
+  rejected: { textColor: '#86909C', bgColor: '#F7F8FA', borderColor: '#C9CDD4', label: '已退回', type: 'info' },
   paused: { textColor: '#D25F00', bgColor: '#FFF7E8', borderColor: '#FF7D00', label: '已暂停', type: 'warning' },
   cancelled: { textColor: '#86909C', bgColor: '#F7F8FA', borderColor: '#C9CDD4', label: '已取消', type: 'info' },
 }

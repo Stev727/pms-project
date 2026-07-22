@@ -4,7 +4,8 @@ export interface TaskVO {
   taskId: string
   projectId: string
   stageId?: string
-  parentTaskId?: number
+  parentTaskId?: string
+  predecessorTaskIds?: string  // 前置任务ID列表(逗号分隔)
   taskCode?: string
   taskName: string
   description?: string
@@ -13,20 +14,27 @@ export interface TaskVO {
   priority?: string
   planStartDate?: string
   planEndDate?: string
+  firstDelayedPlanEndDate?: string  // 一次延迟计划结束日期
+  secondDelayedPlanEndDate?: string // 二次延迟计划结束日期
   actualCompleteDate?: string
   outputRequirement?: string
   completionStandard?: string
   mainOwnerId?: number
   helperIds?: string
   deptId?: number
+  helperDeptIds?: string  // 协助部门ID列表(逗号分隔)
   isCriticalPath?: boolean
   isMilestone?: boolean
   completeStatus?: string
   isDispatched?: boolean
+  exceptionReason?: string  // 异常原因说明
+  improvementPlan?: string  // 改善方案
   estimatedHours?: number
   actualHours?: number
   sortOrder?: number
   progress?: number
+  dingtalkReminderEnabled?: boolean  // 延迟钉钉提醒开关
+  approvalIds?: string  // 关联审批单号
   createTime?: string
 }
 
