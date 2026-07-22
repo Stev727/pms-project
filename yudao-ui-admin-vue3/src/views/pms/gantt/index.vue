@@ -45,7 +45,7 @@
 
 <script setup lang="ts">
 import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getTaskList, TaskVO } from '@/api/pms/task'
+import { getTaskList, updateTask, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { calcDelayDays } from '../pms-utils'
 import { gantt } from 'dhtmlx-gantt'
@@ -120,18 +120,27 @@ const configGantt = () => {
   }] : []
 
   // 拖拽后更新
-  gantt.attachEvent('onAfterTaskDrag', (id: any, mode: any, _e: any) => {
+  gantt.attachEvent('onAfterTaskDrag', async (id: any, mode: any, _e: any) => {
     const task = gantt.getTask(id)
     if (task.type === 'project') return
-    message.success(`任务「${task.text}」日期已更新`)
-    // TODO: 调用 updateTask API 更新后端数据
+    try {
+      await updateTask({
+        taskId: String(id),
+        planStartDate: task.start_date ? new Date(task.start_date).toISOString().split('T')[0] : undefined,
+        cycle: task.duration || 1
+      } as TaskVO)
+      message.success(`任务「${task.text}」日期已更新`)
+    } catch (e) {
+      console.error('保存任务日期失败', e)
+      message.error('保存失败，请重试')
+    }
   })
 
-  // 双击编辑
+  // 双击编辑 — 跳转到任务详情
   gantt.attachEvent('onTaskDblClick', (id: any, _e: any) => {
     const task = gantt.getTask(id)
     if (task.type === 'project') return
-    // TODO: 打开编辑弹窗
+    message.info(`任务「${task.text}」— 请前往任务管理页面编辑详情`)
   })
 }
 

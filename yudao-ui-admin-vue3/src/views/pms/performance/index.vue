@@ -7,7 +7,7 @@
         <el-select v-model="selectedDept" placeholder="部门" clearable style="width: 160px">
           <el-option v-for="d in deptList" :key="d.id" :label="d.name" :value="d.id" />
         </el-select>
-        <el-button @click="exportReport" v-if="checkPermi(['pms:performance:query'])">
+        <el-button @click="exportReport" :disabled="true" v-if="checkPermi(['pms:performance:query'])">
           <el-icon><Download /></el-icon> 导出报表
         </el-button>
       </div>
@@ -109,16 +109,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { formatDate, calcDelayDays } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
+import * as DeptApi from '@/api/system/dept'
 
 defineOptions({ name: 'PmsPerformance' })
 
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const selectedMonth = ref(new Date().toISOString().slice(0, 7))
 const selectedDept = ref<number | undefined>(undefined)
 const allTasks = ref<TaskVO[]>([])
@@ -134,12 +137,32 @@ function disabledDate(time: Date): boolean {
   return time > new Date()
 }
 
+// 按月份和部门筛选后的任务
+const filteredTasks = computed(() => {
+  let tasks = allTasks.value
+  // 按月份筛选（基于任务创建时间或计划开始时间）
+  if (selectedMonth.value) {
+    tasks = tasks.filter(t => {
+      const dateStr = t.planStartDate || t.createTime || ''
+      return dateStr.startsWith(selectedMonth.value)
+    })
+  }
+  // 按部门筛选（基于项目关联的部门）
+  if (selectedDept.value) {
+    const projectIds = new Set(
+      projects.value.filter(p => p.deptId === selectedDept.value).map(p => String(p.projectId))
+    )
+    tasks = tasks.filter(t => projectIds.has(String(t.projectId)))
+  }
+  return tasks
+})
+
 // 统计卡片
 const statCards = computed(() => {
-  const tasks = allTasks.value
+  const tasks = filteredTasks.value
   const completed = tasks.filter(t => t.completeStatus === 'completed')
   const onTime = completed.filter(t => calcDelayDays(t.planEndDate, t.completeStatus) === 0)
-  const users = new Set(tasks.map(t => t.mainOwnerId)).size
+  const users = new Set(tasks.map(t => t.mainOwnerId).filter(Boolean)).size
   const onTimeRate = completed.length ? (onTime.length / completed.length) : 0
   const avgDuration = completed.length
     ? completed.reduce((sum, t) => sum + (t.cycle || 0), 0) / completed.length
@@ -155,16 +178,34 @@ const statCards = computed(() => {
 // 绩效排行
 const rankingData = computed(() => {
   const userStats: Record<string, any> = {}
-  allTasks.value.forEach(t => {
+  filteredTasks.value.forEach(t => {
     const uid = String(t.mainOwnerId || 'unknown')
     if (!userStats[uid]) {
-      userStats[uid] = { userId: uid, userName: `用户${uid}`, deptName: '-', totalTasks: 0, completedTasks: 0, onTimeTasks: 0, totalDuration: 0 }
+      userStats[uid] = {
+        userId: uid,
+        userName: getUserName(t.mainOwnerId),
+        deptName: '-',
+        totalTasks: 0, completedTasks: 0, onTimeTasks: 0, totalDuration: 0
+      }
     }
     userStats[uid].totalTasks++
     if (t.completeStatus === 'completed') {
       userStats[uid].completedTasks++
       userStats[uid].totalDuration += (t.cycle || 0)
       if (calcDelayDays(t.planEndDate, t.completeStatus) === 0) userStats[uid].onTimeTasks++
+    }
+  })
+  // 填充部门信息
+  Object.values(userStats).forEach((u: any) => {
+    if (u.userId !== 'unknown') {
+      const userTasks = filteredTasks.value.filter(t => String(t.mainOwnerId) === u.userId)
+      if (userTasks.length > 0) {
+        const proj = projects.value.find(p => String(p.projectId) === String(userTasks[0].projectId))
+        if (proj?.deptId) {
+          const dept = deptList.value.find(d => d.id === proj.deptId)
+          u.deptName = dept?.name || '-'
+        }
+      }
     }
   })
   return Object.values(userStats).map((u: any) => ({
@@ -201,7 +242,7 @@ const deptCompareData = computed(() => {
     onTimeRate: d.completedTasks ? d.onTimeTasks / d.completedTasks : 0,
     avgDuration: d.completedTasks ? d.totalDuration / d.completedTasks : 0,
     score: d.onTimeRate * 40 + (d.completedTasks / d.totalTasks) * 30 + 50,
-    trend: (Math.random() - 0.5) * 5
+    trend: 0 // 不再使用随机数
   }))
 })
 
@@ -219,7 +260,18 @@ function getScoreClass(score: number): string {
   return 'score-poor'
 }
 
-function exportReport() { console.log('导出绩效报表') }
+function exportReport() {
+  // 导出功能暂未实现
+}
+
+// 监听筛选变化重新渲染图表
+watch([selectedMonth, selectedDept], () => {
+  nextTick(() => {
+    charts.forEach(c => c?.dispose())
+    charts = []
+    initCharts()
+  })
+})
 
 function initCharts() {
   const top10 = rankingData.value.slice(0, 10)
@@ -263,6 +315,12 @@ async function loadData() {
     allTasks.value = taskRes as TaskVO[]
     projects.value = projectRes as ProjectVO[]
     stages.value = stageRes as StageVO[]
+    // 加载部门列表
+    try {
+      const depts = await DeptApi.getSimpleDeptList()
+      deptList.value = (depts as any[]) || []
+    } catch { deptList.value = [] }
+    await ensureUsersLoaded()
     await nextTick()
     initCharts()
   } catch (e) {

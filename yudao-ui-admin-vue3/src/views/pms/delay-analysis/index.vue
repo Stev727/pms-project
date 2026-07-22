@@ -9,7 +9,7 @@
           <el-option label="本季度" value="quarter" />
           <el-option label="本年" value="year" />
         </el-select>
-        <el-button @click="exportData">
+        <el-button @click="exportData" :disabled="true">
           <el-icon><Download /></el-icon> 导出
         </el-button>
       </div>
@@ -53,8 +53,12 @@
     <!-- 延期任务列表 -->
     <ContentWrap title="延期任务列表">
       <div class="list-toolbar">
-        <el-select v-model="filterUser" placeholder="责任人" clearable style="width: 140px" />
-        <el-select v-model="filterPhase" placeholder="阶段" clearable style="width: 140px" />
+        <el-select v-model="filterUser" placeholder="责任人" clearable filterable style="width: 140px">
+          <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+        </el-select>
+        <el-select v-model="filterPhase" placeholder="阶段" clearable style="width: 140px">
+          <el-option v-for="s in stages" :key="s.stageId" :label="s.stageName" :value="String(s.stageId)" />
+        </el-select>
         <el-select v-model="filterSeverity" placeholder="严重程度" clearable style="width: 120px">
           <el-option label="轻微(1-3天)" value="minor" />
           <el-option label="一般(4-7天)" value="moderate" />
@@ -70,7 +74,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="projectName" label="项目" width="120" />
-        <el-table-column prop="ownerName" label="负责人" width="80" />
+        <el-table-column label="负责人" width="80">
+          <template #default="{ row }">{{ getUserName(row.mainOwnerId) }}</template>
+        </el-table-column>
         <el-table-column label="延期天数" width="90" align="center">
           <template #default="{ row }">
             <span :style="{ color: getSeverityColor(row), fontWeight: 600 }">{{ calcDelayDays(row.planEndDate, row.completeStatus) }} 天</span>
@@ -107,10 +113,12 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { taskStatusMap, phaseColorMap, formatDate, calcDelayDays, getDelaySeverity } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsDelayAnalysis' })
 const TaskDetailDrawer = defineAsyncComponent(() => import('../project-detail/TaskDetailDrawer.vue'))
 
+const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const timeRange = ref('month')
 const allTasks = ref<TaskVO[]>([])
 const projects = ref<ProjectVO[]>([])
@@ -137,6 +145,12 @@ const delayTasks = computed(() => {
 
 const filteredDelayTasks = computed(() => {
   let result = delayTasks.value
+  if (filterUser.value) {
+    result = result.filter(t => String(t.mainOwnerId) === filterUser.value)
+  }
+  if (filterPhase.value) {
+    result = result.filter(t => String(t.stageId) === filterPhase.value)
+  }
   if (filterSeverity.value) {
     result = result.filter(t => {
       const days = calcDelayDays(t.planEndDate, t.completeStatus)
@@ -197,7 +211,7 @@ function initCharts() {
   const byPhase: Record<string, number> = {}
 
   delayTasks.value.forEach(t => {
-    const user = String(t.mainOwnerId || '未分配')
+    const user = t.mainOwnerId ? getUserName(t.mainOwnerId) : '未分配'
     byUser[user] = (byUser[user] || 0) + 1
     const dept = getProjectName(t.projectId)
     byDept[dept] = (byDept[dept] || 0) + 1
@@ -259,6 +273,7 @@ async function loadData() {
     allTasks.value = taskRes as TaskVO[]
     projects.value = projectRes as ProjectVO[]
     stages.value = stageRes as StageVO[]
+    await ensureUsersLoaded()
     await nextTick()
     initCharts()
   } catch (e) {

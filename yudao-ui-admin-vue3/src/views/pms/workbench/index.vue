@@ -182,7 +182,7 @@ function switchTab(key: string) {
 }
 
 function onTabChange() {
-  // Tab 切换时可以刷新数据
+  loadTasks()
 }
 
 function openTaskDetail(task: TaskVO) {

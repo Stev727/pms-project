@@ -48,7 +48,7 @@
         <span>共 {{ filteredData.length }} 条物料记录</span>
         <div>
           <el-button type="primary" size="small" @click="openCreateDialog" v-if="checkPermi(['pms:material:create'])" class="mr-8px"><el-icon><Plus /></el-icon> 新增物料</el-button>
-          <el-button type="primary" size="small" @click="exportData" plain>导出</el-button>
+          <el-button type="primary" size="small" @click="exportData" plain :disabled="true">导出</el-button>
         </div>
       </div>
       <el-table :data="filteredData" border size="small" v-loading="loading" @row-click="openDetail">

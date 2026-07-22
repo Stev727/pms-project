@@ -14,7 +14,7 @@
           </el-form-item>
           <el-form-item>
             <el-button @click="getList"><Icon icon="ep:search" />搜索</el-button>
-            <el-button type="primary" plain @click="openForm()" v-hasPermi="['pms:template:create']">
+            <el-button type="primary" plain @click="openCreateDialog" v-hasPermi="['pms:template:create']">
               <Icon icon="ep:plus" />新增模板
             </el-button>
           </el-form-item>
@@ -107,6 +107,33 @@
       </el-row>
       <el-empty v-if="!loading && filteredList.length === 0" description="暂无模板" />
     </ContentWrap>
+
+    <!-- 新增模板弹窗 -->
+    <Dialog v-model="createVisible" title="新增模板" width="560px" :close-on-click-modal="false">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
+        <el-form-item label="模板名称" prop="projectName">
+          <el-input v-model="createForm.projectName" placeholder="请输入模板名称" />
+        </el-form-item>
+        <el-form-item label="模板类型" prop="projectType">
+          <el-select v-model="createForm.projectType" placeholder="请选择" class="w-full">
+            <el-option label="标准板" value="standard_template" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-select v-model="createForm.status" placeholder="请选择" class="w-full">
+            <el-option label="启用" value="active" />
+            <el-option label="归档" value="archived" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="模板说明" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createVisible = false">取消</el-button>
+        <el-button type="primary" :loading="createSaving" @click="submitCreate">创建</el-button>
+      </template>
+    </Dialog>
 
     <!-- 预览弹窗 -->
     <Dialog v-model="previewVisible" title="模板预览" width="900px">
@@ -355,6 +382,62 @@ const editTaskList = ref<TaskVO[]>([])
 const editStageList = ref<StageVO[]>([])
 const editDeletedTaskIds = ref<(string | number)[]>([])
 const editDeletedStageIds = ref<(string | number)[]>([])
+
+// 新增模板相关
+const createVisible = ref(false)
+const createSaving = ref(false)
+const createFormRef = ref<any>(null)
+const createForm = reactive({
+  projectName: '',
+  projectType: 'standard_template',
+  status: 'active',
+  description: ''
+})
+const createRules = {
+  projectName: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+  projectType: [{ required: true, message: '请选择模板类型', trigger: 'change' }],
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }]
+}
+
+const openCreateDialog = () => {
+  Object.assign(createForm, {
+    projectName: '',
+    projectType: 'standard_template',
+    status: 'active',
+    description: ''
+  })
+  createVisible.value = true
+}
+
+const submitCreate = async () => {
+  if (!createFormRef.value) return
+  try {
+    await createFormRef.value.validate()
+  } catch {
+    return
+  }
+  createSaving.value = true
+  try {
+    await createProject({
+      projectName: createForm.projectName,
+      projectCode: `TPL-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
+      projectType: createForm.projectType,
+      status: createForm.status,
+      description: createForm.description,
+      createMethod: 'manual',
+      planStartDate: new Date().toISOString().split('T')[0],
+      planEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    } as ProjectVO)
+    message.success('模板创建成功')
+    createVisible.value = false
+    getList()
+  } catch (e) {
+    console.error('创建模板失败', e)
+    message.error('创建模板失败，请重试')
+  } finally {
+    createSaving.value = false
+  }
+}
 
 const taskEditVisible = ref(false)
 const taskEditForm = reactive<any>({
