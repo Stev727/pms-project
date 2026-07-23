@@ -234,14 +234,14 @@
           <el-col :span="12">
             <el-form-item label="责任人" prop="mainOwnerId">
               <el-select v-model="taskForm.mainOwnerId" filterable placeholder="请选择" class="w-full">
-                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="协助人">
               <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选" class="w-full">
-                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>

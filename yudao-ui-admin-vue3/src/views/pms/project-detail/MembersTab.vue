@@ -48,7 +48,7 @@
       <el-form label-width="80px">
         <el-form-item label="成员" required>
           <el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full" :disabled="!!editing">
-            <el-option v-for="u in availableUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+            <el-option v-for="u in availableUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目角色" required>
@@ -88,6 +88,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectMemberList, createProjectMember, updateProjectMember, deleteProjectMember } from '@/api/pms/member'
+import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -198,8 +199,24 @@ async function saveMember() {
   }
 }
 
-function removeMember(row: any) {
-  ElMessageBox.confirm('确认移除该成员？', '提示', { type: 'warning' }).then(async () => {
+async function removeMember(row: any) {
+  // P1-07 修复：移除前检查该成员是否有未完成任务，避免产生孤儿任务
+  try {
+    const allTasks = await getTaskList() as TaskVO[]
+    const projectTasks = ((allTasks as any[]) || []).filter(t => String(t.projectId) === String(props.projectId))
+    const memberTasks = projectTasks.filter(t =>
+      String(t.mainOwnerId) === String(row.userId) &&
+      t.completeStatus !== 'completed'
+    )
+    if (memberTasks.length > 0) {
+      ElMessage.warning(`该成员有 ${memberTasks.length} 个未完成任务，请先移交任务再移除`)
+      return
+    }
+  } catch (e) {
+    console.error('检查成员任务失败', e)
+  }
+  // 原有移除逻辑
+  ElMessageBox.confirm('确认移除该成员？', '移除确认', { type: 'warning' }).then(async () => {
     try {
       await deleteProjectMember(row.memberId as number)
       ElMessage.success('成员已移除')

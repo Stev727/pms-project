@@ -81,13 +81,13 @@ const loadProjects = async () => {
   projectList.value = (await getProjectList()).filter((p: ProjectVO) => p.projectType !== 'standard_template')
   // 预加载所有任务和阶段
   const [tasks, stages] = await Promise.all([getTaskList(), getStageList()])
-  allTasks.value = tasks || []
-  allStages.value = stages || []
+  allTasks.value = Array.isArray(tasks) ? tasks : ((tasks as any)?.list || [])
+  allStages.value = Array.isArray(stages) ? stages : ((stages as any)?.list || [])
   await ensureUsersLoaded()
 }
 
 const loadGanttData = () => {
-  renderGantt()
+  nextTick(() => renderGantt())
 }
 
 const configGantt = () => {
@@ -263,6 +263,7 @@ const buildGanttData = () => {
 
 const renderGantt = () => {
   if (!ganttRef.value) return
+  if (!selectedProjectId.value) return  // 未选择项目时不渲染，避免在隐藏元素上初始化
   if (!ganttReady) {
     configGantt()
     gantt.init(ganttRef.value)
@@ -298,7 +299,8 @@ const collapseAll = () => {
 
 onMounted(async () => {
   await loadProjects()
-  nextTick(() => renderGantt())
+  // 不在此处调用 renderGantt，因为此时未选择项目，甘特图 div 被隐藏
+  // renderGantt 会在用户选择项目后通过 loadGanttData 触发
 })
 
 onUnmounted(() => {

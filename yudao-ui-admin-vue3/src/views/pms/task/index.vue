@@ -18,7 +18,7 @@
         </el-form-item>
         <el-form-item label="负责人">
           <el-select v-model="queryParams.mainOwnerId" placeholder="全部" clearable filterable style="width: 140px">
-            <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="u.id" />
+            <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -174,14 +174,14 @@
           <el-col :span="12">
             <el-form-item label="负责人" prop="mainOwnerId">
               <el-select v-model="taskForm.mainOwnerId" placeholder="请选择负责人" filterable class="w-full">
-                <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="u.id" />
+                <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="协助人">
               <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选协助人" class="w-full">
-                <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="u.id" />
+                <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
               </el-select>
             </el-form-item>
           </el-col>

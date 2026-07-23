@@ -89,7 +89,7 @@
             <el-col :span="12">
               <el-form-item label="项目经理" prop="projectManagerId">
                 <el-select v-model="projectForm.projectManagerId" filterable remote placeholder="请选择" class="w-full" :remote-method="searchUsers" :loading="remoteLoading">
-                  <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+                  <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -164,7 +164,7 @@
             </template>
             <template v-if="batchAction === 'set_owner'">
               <el-select v-model="batchOwner" filterable placeholder="选择责任人" size="small" style="width: 150px">
-                <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="u.id" />
+                <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
               </el-select>
             </template>
             <template v-if="batchAction === 'set_priority'">
@@ -288,14 +288,14 @@
               <el-col :span="12">
                 <el-form-item label="责任人">
                   <el-select v-model="taskForm.mainOwnerId" filterable placeholder="选择责任人" class="w-full" clearable>
-                    <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="u.id" />
+                    <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
                   </el-select>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="协助人">
                   <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选协助人" class="w-full">
-                    <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="u.id" />
+                    <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
                   </el-select>
                 </el-form-item>
               </el-col>

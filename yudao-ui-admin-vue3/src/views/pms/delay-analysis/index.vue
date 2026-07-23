@@ -54,7 +54,7 @@
     <ContentWrap title="延期任务列表">
       <div class="list-toolbar">
         <el-select v-model="filterUser" placeholder="责任人" clearable filterable style="width: 140px">
-          <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+          <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
         </el-select>
         <el-select v-model="filterPhase" placeholder="阶段" clearable style="width: 140px">
           <el-option v-for="s in stages" :key="s.stageId" :label="s.stageName" :value="String(s.stageId)" />

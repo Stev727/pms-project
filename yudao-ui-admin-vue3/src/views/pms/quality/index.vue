@@ -157,7 +157,7 @@
         </el-form-item>
         <el-form-item label="负责人">
           <el-select v-model="createForm.owner" filterable clearable placeholder="请选择负责人" style="width: 100%">
-            <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+            <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="问题描述" required>
@@ -240,7 +240,7 @@ const fetchList = async () => {
       ...item,
       issueNo: item.issueCode || '',
       title: item.issueDescription || '',
-      owner: item.responsiblePerson || (item.assigneeId ? getUserName(item.assigneeId) : (item.resolverId ? getUserName(item.resolverId) : '-')),
+      owner: item.responsiblePerson ? getUserName(item.responsiblePerson) : (item.assigneeId ? getUserName(item.assigneeId) : (item.resolverId ? getUserName(item.resolverId) : '-')),
       foundDate: item.createTime || '',
       phase: item.rootCauseCategory || '',
       description: item.impactScope || item.rootCauseDetail || '',

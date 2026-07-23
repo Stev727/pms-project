@@ -41,7 +41,7 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
                     target: env.VITE_BASE_URL || 'http://10.1.3.32:48080',
                     ws: false,
                     changeOrigin: true,
-                    rewrite: (path) => path.replace(new RegExp('^/admin-api'), ''),
+                    // 不需要 rewrite — 保留 /admin-api 前缀
                 },
             },
         },

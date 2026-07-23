@@ -159,6 +159,7 @@ import { getChangeRecordList, createChangeRecord, updateChangeRecord, deleteChan
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useCache } from '@/hooks/web/useCache'
 
 defineOptions({ name: 'PmsChange' })
 
@@ -231,7 +232,7 @@ const fetchList = async () => {
         ...(item.costImpact ? [`成本影响: ${item.costImpact}元`] : []),
         ...(item.scheduleImpact ? [`工期影响: ${item.scheduleImpact}天`] : [])
       ],
-      taskName: item.affectedTasks || ''
+      taskName: item.taskId || item.affectedTasks || ''
     }))
   } catch {
     changeList.value = []
@@ -249,17 +250,22 @@ async function submitChange() {
   if (!newChange.projectId) { ElMessage.warning('请选择所属项目'); return }
   saving.value = true
   try {
+    // P1-05: 获取当前用户 ID 作为申请人
+    const userInfo = useCache().wsCache.get('userInfo')
+    const currentUserId = userInfo?.id
     await createChangeRecord({
       changeDescription: newChange.title,
       changeType: newChange.type,
       changeReason: newChange.reason,
       projectId: String(newChange.projectId),
+      taskId: null,  // P0-07: 项目级变更无关联任务
       beforeContent: newChange.beforeContent,
       afterContent: newChange.afterContent,
       urgent: newChange.urgent,
       scheduleImpact: newChange.scheduleImpact,
       changeCode: `CR-${Date.now().toString().slice(-6)}`,
-      approvalStatus: 'pending'
+      approvalStatus: 'pending',
+      initiatorId: String(currentUserId)  // P1-05: 申请人
     } as ChangeRecordVO)
     ElMessage.success('变更已提交')
     showForm.value = false

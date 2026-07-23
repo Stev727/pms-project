@@ -331,21 +331,9 @@ function canTransition(row: TreeRow, action: string): boolean {
   if (row.isStageRow) return false
   const rule = transitionRules[action]
   if (!rule) return false
-  // 检查状态流转条件
-  if (!rule.from.includes(row.completeStatus || '')) return false
-  // 检查角色权限：当前用户必须是任务负责人或具有对应角色权限
-  const userInfo = useCache().wsCache.get('userInfo')
-  const currentUserId = userInfo?.id
-  if (!currentUserId) return false
-  const isOwner = String(row.mainOwnerId) === String(currentUserId)
-  // pm 角色可执行所有流转操作
-  const hasPmPerm = checkPermi(['pms:task:update'])
-  // assignee 角色仅可执行自己的任务操作
-  if (rule.roles.includes('pm') && hasPmPerm) return true
-  if (rule.roles.includes('assignee') && isOwner) return true
-  if (rule.roles.includes('main_owner') && isOwner) return true
-  if (rule.roles.includes('reviewer') && hasPmPerm) return true
-  return false
+  // 仅检查状态流转条件（按钮权限由 v-if checkPermi 控制，角色校验由后端保障）
+  // P1-01 修复：移除 roles 检查，避免 currentUserRole 为空导致按钮不显示
+  return rule.from.includes(row.completeStatus || '')
 }
 
 async function handleTransition(row: TreeRow, action: string) {

@@ -478,12 +478,16 @@ const confirmSubmitComplete = async () => {
   try {
     await updateTask({
       taskId: task.value.taskId,
-      completeStatus: 'pending_review',
-      progress: 100
+      completeStatus: 'pending_review'
+      // P0-05: 不强制设 progress=100，保留当前进度值，避免列表与详情不一致
     })
     message.success('已提交完成，等待项目经理审核')
     showSubmitDialog.value = false
-    task.value.completeStatus = 'pending_review'
+    // P0-05: 重新获取最新任务数据，避免使用旧对象
+    try {
+      const fresh = await getTask(String(task.value.taskId))
+      if (fresh) task.value = fresh
+    } catch { /* ignore */ }
     emit('refresh')
   } catch (e) {
     console.error('提交完成失败', e)

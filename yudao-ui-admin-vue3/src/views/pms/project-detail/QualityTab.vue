@@ -37,7 +37,7 @@
         <template #default="{ row }">{{ row.source || '-' }}</template>
       </el-table-column>
       <el-table-column label="责任人" width="90">
-        <template #default="{ row }">{{ row.responsiblePerson || '-' }}</template>
+        <template #default="{ row }">{{ getUserName(row.responsiblePerson) || row.responsiblePerson || '-' }}</template>
       </el-table-column>
       <el-table-column label="状态" width="80" align="center">
         <template #default="{ row }">
@@ -72,7 +72,7 @@
           <el-descriptions-item label="严重程度">{{ getSeverityLabel(selected.severity) }}</el-descriptions-item>
           <el-descriptions-item label="分类">{{ getCategoryLabel(selected.category) }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ selected.source || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="责任人">{{ selected.responsiblePerson || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="责任人">{{ getUserName(selected.responsiblePerson) || selected.responsiblePerson || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ getStatusLabel(selected.status) }}</el-descriptions-item>
           <el-descriptions-item label="发现日期">{{ formatDate(selected.foundDate) }}</el-descriptions-item>
           <el-descriptions-item label="关闭日期">{{ formatDate(selected.closeTime) }}</el-descriptions-item>
@@ -98,7 +98,7 @@
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item label="责任人">
             <el-select v-model="newIssue.responsiblePerson" filterable clearable placeholder="请选择责任人" class="w-full">
-              <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+              <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
             </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="来源"><el-input v-model="newIssue.source" placeholder="测试/评审/现场" /></el-form-item></el-col>
@@ -118,11 +118,13 @@ import { getQualityIssueList, createQualityIssue, updateQualityIssue } from '@/a
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'QualityTab' })
 
 const props = defineProps<{ projectId: string }>()
 const { projectMemberUsers, loadProjectMembers } = useProjectMembers()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -161,8 +163,13 @@ function getStatusColor(s: string): string {
 function openDetail(row: any) { selected.value = row; drawerVisible.value = true }
 
 async function closeIssue(row: any) {
+  // P1-02 修复：关闭前强制确认已填写根因分析和解决方案
   try {
-    await ElMessageBox.confirm('确认关闭该质量问题？', '提示', { confirmButtonText: '确认关闭', type: 'warning' })
+    await ElMessageBox.confirm(
+      '关闭前请确认已填写根因分析和解决方案。确认关闭此质量问题？',
+      '关闭确认',
+      { confirmButtonText: '确认关闭', cancelButtonText: '取消', type: 'warning' }
+    )
     await updateQualityIssue({ issueId: row.issueId, status: 'closed', closeTime: new Date().toISOString().split('T')[0] } as any)
     await fetchList()
     ElMessage.success('问题已关闭')
@@ -204,6 +211,7 @@ async function fetchList() {
 }
 
 onMounted(() => {
+  ensureUsersLoaded()
   loadProjectMembers(props.projectId)
   fetchList()
 })

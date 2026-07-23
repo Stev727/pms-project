@@ -121,12 +121,12 @@ const message = ElMessage
 const TaskDetailDrawer = defineAsyncComponent(() => import('../project-detail/TaskDetailDrawer.vue'))
 
 const currentUserId = computed(() => {
-  const uid = userStore.getUserInfo?.id
+  const uid = userStore.getUser?.id
   if (uid) return String(uid)
   // fallback: 从 wsCache 获取用户信息
   try {
-    const cached = wsCache.get('userInfo') || wsCache.get('user') || {}
-    return String(cached?.id || cached?.user?.id || '')
+    const cached = wsCache.get('user') || wsCache.get('userInfo') || {}
+    return String(cached?.user?.id || cached?.id || '')
   } catch {
     return ''
   }
@@ -324,7 +324,8 @@ async function loadTasks() {
       return
     }
     const [taskRes, projectRes] = await Promise.all([getTaskList(), getProjectList()])
-    allTasks.value = (taskRes as TaskVO[]).filter(t => String(t.mainOwnerId) === uid)
+    const taskList = Array.isArray(taskRes) ? taskRes : ((taskRes as any)?.list || [])
+    allTasks.value = taskList.filter(t => String(t.mainOwnerId) === uid)
     projects.value = projectRes as ProjectVO[]
     await ensureUsersLoaded()
   } catch (e) {
