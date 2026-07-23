@@ -87,6 +87,9 @@
                   {{ getPhaseLabel(project.currentStage) }}
                 </el-tag>
                 <el-tag v-if="project.isKeyProject" type="danger" size="small" effect="dark" style="margin-left: 4px">重点</el-tag>
+                <el-tag :type="getStatusTag(project.status).type" size="small" effect="plain" style="margin-left: 4px">
+                  {{ getStatusTag(project.status).label }}
+                </el-tag>
               </div>
 
               <div class="card-progress">
@@ -108,11 +111,14 @@
                 </div>
                 <div class="meta-row">
                   <Icon icon="ep:document" class="meta-icon" />
-                  <span>任务统计</span>
-                  <span style="margin-left: 4px; color: #1D2129; font-weight: 500">{{ getTaskCount(project) }}</span>
-                  <el-tag v-if="project.delayCount > 0" type="danger" size="small" effect="plain" style="margin-left: auto">
-                    {{ project.delayCount }} 延期
+                  <span>任务: {{ getProjectTaskStats(project.projectId).completed }}/{{ getProjectTaskStats(project.projectId).total }}</span>
+                  <el-tag v-if="getProjectTaskStats(project.projectId).delayed > 0" type="danger" size="small" effect="plain" style="margin-left: auto">
+                    延期 {{ getProjectTaskStats(project.projectId).delayed }}
                   </el-tag>
+                </div>
+                <div class="meta-row">
+                  <Icon icon="ep:timer" class="meta-icon" />
+                  <span>{{ getRemainingDays(project.planEndDate) }}</span>
                 </div>
               </div>
             </el-card>
@@ -360,6 +366,49 @@ const getDelayCountForProject = (project: ProjectVO) => {
 // P2-03 修复: 统计项目任务数
 const getTaskCount = (project: ProjectVO) => {
   return taskList.value.filter(t => String(t.projectId) === String(project.projectId)).length
+}
+
+// 任务统计：总数 / 已完成 / 延期
+const getProjectTaskStats = (projectId: any) => {
+  const tasks = taskList.value.filter(t => String(t.projectId) === String(projectId))
+  const total = tasks.length
+  const completed = tasks.filter(t => t.completeStatus === 'completed').length
+  const delayed = tasks.filter(t => {
+    if (t.completeStatus === 'completed') return false
+    if (!t.planEndDate) return false
+    const endDate = Array.isArray(t.planEndDate)
+      ? new Date(t.planEndDate[0], t.planEndDate[1] - 1, t.planEndDate[2])
+      : new Date(t.planEndDate)
+    return endDate < new Date()
+  }).length
+  return { total, completed, delayed }
+}
+
+// 剩余天数
+const getRemainingDays = (planEndDate: any) => {
+  if (!planEndDate) return '-'
+  const end = Array.isArray(planEndDate)
+    ? new Date(planEndDate[0], planEndDate[1] - 1, planEndDate[2])
+    : new Date(planEndDate)
+  const diff = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  if (diff < 0) return `延期${Math.abs(diff)}天`
+  if (diff === 0) return '今天到期'
+  return `剩${diff}天`
+}
+
+// 状态标签
+const getStatusTag = (status: string) => {
+  const map: Record<string, { label: string; type: any }> = {
+    'initiating': { label: '立项中', type: 'info' },
+    'planning': { label: '规划中', type: 'info' },
+    'in_progress': { label: '进行中', type: 'primary' },
+    'completed': { label: '已完成', type: 'success' },
+    'delayed': { label: '已延期', type: 'warning' },
+    'cancelled': { label: '已取消', type: 'danger' },
+    'archived': { label: '已归档', type: 'info' },
+    'active': { label: '活跃', type: 'primary' }
+  }
+  return map[status || ''] || { label: status || '-', type: 'info' }
 }
 
 const handleTableSelection = (rows: ProjectVO[]) => {

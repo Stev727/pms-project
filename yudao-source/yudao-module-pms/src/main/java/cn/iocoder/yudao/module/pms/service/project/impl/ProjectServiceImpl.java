@@ -175,12 +175,47 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public PmsProjectDO getProject(Long id) {
-        return projectMapper.selectById(id);
+        PmsProjectDO project = projectMapper.selectById(id);
+        if (project != null) {
+            fillProjectProgress(project);
+        }
+        return project;
     }
 
     @Override
     public List<PmsProjectDO> getProjectList() {
-        return projectMapper.selectList(null);
+        List<PmsProjectDO> projects = projectMapper.selectList(null);
+        if (projects != null && !projects.isEmpty()) {
+            for (PmsProjectDO project : projects) {
+                fillProjectProgress(project);
+            }
+        }
+        return projects;
+    }
+
+    /**
+     * 实时计算项目的 progress 和当前阶段状态
+     * - progress = 已完成任务数 * 100 / 总任务数
+     * - 若有任务进行中或已完成，且项目状态为 initiating，则更新为 in_progress
+     */
+    private void fillProjectProgress(PmsProjectDO project) {
+        List<PmsTaskDO> tasks = taskMapper.selectList(PmsTaskDO::getProjectId, project.getProjectId());
+        if (tasks == null || tasks.isEmpty()) {
+            return;
+        }
+        long completed = tasks.stream()
+                .filter(t -> "completed".equals(t.getCompleteStatus()))
+                .count();
+        int progress = (int) (completed * 100 / tasks.size());
+        project.setProgress(progress);
+
+        long inProgressCount = tasks.stream()
+                .filter(t -> "in_progress".equals(t.getCompleteStatus())
+                        || "completed".equals(t.getCompleteStatus()))
+                .count();
+        if (inProgressCount > 0 && "initiating".equals(project.getStatus())) {
+            project.setStatus("in_progress");
+        }
     }
 
 }

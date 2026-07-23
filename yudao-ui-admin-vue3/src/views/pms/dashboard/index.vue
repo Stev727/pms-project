@@ -37,6 +37,27 @@
       </el-col>
     </el-row>
 
+    <!-- 项目健康度矩阵 -->
+    <el-card class="mt-16px" header="项目健康度">
+      <div class="health-matrix">
+        <div v-for="p in projectHealthList" :key="p.projectId" class="health-item" @click="goToProject(p.projectId)">
+          <el-tag :type="p.healthType" size="small">{{ p.healthLabel }}</el-tag>
+          <span class="ml-8px">{{ p.projectName }}</span>
+          <span class="ml-auto">{{ p.progress }}%</span>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 延期项目 TOP 5 -->
+    <el-card class="mt-16px" header="延期项目 TOP 5">
+      <div v-if="delayedProjects.length === 0" class="text-center text-gray py-20px">暂无延期项目</div>
+      <div v-for="p in delayedProjects" :key="p.projectId" class="health-item" @click="goToProject(p.projectId)">
+        <el-tag type="danger" size="small">延期{{ p.delayDays }}天</el-tag>
+        <span class="ml-8px">{{ p.projectName }}</span>
+        <span class="ml-auto text-red">{{ p.progress }}%</span>
+      </div>
+    </el-card>
+
     <!-- 图表行 1：饼图 -->
     <el-row :gutter="16" class="mb-16px">
       <el-col :span="12">
@@ -136,8 +157,10 @@ import {
   formatDate, calcDelayDays
 } from '../pms-utils'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useRouter } from 'vue-router'
 
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const router = useRouter()
 
 defineOptions({ name: 'PmsDashboard' })
 
@@ -269,6 +292,56 @@ const projectProgress = computed(() => {
     .sort((a, b) => (b.progress || 0) - (a.progress || 0))
     .slice(0, 8)
 })
+
+// ==================== 项目健康度 ====================
+const parseDate = (d: any): Date => {
+  if (!d) return new Date(NaN)
+  if (d instanceof Date) return d
+  if (Array.isArray(d)) return new Date(d[0], (d[1] || 1) - 1, d[2] || 1)
+  return new Date(d)
+}
+
+const projectHealthList = computed(() => {
+  return projectList.value.map(p => {
+    const tasks = taskList.value.filter(t => String(t.projectId) === String(p.projectId))
+    const total = tasks.length
+    const completed = tasks.filter(t => t.completeStatus === 'completed').length
+    const progress = total > 0 ? Math.round(completed / total * 100) : (p.progress || 0)
+    // 计算健康度
+    let healthType: any = 'success'
+    let healthLabel = '正常'
+    if (p.planEndDate) {
+      const end = parseDate(p.planEndDate)
+      const remaining = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      if (remaining < 0) {
+        healthType = 'danger'
+        healthLabel = '已延期'
+      } else if (remaining < 30 && progress < 50) {
+        healthType = 'warning'
+        healthLabel = '有风险'
+      } else if (remaining < 7 && progress < 80) {
+        healthType = 'warning'
+        healthLabel = '即将到期'
+      }
+    }
+    return { ...p, progress, healthType, healthLabel }
+  })
+})
+
+const delayedProjects = computed(() => {
+  return projectHealthList.value
+    .filter(p => p.healthType === 'danger')
+    .map(p => ({
+      ...p,
+      delayDays: p.planEndDate ? Math.abs(Math.ceil((parseDate(p.planEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0
+    }))
+    .sort((a, b) => b.delayDays - a.delayDays)
+    .slice(0, 5)
+})
+
+const goToProject = (projectId: string | number) => {
+  router.push(`/pms/project-detail/${projectId}`)
+}
 
 // ==================== 数据加载 ====================
 const loadData = async () => {
@@ -581,5 +654,48 @@ const handleResize = () => {
   font-size: 12px;
   color: #86909C;
   margin-top: 2px;
+}
+.health-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+.health-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.health-item:hover {
+  background: var(--el-fill-color-light);
+  border-color: var(--el-color-primary-light-5);
+}
+.mt-16px {
+  margin-top: 16px;
+}
+.mb-16px {
+  margin-bottom: 16px;
+}
+.ml-auto {
+  margin-left: auto;
+}
+.ml-8px {
+  margin-left: 8px;
+}
+.text-gray {
+  color: #86909C;
+}
+.text-red {
+  color: #F53F3F;
+}
+.text-center {
+  text-align: center;
+}
+.py-20px {
+  padding-top: 20px;
+  padding-bottom: 20px;
 }
 </style>

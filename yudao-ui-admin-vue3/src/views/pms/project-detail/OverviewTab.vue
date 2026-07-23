@@ -17,6 +17,33 @@
       <div class="stat-item">已延期 <b class="text-danger">{{ delayedCount }}</b></div>
     </div>
 
+    <!-- 本周到期任务 -->
+    <el-card class="mb-16px" header="本周到期">
+      <div v-if="weekDueTasks.length === 0" class="text-center text-gray">暂无本周到期任务</div>
+      <div v-for="t in weekDueTasks" :key="t.taskId" class="task-item">
+        <span>{{ t.taskName }}</span>
+        <el-tag size="small" :type="getDaysColor(t.planEndDate)">{{ formatPlanDate(t.planEndDate) }}</el-tag>
+      </div>
+    </el-card>
+
+    <!-- 延期任务 -->
+    <el-card class="mb-16px" header="延期任务">
+      <div v-if="delayedTasks.length === 0" class="text-center text-gray">暂无延期任务</div>
+      <div v-for="t in delayedTasks" :key="t.taskId" class="task-item">
+        <span class="text-red">{{ t.taskName }}</span>
+        <span class="text-red">延期 {{ getDelayDays(t.planEndDate) }} 天</span>
+      </div>
+    </el-card>
+
+    <!-- 未分配责任人 -->
+    <el-card class="mb-16px" header="未分配责任人的任务">
+      <div v-if="unassignedTasks.length === 0" class="text-center text-gray">所有任务已分配责任人</div>
+      <div v-for="t in unassignedTasks" :key="t.taskId" class="task-item">
+        <span>{{ t.taskName }}</span>
+        <el-tag size="small" type="warning">未分配</el-tag>
+      </div>
+    </el-card>
+
     <!-- 阶段进度卡片 (PRD-003) -->
     <el-row :gutter="16" class="mb-16px">
       <el-col v-for="stage in stageProgress" :key="stage.stageId" :span="4">
@@ -100,6 +127,54 @@ const pendingReviewCount = computed(() => props.tasks.filter(t => t.completeStat
 const completionRate = computed(() => {
   if (!totalCount.value) return 0
   return Math.round(completedCount.value / totalCount.value * 100)
+})
+
+// ==================== 辅助函数 ====================
+const parseDate = (date: any) => {
+  if (!date) return new Date()
+  if (Array.isArray(date)) return new Date(date[0], date[1] - 1, date[2])
+  return new Date(date)
+}
+
+const formatPlanDate = (date: any) => {
+  return formatDate(date, 'MM-DD')
+}
+
+const getDaysColor = (planEndDate: any) => {
+  const end = parseDate(planEndDate)
+  const diff = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  if (diff < 0) return 'danger'
+  if (diff <= 2) return 'warning'
+  return 'primary'
+}
+
+const getDelayDays = (planEndDate: any) => {
+  if (!planEndDate) return 0
+  const end = parseDate(planEndDate)
+  const diff = Math.floor((Date.now() - end.getTime()) / (1000 * 60 * 60 * 24))
+  return diff > 0 ? diff : 0
+}
+
+// ==================== 任务分类列表 (PRD-003) ====================
+const weekDueTasks = computed(() => {
+  const now = new Date()
+  const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  return props.tasks.filter(t => {
+    if (!t.planEndDate || t.completeStatus === 'completed') return false
+    const end = parseDate(t.planEndDate)
+    return end >= now && end <= weekLater
+  })
+})
+
+const delayedTasks = computed(() => {
+  return props.tasks.filter(t => {
+    if (!t.planEndDate || t.completeStatus === 'completed') return false
+    return parseDate(t.planEndDate) < new Date()
+  })
+})
+
+const unassignedTasks = computed(() => {
+  return props.tasks.filter(t => !t.mainOwnerId && t.completeStatus !== 'completed')
 })
 
 // ==================== 阶段进度 (PRD-003) ====================
@@ -268,4 +343,12 @@ const recentActivities = computed(() => {
 .stage-card .stage-stats {
   font-size: 12px; color: #86909C; margin: 8px 0 0 0;
 }
+.task-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid #F2F3F5; font-size: 13px; color: #1D2129;
+}
+.task-item:last-child { border-bottom: none; }
+.text-center { text-align: center; }
+.text-gray { color: #86909C; }
+.text-red { color: #F53F3F; }
 </style>

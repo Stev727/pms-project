@@ -31,6 +31,15 @@
             <el-progress :percentage="projectCompletionRate" :stroke-width="12" :format="(p) => `${p}%`" class="flex-1 mr-16px" />
             <span class="text-gray">{{ completedTaskCount }} / {{ totalTaskCount }} 任务</span>
           </div>
+          <div class="project-meta mt-8px">
+            <span>已用 {{ getElapsedDays(project.actualStartDate || project.planStartDate) }} 天</span>
+            <el-divider direction="vertical" />
+            <span>{{ getRemainingDays(project.planEndDate) }}</span>
+            <el-divider direction="vertical" />
+            <el-tag v-if="projectRiskLevel" :type="projectRiskLevel.type" size="small">
+              {{ projectRiskLevel.label }}
+            </el-tag>
+          </div>
         </div>
         <div class="header-right">
           <el-button @click="handleCopyProject" v-if="false">
@@ -447,6 +456,47 @@ const projectDuration = computed(() => {
   return calcDuration(project.value.planStartDate, project.value.planEndDate)
 })
 
+// 已用天数
+const getElapsedDays = (startDate: any) => {
+  if (!startDate) return 0
+  const start = Array.isArray(startDate)
+    ? new Date(startDate[0], startDate[1] - 1, startDate[2])
+    : new Date(startDate)
+  return Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+// 剩余天数（文本）
+const getRemainingDays = (planEndDate: any) => {
+  if (!planEndDate) return '-'
+  const end = Array.isArray(planEndDate)
+    ? new Date(planEndDate[0], planEndDate[1] - 1, planEndDate[2])
+    : new Date(planEndDate)
+  const diff = Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  if (diff < 0) return `延期${Math.abs(diff)}天`
+  if (diff === 0) return '今天到期'
+  return `剩${diff}天`
+}
+
+// 剩余天数（数字）
+const getRemainingDaysRaw = (planEndDate: any) => {
+  if (!planEndDate) return 0
+  const end = Array.isArray(planEndDate)
+    ? new Date(planEndDate[0], planEndDate[1] - 1, planEndDate[2])
+    : new Date(planEndDate)
+  return Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+}
+
+// 项目风险等级
+const projectRiskLevel = computed(() => {
+  if (!project.value) return null
+  const rate = projectCompletionRate.value
+  const remaining = getRemainingDaysRaw(project.value.planEndDate)
+  if (remaining < 0) return { type: 'danger', label: '已延期' }
+  if (remaining < 30 && rate < 50) return { type: 'warning', label: '进度风险' }
+  if (remaining < 7 && rate < 80) return { type: 'warning', label: '即将到期' }
+  return null
+})
+
 // ==================== 看板 ====================
 const kanbanColumns = computed(() => {
   const statuses = ['not_started', 'in_progress', 'pending_review', 'completed', 'delayed', 'paused']
@@ -741,4 +791,8 @@ onMounted(async () => {
 .project-progress .mr-8px { margin-right: 8px; }
 .project-progress .mr-16px { margin-right: 16px; }
 .project-progress .text-gray { color: #86909C; }
+.project-meta {
+  display: flex; align-items: center; font-size: 13px; color: #4E5969; margin-top: 8px;
+}
+.mt-8px { margin-top: 8px; }
 </style>

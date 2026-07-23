@@ -18,6 +18,34 @@
       </el-col>
     </el-row>
 
+    <!-- 今日待办 -->
+    <el-card class="mb-16px" header="今日待办">
+      <div v-if="todayTasks.length === 0" class="text-center text-gray py-20px">今日暂无待办任务</div>
+      <div v-for="t in todayTasks" :key="t.taskId" class="task-item" @click="openTaskDetail(t)">
+        <el-tag size="small" :type="getPriorityTag(t.priority)">{{ getPriorityLabel(t.priority) }}</el-tag>
+        <span class="ml-8px">{{ t.taskName }}</span>
+        <span class="ml-auto text-gray">{{ t.taskCode || '-' }}</span>
+      </div>
+    </el-card>
+
+    <!-- 待审核快捷入口 -->
+    <el-card class="mb-16px" header="需要我处理的">
+      <div class="flex gap-16px">
+        <div class="quick-action" @click="goToReviewCenter">
+          <el-badge :value="pendingReviewCount" :hidden="!pendingReviewCount" :max="99">
+            <el-button type="warning" circle><Icon icon="ep:circle-check" /></el-button>
+          </el-badge>
+          <span class="ml-8px">待审核</span>
+        </div>
+        <div class="quick-action" @click="goToMyTasks">
+          <el-badge :value="myInProgressCount" :hidden="!myInProgressCount" :max="99">
+            <el-button type="primary" circle><Icon icon="ep:list" /></el-button>
+          </el-badge>
+          <span class="ml-8px">我的进行中</span>
+        </div>
+      </div>
+    </el-card>
+
     <!-- 任务列表 Tab -->
     <ContentWrap>
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
@@ -71,6 +99,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -83,12 +112,66 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsWorkbench' })
 
+const router = useRouter()
 const { wsCache } = useCache()
 const userStore = useUserStore()
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const message = ElMessage
 const TaskDetailDrawer = defineAsyncComponent(() => import('../project-detail/TaskDetailDrawer.vue'))
 
 const currentUserId = computed(() => String(userStore.getUserInfo?.id || ''))
+
+// 今日待办：今天到期 + 我的进行中任务
+const todayTasks = computed(() => {
+  const today = new Date().toISOString().split('T')[0]
+  return allTasks.value.filter(t => {
+    if (t.completeStatus === 'completed') return false
+    // 今天到期的任务 + 进行中的任务
+    const endDate = t.planEndDate
+    if (endDate) {
+      const endStr = Array.isArray(endDate)
+        ? `${endDate[0]}-${String(endDate[1]).padStart(2,'0')}-${String(endDate[2]).padStart(2,'0')}`
+        : String(endDate).split('T')[0]
+      if (endStr === today) return true
+    }
+    return t.completeStatus === 'in_progress' && String(t.mainOwnerId) === currentUserId.value
+  }).slice(0, 10)
+})
+
+const pendingReviewCount = computed(() =>
+  allTasks.value.filter(t => t.completeStatus === 'pending_review').length
+)
+
+const myInProgressCount = computed(() =>
+  allTasks.value.filter(t =>
+    t.completeStatus === 'in_progress' &&
+    String(t.mainOwnerId) === currentUserId.value
+  ).length
+)
+
+const goToReviewCenter = () => {
+  // 找到第一个有待审核任务的项目
+  const task = allTasks.value.find(t => t.completeStatus === 'pending_review')
+  if (task) {
+    router.push(`/pms/project-detail/${task.projectId}?tab=review-center`)
+  } else {
+    message.info('暂无待审核任务')
+  }
+}
+
+const goToMyTasks = () => {
+  router.push('/pms/task')
+}
+
+const getPriorityTag = (priority?: string) => {
+  const map: Record<string, string> = { high: 'danger', medium: 'warning', low: 'info' }
+  return map[priority || ''] || 'info'
+}
+
+const getPriorityLabel = (priority?: string) => {
+  const map: Record<string, string> = { high: '高', medium: '中', low: '低' }
+  return map[priority || ''] || '普通'
+}
 
 const activeTab = ref('not_started')
 const allTasks = ref<TaskVO[]>([])
@@ -313,5 +396,29 @@ onUnmounted(() => {
     .task-progress { font-size: 12px; color: #2468F2; font-weight: 600; }
     .task-arrow { color: var(--el-text-color-placeholder); }
   }
+
+  .task-item {
+    display: flex; align-items: center; padding: 10px 12px;
+    border: 1px solid var(--el-border-color-lighter); border-radius: 6px;
+    margin-bottom: 8px; cursor: pointer; transition: all 0.15s;
+    &:hover { background: var(--el-fill-color-light); border-color: var(--el-color-primary-light-5); }
+    &:last-child { margin-bottom: 0; }
+  }
+
+  .quick-action {
+    display: flex; flex-direction: column; align-items: center; cursor: pointer;
+    padding: 8px 16px; border-radius: 8px; transition: background 0.15s;
+    &:hover { background: var(--el-fill-color-light); }
+  }
+
+  .text-gray { color: var(--el-text-color-secondary); }
+  .text-red { color: #F53F3F; }
+  .text-center { text-align: center; }
+  .ml-auto { margin-left: auto; }
+  .ml-8px { margin-left: 8px; }
+  .py-20px { padding-top: 20px; padding-bottom: 20px; }
+  .mb-16px { margin-bottom: 16px; }
+  .flex { display: flex; }
+  .gap-16px { gap: 16px; }
 }
 </style>

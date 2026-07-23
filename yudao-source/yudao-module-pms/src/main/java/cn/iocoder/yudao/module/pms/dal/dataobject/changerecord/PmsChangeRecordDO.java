@@ -4,6 +4,7 @@ import cn.iocoder.yudao.framework.tenant.core.db.TenantBaseDO;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
@@ -86,5 +87,35 @@ public class PmsChangeRecordDO extends TenantBaseDO {
      * 执行时间
      */
     private LocalDateTime executeTime;
+
+    /**
+     * 变更前内容
+     */
+    @TableField("before_content")
+    private String beforeContent;
+
+    /**
+     * 变更后内容
+     */
+    @TableField("after_content")
+    private String afterContent;
+
+    /**
+     * 变更状态
+     */
+    @TableField("change_status")
+    private String changeStatus;
+
+    /**
+     * 变更前状态快照（对应数据库 before_state 列）
+     */
+    @TableField("before_state")
+    private String beforeState;
+
+    /**
+     * 变更后状态快照（对应数据库 after_state 列）
+     */
+    @TableField("after_state")
+    private String afterState;
 
 }
