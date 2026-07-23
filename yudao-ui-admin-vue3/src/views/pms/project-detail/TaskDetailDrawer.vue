@@ -175,6 +175,9 @@
           <el-button type="success" @click="handleSubmitComplete" v-if="task?.completeStatus === 'in_progress' || task?.completeStatus === 'delayed'">
             <Icon icon="ep:circle-check" class="mr-4px" />提交完成
           </el-button>
+          <el-button v-if="checkPermi(['pms:task:update'])" type="primary" plain @click="openEditOwnerDialog">
+            <Icon icon="ep:user" class="mr-4px" />修改责任人
+          </el-button>
         </template>
         <el-button @click="handleCreateChange" v-if="task?.completeStatus === 'completed'">
           <Icon icon="ep:edit-pen" class="mr-4px" />发起变更
@@ -199,6 +202,24 @@
       <template #footer>
         <el-button @click="showProgressDialog = false">取消</el-button>
         <el-button type="primary" @click="submitProgress">提交填报</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 修改责任人弹窗 -->
+    <el-dialog v-model="showEditOwnerDialog" title="修改责任人" width="400px" append-to-body>
+      <el-form label-width="80px">
+        <el-form-item label="当前责任人">
+          <span>{{ getUserName(task?.mainOwnerId) || '未分配' }}</span>
+        </el-form-item>
+        <el-form-item label="新责任人">
+          <el-select v-model="newOwnerId" filterable placeholder="选择项目成员" class="w-full">
+            <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="String(m.userId)" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditOwnerDialog = false">取消</el-button>
+        <el-button type="primary" :loading="changingOwner" @click="changeOwner">确认修改</el-button>
       </template>
     </el-dialog>
   </el-drawer>
@@ -236,6 +257,7 @@
 
 <script setup lang="ts">
 import { TaskVO, updateTask, getTask } from '@/api/pms/task'
+import { getProjectMemberList } from '@/api/pms/member'
 import { getDocumentList } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
 import {
@@ -261,6 +283,11 @@ const drawerVisible = ref(false)
 const activeTab = ref('info')
 const task = ref<TaskVO | null>(null)
 const showProgressDialog = ref(false)
+// 修改责任人对话框状态
+const showEditOwnerDialog = ref(false)
+const newOwnerId = ref('')
+const changingOwner = ref(false)
+const projectMembers = ref<any[]>([])
 
 // 列表数据
 const progressList = ref<any[]>([])
@@ -305,6 +332,9 @@ const open = async (taskData: TaskVO) => {
   }
   activeTab.value = 'info'
   progressForm.progress = task.value?.progress || 0
+
+  // 加载项目成员列表（用于修改责任人）
+  await loadProjectMembers()
 
   // 优先从 task 数据加载
   progressList.value = task.value?.progressHistory || []
@@ -603,6 +633,58 @@ const handleSubmitReview = async () => {
   } catch (e) {
     console.error('审核提交失败', e)
     message.error('审核提交失败')
+  }
+}
+
+// ==================== 修改责任人 ====================
+const loadProjectMembers = async () => {
+  if (!task.value?.projectId) return
+  try {
+    const res: any = await getProjectMemberList()
+    const list = ((res as any)?.data || (res as any[]) || []) as any[]
+    projectMembers.value = list.filter(m =>
+      String(m.projectId) === String(task.value?.projectId) && m.status === 'active'
+    )
+  } catch (e) {
+    console.error('加载项目成员失败', e)
+    projectMembers.value = []
+  }
+}
+
+const openEditOwnerDialog = () => {
+  newOwnerId.value = task.value?.mainOwnerId ? String(task.value.mainOwnerId) : ''
+  showEditOwnerDialog.value = true
+}
+
+const changeOwner = async () => {
+  if (!newOwnerId.value) {
+    message.warning('请选择新责任人')
+    return
+  }
+  if (!task.value) return
+  if (String(newOwnerId.value) === String(task.value.mainOwnerId || '')) {
+    message.warning('新责任人与当前责任人相同')
+    return
+  }
+  changingOwner.value = true
+  try {
+    await updateTask({
+      ...task.value,
+      mainOwnerId: newOwnerId.value
+    })
+    message.success('责任人修改成功')
+    showEditOwnerDialog.value = false
+    // 重新获取任务数据，确保状态同步
+    try {
+      const fresh = await getTask(String(task.value.taskId))
+      if (fresh) task.value = fresh
+    } catch { /* ignore */ }
+    emit('refresh')
+  } catch (e) {
+    console.error('修改责任人失败', e)
+    message.error('修改失败')
+  } finally {
+    changingOwner.value = false
   }
 }
 

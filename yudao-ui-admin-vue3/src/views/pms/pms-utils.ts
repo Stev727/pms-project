@@ -186,3 +186,17 @@ export function getDynamicProjectTypeOptions() {
 export function getDynamicPriorityOptions() {
   return getDictOptions('pms_priority', priorityOptions)
 }
+
+
+// ==================== 通知内容生成 ====================
+// 根据通知模板和任务/项目数据生成通知内容
+// 支持变量：{任务名称}、{计划结束日期}、{责任人姓名}、{项目名称}
+export const generateNotifyContent = (template: string, task: any, project?: any): string => {
+  let content = template
+  content = content.replace(/\{任务名称\}/g, task?.taskName || '未知任务')
+  const endDate = formatDate(task?.planEndDate)
+  content = content.replace(/\{计划结束日期\}/g, endDate === '-' ? '未排期' : endDate)
+  content = content.replace(/\{责任人姓名\}/g, task?.mainOwnerName || '未分配')
+  content = content.replace(/\{项目名称\}/g, project?.projectName || '未知项目')
+  return content
+}

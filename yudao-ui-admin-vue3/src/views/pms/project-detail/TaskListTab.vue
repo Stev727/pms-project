@@ -28,6 +28,12 @@
       </div>
     </div>
 
+    <!-- 任务计数 + 仅看我负责的开关 -->
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+      <span style="font-size: 13px; color: #86909c;">共 {{ filteredTaskCount }} 个任务</span>
+      <el-switch v-model="onlyMyTasks" active-text="仅看我负责的" @change="handleFilterChange" />
+    </div>
+
     <!-- 树形表格 -->
     <el-table
       :data="filteredTreeData"
@@ -205,6 +211,7 @@ import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCache } from '@/hooks/web/useCache'
+import { useUserStore } from '@/store/modules/user'
 
 defineOptions({ name: 'TaskListTab' })
 
@@ -227,6 +234,7 @@ const filterStage = ref<string | undefined>()
 const filterStatus = ref('')
 const filterAssignee = ref('')
 const expandAll = ref(true)
+const onlyMyTasks = ref(false)
 
 // 延期填写
 const delayFormVisible = ref(false)
@@ -280,6 +288,14 @@ const filteredTreeData = computed<TreeRow[]>(() => {
       })
     }
   }
+  // 仅看我负责的开关过滤
+  if (onlyMyTasks.value) {
+    const userInfo = useCache().wsCache.get('userInfo')
+    const uid = userInfo?.id
+    if (uid) {
+      tasks = tasks.filter(t => String(t.mainOwnerId) === String(uid))
+    }
+  }
 
   // 按阶段分组
   const tree: TreeRow[] = []
@@ -311,6 +327,33 @@ const filteredTreeData = computed<TreeRow[]>(() => {
 
   return tree.filter(node => !node.isStageRow || (node.children && node.children.length > 0))
 })
+
+// 当前登录用户ID
+const currentUserId = computed(() => {
+  const userStore = useUserStore()
+  return String(userStore.getUser?.id || '')
+})
+
+// 过滤后的任务总数（不含阶段行）
+const filteredTaskCount = computed(() => {
+  let count = 0
+  for (const node of filteredTreeData.value) {
+    if (node.isStageRow) {
+      count += node.children?.length || 0
+    } else {
+      count += 1
+    }
+  }
+  return count
+})
+
+// 仅看我负责的开关变化处理（仅用于触发重新计算，过滤逻辑在 filteredTreeData 内）
+const handleFilterChange = () => {
+  // 切换 onlyMyTasks 时，自动清空 filterAssignee 避免冲突
+  if (onlyMyTasks.value) {
+    filterAssignee.value = ''
+  }
+}
 
 // ==================== 状态流转逻辑 ====================
 const transitionRules: Record<string, { from: string[]; to: string; label: string; roles: string[] }> = {

@@ -42,6 +42,27 @@
       </el-table>
     </ContentWrap>
 
+    <!-- 通知模板配置 -->
+    <el-card class="mt-16px" header="通知模板配置">
+      <el-table :data="notifyTemplates" border size="small">
+        <el-table-column prop="name" label="模板名称" width="200" />
+        <el-table-column prop="triggerEvent" label="触发事件" width="150" />
+        <el-table-column prop="channel" label="通知渠道" width="120" />
+        <el-table-column prop="template" label="模板内容" min-width="300" show-overflow-tooltip />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="editTemplate(row)">编辑</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-alert type="info" :closable="false" class="mt-12px">
+        <template #title>
+          可用变量：{任务名称}、{计划结束日期}、{责任人姓名}、{项目名称}
+        </template>
+      </el-alert>
+    </el-card>
+
     <!-- 编辑弹窗 -->
     <el-dialog v-model="formVisible" :title="editingRule ? '编辑通知规则' : '新建通知规则'" width="560px">
       <el-form ref="formRef" :model="form" label-width="100px">
@@ -125,6 +146,26 @@
       <template #footer>
         <el-button @click="formVisible = false">取消</el-button>
         <el-button type="primary" @click="saveRule" :loading="saving">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑通知模板弹窗 -->
+    <el-dialog v-model="templateDialogVisible" title="编辑通知模板" width="600px">
+      <el-form :model="templateForm" label-width="100px">
+        <el-form-item label="模板名称">
+          <el-input v-model="templateForm.name" disabled />
+        </el-form-item>
+        <el-form-item label="模板内容">
+          <el-input v-model="templateForm.template" type="textarea" :rows="8"
+            placeholder="使用变量：{任务名称}、{计划结束日期}、{责任人姓名}、{项目名称}" />
+        </el-form-item>
+        <el-form-item label="可用变量">
+          <el-tag v-for="v in templateForm.variables" :key="v" class="mr-8px">{{ v }}</el-tag>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="templateDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveTemplate">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -292,8 +333,66 @@ function deleteRule(row: any) {
   }).catch(() => {})
 }
 
+// ==================== 通知模板配置 ====================
+const notifyTemplates = ref([
+  {
+    id: 'task_dispatch',
+    name: '任务派发通知',
+    triggerEvent: 'task_dispatched',
+    channel: '钉钉',
+    template: '【PMS任务派发】{任务名称}\n您有新任务：{任务名称}\n截止日期：{计划结束日期}\n项目：{项目名称}\n请及时处理。',
+    variables: ['{任务名称}', '{计划结束日期}', '{责任人姓名}', '{项目名称}']
+  },
+  {
+    id: 'task_t_minus_3',
+    name: '任务T-3提醒',
+    triggerEvent: 'task_t_minus_3',
+    channel: '钉钉',
+    template: '【PMS任务提醒】{任务名称}\n任务将在3天后到期。\n截止日期：{计划结束日期}\n请确保按时完成。',
+    variables: ['{任务名称}', '{计划结束日期}']
+  },
+  {
+    id: 'task_overdue',
+    name: '任务逾期通知',
+    triggerEvent: 'task_overdue',
+    channel: '钉钉+邮件',
+    template: '【PMS逾期预警】{任务名称}\n任务已逾期！\n截止日期：{计划结束日期}\n请立即处理。',
+    variables: ['{任务名称}', '{计划结束日期}']
+  }
+])
+
+const templateDialogVisible = ref(false)
+const templateForm = reactive({
+  id: '', name: '', triggerEvent: '', channel: '', template: '', variables: [] as string[]
+})
+
+const editTemplate = (row: any) => {
+  Object.assign(templateForm, row)
+  templateDialogVisible.value = true
+}
+
+const saveTemplate = () => {
+  const idx = notifyTemplates.value.findIndex(t => t.id === templateForm.id)
+  if (idx !== -1) {
+    notifyTemplates.value[idx] = { ...templateForm }
+  }
+  localStorage.setItem('pms_notify_templates', JSON.stringify(notifyTemplates.value))
+  ElMessage.success('模板保存成功')
+  templateDialogVisible.value = false
+}
+
+const loadTemplates = () => {
+  const saved = localStorage.getItem('pms_notify_templates')
+  if (saved) {
+    try {
+      notifyTemplates.value = JSON.parse(saved)
+    } catch { /* ignore parse error */ }
+  }
+}
+
 onMounted(() => {
   fetchList()
+  loadTemplates()
 })
 </script>
 
