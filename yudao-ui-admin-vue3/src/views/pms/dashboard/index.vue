@@ -40,6 +40,7 @@
     <!-- 项目健康度矩阵 -->
     <el-card class="mt-16px" header="项目健康度">
       <div class="health-matrix">
+        <div v-if="projectHealthList.length === 0" class="text-center text-gray py-20px">暂无项目数据，请先创建项目</div>
         <div v-for="p in projectHealthList" :key="p.projectId" class="health-item" @click="goToProject(p.projectId)">
           <el-tag :type="p.healthType" size="small">{{ p.healthLabel }}</el-tag>
           <span class="ml-8px">{{ p.projectName }}</span>
@@ -50,7 +51,7 @@
 
     <!-- 延期项目 TOP 5 -->
     <el-card class="mt-16px" header="延期项目 TOP 5">
-      <div v-if="delayedProjects.length === 0" class="text-center text-gray py-20px">暂无延期项目</div>
+      <div v-if="delayedProjects.length === 0" class="text-center text-gray py-20px">暂无延期项目，项目进度均正常</div>
       <div v-for="p in delayedProjects" :key="p.projectId" class="health-item" @click="goToProject(p.projectId)">
         <el-tag type="danger" size="small">延期{{ p.delayDays }}天</el-tag>
         <span class="ml-8px">{{ p.projectName }}</span>
@@ -303,10 +304,15 @@ const parseDate = (d: any): Date => {
 
 const projectHealthList = computed(() => {
   return projectList.value.map(p => {
-    const tasks = taskList.value.filter(t => String(t.projectId) === String(p.projectId))
-    const total = tasks.length
-    const completed = tasks.filter(t => t.completeStatus === 'completed').length
-    const progress = total > 0 ? Math.round(completed / total * 100) : (p.progress || 0)
+    // 优先使用后端实时计算的 progress，确保各页面口径统一
+    let progress = p.progress || 0
+    if (progress === 0) {
+      // 后端未提供时，前端按完成任务数占比计算
+      const tasks = taskList.value.filter(t => String(t.projectId) === String(p.projectId))
+      const total = tasks.length
+      const completed = tasks.filter(t => t.completeStatus === 'completed').length
+      progress = total > 0 ? Math.round(completed / total * 100) : 0
+    }
     // 计算健康度
     let healthType: any = 'success'
     let healthLabel = '正常'

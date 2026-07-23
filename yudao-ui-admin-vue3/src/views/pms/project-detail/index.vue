@@ -32,7 +32,8 @@
             <span class="text-gray">{{ completedTaskCount }} / {{ totalTaskCount }} 任务</span>
           </div>
           <div class="project-meta mt-8px">
-            <span>已用 {{ getElapsedDays(project.actualStartDate || project.planStartDate) }} 天</span>
+            <span v-if="isProjectNotStarted(project)">尚未开始</span>
+            <span v-else>已用 {{ getElapsedDays(project.actualStartDate || project.planStartDate) }} 天</span>
             <el-divider direction="vertical" />
             <span>{{ getRemainingDays(project.planEndDate) }}</span>
             <el-divider direction="vertical" />
@@ -462,7 +463,18 @@ const getElapsedDays = (startDate: any) => {
   const start = Array.isArray(startDate)
     ? new Date(startDate[0], startDate[1] - 1, startDate[2])
     : new Date(startDate)
+  if (start.getTime() > Date.now()) return 0 // 未开始的项目显示 0 天
   return Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+// 项目是否尚未开始（计划开始日期在未来）
+const isProjectNotStarted = (project: any) => {
+  const startDate = project?.actualStartDate || project?.planStartDate
+  if (!startDate) return true
+  const start = Array.isArray(startDate)
+    ? new Date(startDate[0], startDate[1] - 1, startDate[2])
+    : new Date(startDate)
+  return start.getTime() > Date.now()
 }
 
 // 剩余天数（文本）

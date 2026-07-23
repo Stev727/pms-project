@@ -353,8 +353,9 @@ const loadChangeList = async () => {
   if (!task.value) return
   try {
     const res = await getChangeRecordList()
-    const changes = ((res as any)?.data || (res as any[]) || [])
-    changeList.value = changes
+    const allChanges = ((res as any)?.data || (res as any[]) || [])
+    // P0-03: 变更记录按当前 taskId 隔离过滤
+    changeList.value = allChanges.filter(c => String(c.taskId) === String(task.value!.taskId))
   } catch {
     changeList.value = []
   }
@@ -509,12 +510,11 @@ const handleFileSelect = async (event: Event) => {
   const target = event.target as HTMLInputElement
   if (!target.files || !target.files.length) return
   const file = target.files[0]
-  // 校验文件大小
   if (file.size > 50 * 1024 * 1024) {
     message.error('文件不能超过 50MB')
     return
   }
-  // 上传文件
+  message.info('正在上传...')
   const formData = new FormData()
   formData.append('file', file)
   try {
@@ -524,28 +524,47 @@ const handleFileSelect = async (event: Event) => {
       headers: { 'Authorization': 'Bearer ' + token, 'tenant-id': '1' },
       body: formData
     })
-    const data = await res.json()
-    if (data.code === 0) {
-      // 上传成功，添加到输出物列表
-      const fileUrl = data.data
-      outputList.value.push({
-        fileName: file.name,
-        fileType: file.name.split('.').pop() || 'unknown',
-        storagePath: fileUrl,
-        fileSize: file.size,
-        version: 'v1',
-        createTime: new Date().toISOString(),
-        uploadTime: new Date().toISOString()
-      })
-      message.success('文件上传成功')
-    } else {
-      message.error('上传失败: ' + (data.msg || '未知错误'))
+    if (!res.ok) {
+      message.error(`上传失败: HTTP ${res.status}`)
+      return
     }
+    const text = await res.text()
+    let fileUrl = ''
+    const fileName = file.name
+    // 尝试 JSON 解析
+    try {
+      const data = JSON.parse(text)
+      if (data.code === 0) {
+        fileUrl = data.data
+      } else {
+        message.error('上传失败: ' + (data.msg || '未知错误'))
+        return
+      }
+    } catch {
+      // 不是 JSON，可能是纯文本 URL
+      if (text && text.startsWith('http')) {
+        fileUrl = text
+      } else {
+        message.error('上传失败: 服务端返回格式异常')
+        console.error('Upload response:', text)
+        return
+      }
+    }
+    // 上传成功，添加到输出物列表
+    outputList.value.push({
+      fileName: fileName,
+      fileType: fileName.split('.').pop() || 'unknown',
+      storagePath: fileUrl,
+      fileSize: file.size,
+      version: 'v1',
+      createTime: new Date().toISOString(),
+      uploadTime: new Date().toISOString()
+    })
+    message.success('文件上传成功')
   } catch (e) {
-    console.error('文件上传失败', e)
-    message.error('文件上传失败')
+    message.error('文件上传失败: ' + (e instanceof Error ? e.message : '网络错误'))
+    console.error('Upload error:', e)
   }
-  // 重置 input 以支持重复选择同一文件
   target.value = ''
 }
 

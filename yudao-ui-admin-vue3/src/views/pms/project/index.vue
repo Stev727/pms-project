@@ -118,7 +118,7 @@
                 </div>
                 <div class="meta-row">
                   <Icon icon="ep:timer" class="meta-icon" />
-                  <span>{{ getRemainingDays(project.planEndDate) }}</span>
+                  <span>{{ getRemainingDays(project) }}</span>
                 </div>
               </div>
             </el-card>
@@ -338,6 +338,9 @@ const getProgressColor = (project: ProjectVO) => {
 }
 
 const getCompletionRate = (project: ProjectVO) => {
+  // 优先使用后端实时计算的 progress，确保各页面口径统一
+  if (project.progress != null) return project.progress
+  // 后端未提供时，前端按完成任务数占比计算
   const tasks = taskList.value.filter(t => String(t.projectId) === String(project.projectId))
   if (tasks.length === 0) return 0
   const completed = tasks.filter(t => t.completeStatus === 'completed').length
@@ -385,7 +388,19 @@ const getProjectTaskStats = (projectId: any) => {
 }
 
 // 剩余天数
-const getRemainingDays = (planEndDate: any) => {
+const getRemainingDays = (project: any) => {
+  const planEndDate = project?.planEndDate
+  const planStartDate = project?.planStartDate
+  // 未开始的项目显示距开始天数
+  if (planStartDate) {
+    const start = Array.isArray(planStartDate)
+      ? new Date(planStartDate[0], planStartDate[1] - 1, planStartDate[2])
+      : new Date(planStartDate)
+    if (start.getTime() > Date.now()) {
+      const diffToStart = Math.ceil((start.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      return diffToStart === 0 ? '今天开始' : `距开始${diffToStart}天`
+    }
+  }
   if (!planEndDate) return '-'
   const end = Array.isArray(planEndDate)
     ? new Date(planEndDate[0], planEndDate[1] - 1, planEndDate[2])

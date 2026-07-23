@@ -20,7 +20,8 @@
 
     <!-- 今日待办 -->
     <el-card class="mb-16px" header="今日待办">
-      <div v-if="todayTasks.length === 0" class="text-center text-gray py-20px">今日暂无待办任务</div>
+      <el-empty v-if="loading" description="加载中..." :image-size="60" />
+      <el-empty v-else-if="todayTasks.length === 0" description="今日暂无到期或进行中的任务" :image-size="60" />
       <div v-for="t in todayTasks" :key="t.taskId" class="task-item" @click="openTaskDetail(t)">
         <el-tag size="small" :type="getPriorityTag(t.priority)">{{ getPriorityLabel(t.priority) }}</el-tag>
         <span class="ml-8px">{{ t.taskName }}</span>
@@ -72,7 +73,7 @@
               </span>
               <el-icon class="task-arrow"><ArrowRight /></el-icon>
             </div>
-            <el-empty v-if="group.items.length === 0" description="暂无任务" :image-size="60" />
+            <el-empty v-if="group.items.length === 0" :description="emptyDescription" :image-size="60" />
           </template>
         </el-tab-pane>
       </el-tabs>
@@ -119,7 +120,17 @@ const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const message = ElMessage
 const TaskDetailDrawer = defineAsyncComponent(() => import('../project-detail/TaskDetailDrawer.vue'))
 
-const currentUserId = computed(() => String(userStore.getUserInfo?.id || ''))
+const currentUserId = computed(() => {
+  const uid = userStore.getUserInfo?.id
+  if (uid) return String(uid)
+  // fallback: 从 wsCache 获取用户信息
+  try {
+    const cached = wsCache.get('userInfo') || wsCache.get('user') || {}
+    return String(cached?.id || cached?.user?.id || '')
+  } catch {
+    return ''
+  }
+})
 
 // 今日待办：今天到期 + 我的进行中任务
 const todayTasks = computed(() => {
@@ -201,7 +212,7 @@ const statCards = computed(() => {
   return [
     { key: 'not_started', label: '待办', value: myTasks.filter(t => t.completeStatus === 'not_started').length, sub: '本月新增 ' + myTasks.filter(t => t.completeStatus === 'not_started').length, iconRef: 'ep:clock', color: '#4E5969', bg: '#F2F3F5' },
     { key: 'in_progress', label: '进行中', value: myTasks.filter(t => t.completeStatus === 'in_progress').length, sub: '平均进度 ' + Math.round(avgProgress(myTasks, 'in_progress')) + '%', iconRef: 'ep:loading', color: '#2468F2', bg: '#DCE7FF' },
-    { key: 'delayed', label: '延期', value: myTasks.filter(t => t.completeStatus === 'delayed').length, sub: '最长延期 ' + maxDelay(myTasks) + ' 天', iconRef: 'ep:warning', color: '#F53F3F', bg: '#FFECE8' },
+    { key: 'delayed', label: '延期', value: myTasks.filter(t => isDelayedTask(t)).length, sub: '最长延期 ' + maxDelay(myTasks) + ' 天', iconRef: 'ep:warning', color: '#F53F3F', bg: '#FFECE8' },
     { key: 'completed', label: '已完成', value: myTasks.filter(t => t.completeStatus === 'completed').length, sub: '本月完成', iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' }
   ]
 })
@@ -213,11 +224,24 @@ function avgProgress(tasks: TaskVO[], status: string): number {
 }
 
 function maxDelay(tasks: TaskVO[]): number {
-  const delays = tasks.filter(t => t.completeStatus === 'delayed').map(t => calcDelayDays(t.planEndDate, t.completeStatus))
+  const delays = tasks.filter(t => isDelayedTask(t)).map(t => calcDelayDays(t.planEndDate, t.completeStatus))
   return delays.length ? Math.max(...delays) : 0
 }
 
+// 判断任务是否延期: planEndDate < today && completeStatus !== 'completed'
+function isDelayedTask(t: TaskVO): boolean {
+  if (t.completeStatus === 'completed') return false
+  const d = parseDateSafe(t.planEndDate)
+  if (!d) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return d < today
+}
+
 const filteredTasks = computed(() => {
+  if (activeTab.value === 'delayed') {
+    return allTasks.value.filter(t => isDelayedTask(t))
+  }
   return allTasks.value.filter(t => t.completeStatus === activeTab.value)
 })
 
@@ -251,7 +275,7 @@ const groupedTasks = computed(() => {
   if (thisWeek.length) groups.push({ title: `本周到期 (${thisWeek.length})`, items: thisWeek })
   if (thisMonth.length) groups.push({ title: `本月到期 (${thisMonth.length})`, items: thisMonth })
   if (later.length) groups.push({ title: `更远 (${later.length})`, items: later })
-  if (!groups.length) groups.push({ title: '暂无任务', items: [] })
+  if (!groups.length) groups.push({ title: '任务列表', items: [] })
   return groups
 })
 
@@ -262,6 +286,16 @@ function parseDateSafe(d: any): Date | null {
   const parsed = new Date(d)
   return isNaN(parsed.getTime()) ? null : parsed
 }
+
+// 空状态描述（根据上下文给出原因说明）
+const emptyDescription = computed(() => {
+  if (loading.value) return '加载中...'
+  if (allTasks.value.length === 0) {
+    return '您当前没有负责的任务，请在项目管理中创建项目并分配任务给您'
+  }
+  const tab = tabConfig.find(t => t.name === activeTab.value)
+  return `${tab?.label || '当前'}分类暂无任务`
+})
 
 function switchTab(key: string) {
   activeTab.value = key

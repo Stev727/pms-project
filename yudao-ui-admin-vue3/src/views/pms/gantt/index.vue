@@ -28,7 +28,10 @@
       </div>
 
       <!-- 甘特图区域 -->
-      <div ref="ganttRef" style="width: 100%; height: calc(100vh - 280px); min-height: 400px"></div>
+      <div v-show="selectedProjectId && ganttTaskCount > 0" ref="ganttRef" style="width: 100%; height: calc(100vh - 280px); min-height: 400px"></div>
+      <!-- 空状态提示 -->
+      <el-empty v-if="!selectedProjectId" description="请先选择项目" :image-size="120" style="padding: 60px 0" />
+      <el-empty v-else-if="ganttTaskCount === 0" description="该项目暂无任务" :image-size="120" style="padding: 60px 0" />
 
       <!-- 图例 -->
       <div class="gantt-legend">
@@ -67,6 +70,12 @@ const showLinks = ref(true)
 let ganttReady = false
 // 引用 renderGantt 用于拖拽失败回滚
 let renderGanttFn: (() => void) | null = null
+
+// 当前项目的任务数量
+const ganttTaskCount = computed(() => {
+  if (!selectedProjectId.value) return 0
+  return allTasks.value.filter(t => String(t.projectId) === String(selectedProjectId.value)).length
+})
 
 const loadProjects = async () => {
   projectList.value = (await getProjectList()).filter((p: ProjectVO) => p.projectType !== 'standard_template')
