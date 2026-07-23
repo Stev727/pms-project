@@ -473,12 +473,19 @@ const submitCreateTask = async () => {
   if (!valid) return
   submittingTask.value = true
   try {
-    await createTask({
+    // 关键修复: helperIds 后端期望 String 或 null, 空数组导致 500
+    const submitData = {
       ...taskForm,
       projectId: projectId.value,
       completeStatus: 'not_started',
       progress: 0
-    })
+    }
+    if (Array.isArray(submitData.helperIds)) {
+      submitData.helperIds = submitData.helperIds.length > 0
+        ? submitData.helperIds.join(',')
+        : null
+    }
+    await createTask(submitData)
     message.success('任务创建成功')
     createTaskDialogVisible.value = false
     await loadProjectData()

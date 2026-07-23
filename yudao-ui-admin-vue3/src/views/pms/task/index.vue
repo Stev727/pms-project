@@ -479,7 +479,8 @@ const submitTask = async () => {
     const data: any = { ...taskForm }
     // 序列化协助人ID为逗号分隔字符串
     if (Array.isArray(data.helperIds)) {
-      data.helperIds = data.helperIds.join(',')
+      // 关键修复: 空数组 join 后变空字符串, 改为 null 避免后端报错
+      data.helperIds = data.helperIds.length > 0 ? data.helperIds.join(',') : null
     }
     if (isEdit.value) {
       await updateTask(data)

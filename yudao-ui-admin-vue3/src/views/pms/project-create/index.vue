@@ -745,7 +745,10 @@ async function submitCreate() {
         priority: t.priority || 'normal',
         isMilestone: !!t.isMilestone,
         mainOwnerId: t.mainOwnerId,
-        helperIds: t.helperIds || [],
+        // 关键修复: helperIds 后端不接受空数组, 转 null
+        helperIds: Array.isArray(t.helperIds) && t.helperIds.length > 0
+          ? t.helperIds.join(',')
+          : null,
         description: t.description || '',
         outputRequirement: t.outputRequirement || '',
         planStartDate: t.planStartDate,
