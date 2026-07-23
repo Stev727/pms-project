@@ -285,6 +285,9 @@
                   <el-button v-else link type="primary" size="small" @click="openEditStage(row)">
                     <Icon icon="ep:edit" />编辑
                   </el-button>
+                  <el-button v-if="row.isStage" link type="danger" size="small" @click="removeEditStage(row)">
+                    <Icon icon="ep:delete" />删除
+                  </el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -346,7 +349,7 @@
 <script setup lang="ts">
 import { getProjectList, updateProject, createProject, ProjectVO } from '@/api/pms/project'
 import { getTaskList, updateTask, createTask, deleteTask, TaskVO } from '@/api/pms/task'
-import { getStageList, createStage, updateStage, StageVO } from '@/api/pms/stage'
+import { getStageList, createStage, updateStage, deleteStage, StageVO } from '@/api/pms/stage'
 import { dateFormatter } from '@/utils/formatTime'
 
 defineOptions({ name: 'PmsTemplate' })
@@ -693,13 +696,23 @@ const saveEdit = async () => {
       }
     })
 
-    // 4. 删除标记的任务
+    // 4. 删除标记的阶段
+    const deleteStageResults = await Promise.allSettled(
+      editDeletedStageIds.value
+        .filter(id => !String(id).startsWith('new_'))
+        .map(id => deleteStage(String(id)))
+    )
+    deleteStageResults.forEach((r) => {
+      if (r.status === 'rejected') errors.push(`删除阶段失败: ${r.reason}`)
+    })
+
+    // 5. 删除标记的任务
     const deleteResults = await Promise.allSettled(
       editDeletedTaskIds.value
         .filter(id => !String(id).startsWith('new_'))
         .map(id => deleteTask(String(id)))
     )
-    deleteResults.forEach((r, i) => {
+    deleteResults.forEach((r) => {
       if (r.status === 'rejected') errors.push(`删除任务失败: ${r.reason}`)
     })
 
@@ -822,6 +835,26 @@ const saveTaskEdit = () => {
     }
   }
   taskEditVisible.value = false
+}
+
+const removeEditStage = async (row: any) => {
+  try {
+    await message.confirm(`确认删除阶段「${row.stageName}」？其下任务也将被删除。`)
+    // 删除该阶段下所有任务
+    const taskIdsToDelete = editTaskList.value
+      .filter(t => String(t.stageId) === String(row.stageId))
+      .map(t => t.taskId)
+    taskIdsToDelete.forEach(id => {
+      if (!editDeletedTaskIds.value.includes(id)) {
+        editDeletedTaskIds.value.push(id)
+      }
+    })
+    editTaskList.value = editTaskList.value.filter(t => String(t.stageId) !== String(row.stageId))
+    // 删除阶段
+    editStageList.value = editStageList.value.filter(s => s.stageId !== row.stageId)
+    editDeletedStageIds.value.push(row.stageId)
+    message.success('已删除')
+  } catch {}
 }
 
 const removeEditTask = async (row: any) => {
