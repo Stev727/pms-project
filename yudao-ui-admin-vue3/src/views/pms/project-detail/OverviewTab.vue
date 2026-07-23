@@ -1,79 +1,29 @@
 <template>
   <div class="overview-tab">
-    <!-- 统计卡片 -->
-    <el-row :gutter="16" class="mb-16px">
-      <el-col :span="6">
-        <div class="stat-card">
-          <div class="stat-icon" style="background: #DCE7FF"><Icon icon="ep:list" color="#2468F2" :size="22" /></div>
-          <div class="stat-info">
-            <div class="stat-label">总任务数</div>
-            <div class="stat-value">{{ stats.total }}</div>
-          </div>
-        </div>
-      </el-col>
-      <el-col :span="6">
-        <div class="stat-card">
-          <div class="stat-icon" style="background: #E8FFEA"><Icon icon="ep:circle-check" color="#00B42A" :size="22" /></div>
-          <div class="stat-info">
-            <div class="stat-label">已完成</div>
-            <div class="stat-value" style="color: #00B42A">{{ stats.completed }}</div>
-          </div>
-        </div>
-      </el-col>
-      <el-col :span="6">
-        <div class="stat-card">
-          <div class="stat-icon" style="background: #DCE7FF"><Icon icon="ep:loading" color="#2468F2" :size="22" /></div>
-          <div class="stat-info">
-            <div class="stat-label">进行中</div>
-            <div class="stat-value" style="color: #2468F2">{{ stats.inProgress }}</div>
-          </div>
-        </div>
-      </el-col>
-      <el-col :span="6">
-        <div class="stat-card" :class="{ 'stat-card-danger': stats.delayed > 0 }">
-          <div class="stat-icon" :style="{ background: stats.delayed > 0 ? '#FFECE8' : '#F2F3F5' }">
-            <Icon icon="ep:warning" :color="stats.delayed > 0 ? '#F53F3F' : '#86909C'" :size="22" />
-          </div>
-          <div class="stat-info">
-            <div class="stat-label">已延期</div>
-            <div class="stat-value" :style="{ color: stats.delayed > 0 ? '#F53F3F' : '#86909C' }">{{ stats.delayed }}</div>
-          </div>
-        </div>
-      </el-col>
-    </el-row>
+    <!-- 项目完成率仪表盘 (PRD-003) -->
+    <div class="completion-overview mb-24px">
+      <h3>项目完成率</h3>
+      <el-progress type="dashboard" :percentage="completionRate" :width="180" class="mb-8px" />
+      <p>{{ completedCount }} / {{ totalCount }} 任务已完成</p>
+    </div>
 
-    <!-- 完成率环 + 阶段进度 -->
-    <el-row :gutter="16">
-      <el-col :span="8">
-        <div class="progress-ring-card">
-          <div class="card-title">整体完成率</div>
-          <div class="ring-container">
-            <el-progress type="circle" :percentage="stats.completionRate" :width="140" :stroke-width="12"
-              :color="stats.completionRate === 100 ? '#00B42A' : '#2468F2'" />
-          </div>
-          <div class="ring-detail">
-            <span>{{ stats.completed }}/{{ stats.total }} 任务</span>
-            <span v-if="stats.delayed > 0" style="color: #F53F3F">{{ stats.delayed }} 延期</span>
-          </div>
-        </div>
-      </el-col>
-      <el-col :span="16">
-        <div class="phase-timeline-card">
-          <div class="card-title">阶段进度</div>
-          <div class="phase-timeline">
-            <div v-for="(phase, index) in phaseProgress" :key="phase.stageId" class="phase-item">
-              <div class="phase-node" :class="{ active: phase.isActive, completed: phase.isCompleted }">
-                <Icon v-if="phase.isCompleted" icon="ep:check" :size="14" color="#fff" />
-                <span v-else>{{ index + 1 }}</span>
-              </div>
-              <div v-if="index < phaseProgress.length - 1" class="phase-line" :class="{ active: phase.isCompleted }" />
-              <div class="phase-label">{{ phase.stageName }}</div>
-              <div class="phase-stats">{{ phase.completedTasks }}/{{ phase.totalTasks }}</div>
-              <el-progress v-if="phase.totalTasks > 0" :percentage="phase.percentage" :stroke-width="4" :show-text="false"
-                :color="phase.isCompleted ? '#00B42A' : '#2468F2'" style="width: 80px" />
-            </div>
-          </div>
-        </div>
+    <!-- 任务统计 (PRD-003: 5 项数字) -->
+    <div class="task-stats mb-16px">
+      <div class="stat-item">总任务 <b>{{ totalCount }}</b></div>
+      <div class="stat-item">已完成 <b class="text-success">{{ completedCount }}</b></div>
+      <div class="stat-item">进行中 <b class="text-primary">{{ inProgressCount }}</b></div>
+      <div class="stat-item">延期 <b class="text-danger">{{ delayedCount }}</b></div>
+      <div class="stat-item">完成率 <b class="text-warning">{{ completionRate }}%</b></div>
+    </div>
+
+    <!-- 阶段进度卡片 (PRD-003) -->
+    <el-row :gutter="16" class="mb-16px">
+      <el-col v-for="stage in stageProgress" :key="stage.stageId" :span="4">
+        <el-card class="stage-card">
+          <h4>{{ stage.stageName }}</h4>
+          <el-progress :percentage="stage.rate" :stroke-width="8" />
+          <p class="stage-stats">{{ stage.completed }} / {{ stage.total }} 任务</p>
+        </el-card>
       </el-col>
     </el-row>
 
@@ -134,39 +84,30 @@ const props = defineProps<{
   project: any
 }>()
 
-// ==================== 任务统计 ====================
-const stats = computed(() => {
-  const tasks = props.tasks
-  const total = tasks.length
-  const completed = tasks.filter(t => t.completeStatus === 'completed').length
-  const inProgress = tasks.filter(t => t.completeStatus === 'in_progress').length
-  const notStarted = tasks.filter(t => t.completeStatus === 'not_started').length
-  const delayed = tasks.filter(t => {
-    if (t.completeStatus === 'completed' || t.completeStatus === 'cancelled') return false
-    return calcDelayDays(t.planEndDate, t.completeStatus) > 0
-  }).length
-  return {
-    total, completed, inProgress, notStarted, delayed,
-    completionRate: total > 0 ? Math.round((completed / total) * 100) : 0
-  }
+// ==================== 任务统计 (PRD-003) ====================
+const totalCount = computed(() => props.tasks.length)
+const completedCount = computed(() => props.tasks.filter(t => t.completeStatus === 'completed').length)
+const inProgressCount = computed(() => props.tasks.filter(t => t.completeStatus === 'in_progress').length)
+const delayedCount = computed(() => props.tasks.filter(t => {
+  if (t.completeStatus === 'completed' || t.completeStatus === 'cancelled') return false
+  return calcDelayDays(t.planEndDate, t.completeStatus) > 0
+}).length)
+const completionRate = computed(() => {
+  if (!totalCount.value) return 0
+  return Math.round(completedCount.value / totalCount.value * 100)
 })
 
-// ==================== 阶段进度 ====================
-const phaseProgress = computed(() => {
+// ==================== 阶段进度 (PRD-003) ====================
+const stageProgress = computed(() => {
   return props.stages.map(stage => {
     const stageTasks = props.tasks.filter(t => String(t.stageId) === String(stage.stageId))
-    const completedTasks = stageTasks.filter(t => t.completeStatus === 'completed').length
-    const totalTasks = stageTasks.length
-    const percentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
-    const isCompleted = totalTasks > 0 && completedTasks === totalTasks
-    const isActive = totalTasks > 0 && completedTasks < totalTasks
+    const completed = stageTasks.filter(t => t.completeStatus === 'completed').length
+    const total = stageTasks.length
     return {
       ...stage,
-      completedTasks,
-      totalTasks,
-      percentage,
-      isCompleted,
-      isActive
+      total,
+      completed,
+      rate: total ? Math.round(completed / total * 100) : 0
     }
   })
 })
@@ -284,5 +225,41 @@ const recentActivities = computed(() => {
 
 .activity-card {
   background: #F7F8FA; border-radius: 8px; padding: 20px;
+}
+
+/* PRD-003 新增样式 */
+.completion-overview {
+  background: #F7F8FA; border-radius: 8px; padding: 24px; text-align: center;
+}
+.completion-overview h3 {
+  font-size: 15px; font-weight: 600; color: #1D2129; margin: 0 0 16px 0;
+}
+.completion-overview p {
+  font-size: 13px; color: #4E5969; margin: 8px 0 0 0;
+}
+.mb-24px { margin-bottom: 24px; }
+.mb-8px { margin-bottom: 8px; }
+
+.task-stats {
+  display: flex; gap: 16px; background: #F7F8FA; border-radius: 8px; padding: 16px;
+}
+.task-stats .stat-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  font-size: 13px; color: #86909C;
+}
+.task-stats .stat-item b {
+  font-size: 22px; font-weight: 700; color: #1D2129;
+}
+.text-success { color: #00B42A; }
+.text-primary { color: #2468F2; }
+.text-danger { color: #F53F3F; }
+.text-warning { color: #FF7D00; }
+
+.stage-card { text-align: center; }
+.stage-card h4 {
+  font-size: 13px; font-weight: 600; color: #1D2129; margin: 0 0 12px 0;
+}
+.stage-card .stage-stats {
+  font-size: 12px; color: #86909C; margin: 8px 0 0 0;
 }
 </style>

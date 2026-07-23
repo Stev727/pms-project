@@ -26,6 +26,11 @@
             <el-divider direction="vertical" />
             <el-tag :type="getStatusType(project.status)" size="small">{{ getStatusLabel(project.status) }}</el-tag>
           </div>
+          <div class="project-progress">
+            <span class="mr-8px">项目完成率</span>
+            <el-progress :percentage="projectCompletionRate" :stroke-width="12" :format="(p) => `${p}%`" class="flex-1 mr-16px" />
+            <span class="text-gray">{{ completedTaskCount }} / {{ totalTaskCount }} 任务</span>
+          </div>
         </div>
         <div class="header-right">
           <el-button @click="handleCopyProject" v-if="checkPermi(['pms:project:create'])" :disabled="true">
@@ -34,6 +39,11 @@
           <el-button @click="handleEdit" v-if="checkPermi(['pms:project:update'])">
             <Icon icon="ep:edit" class="mr-5px" />编辑
           </el-button>
+          <el-badge :value="pendingReviewCount" :hidden="!pendingReviewCount" :max="99">
+            <el-button type="warning" @click="switchToReviewCenter">
+              <Icon icon="ep:circle-check" class="mr-5px" />审核中心
+            </el-button>
+          </el-badge>
           <el-dropdown trigger="click">
             <el-button>更多<Icon icon="ep:arrow-down" class="ml-5px" /></el-button>
             <template #dropdown>
@@ -78,6 +88,13 @@
         <el-tab-pane label="概览" name="overview">
           <template v-if="activeTab === 'overview'">
             <OverviewTab :tasks="projectTasks" :stages="projectStages" :project="project" />
+          </template>
+        </el-tab-pane>
+
+        <!-- 审核中心 Tab (NEW - PRD-003) -->
+        <el-tab-pane label="审核中心" name="review-center">
+          <template v-if="activeTab === 'review-center'">
+            <ReviewCenterTab :project-id="projectId" @reviewed="loadProjectData" />
           </template>
         </el-tab-pane>
 
@@ -281,6 +298,7 @@ import DocumentsTab from './DocumentsTab.vue'
 import ApprovalTab from './ApprovalTab.vue'
 import ChangesTab from './ChangesTab.vue'
 import QualityTab from './QualityTab.vue'
+import ReviewCenterTab from './ReviewCenterTab.vue'
 import ProjectForm from '../project/ProjectForm.vue'
 import {
   projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
@@ -410,6 +428,19 @@ const taskStats = computed(() => {
     qualityIssues: 0, pendingIssues: 0
   }
 })
+
+// ==================== 审核中心 (PRD-003) ====================
+const projectCompletionRate = computed(() => {
+  if (!projectTasks.value.length) return 0
+  return Math.round(projectTasks.value.filter(t => t.completeStatus === 'completed').length / projectTasks.value.length * 100)
+})
+const completedTaskCount = computed(() => projectTasks.value.filter(t => t.completeStatus === 'completed').length)
+const totalTaskCount = computed(() => projectTasks.value.length)
+const pendingReviewCount = computed(() => projectTasks.value.filter(t => t.completeStatus === 'pending_review').length)
+
+const switchToReviewCenter = () => {
+  activeTab.value = 'review-center'
+}
 
 const projectDuration = computed(() => {
   if (!project.value?.planStartDate || !project.value?.planEndDate) return 0
@@ -676,4 +707,12 @@ onMounted(async () => {
   display: flex; justify-content: space-between; font-size: 12px; color: #86909C; margin-bottom: 4px;
 }
 .kanban-empty { text-align: center; color: #C9CDD4; font-size: 13px; padding: 40px 0; }
+
+.project-progress {
+  display: flex; align-items: center; margin-top: 12px; font-size: 13px; color: #4E5969;
+}
+.project-progress .flex-1 { flex: 1; }
+.project-progress .mr-8px { margin-right: 8px; }
+.project-progress .mr-16px { margin-right: 16px; }
+.project-progress .text-gray { color: #86909C; }
 </style>
