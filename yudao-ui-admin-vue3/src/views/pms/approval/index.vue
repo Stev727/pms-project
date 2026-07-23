@@ -118,7 +118,7 @@ const createForm = reactive({
 const submitCreateApproval = async () => {
   if (!createForm.approvalType) { ElMessage.warning('请选择审批类型'); return }
   if (!createForm.projectId) { ElMessage.warning('请选择关联项目'); return }
-  if (!createForm.approvalTitle) { ElMessage.warning('请输入审批事项'); return }
+  // approvalTitle 选填
   creating.value = true
   try {
     await createApprovalRecord({

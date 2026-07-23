@@ -414,11 +414,11 @@ const projectForm = reactive({
 const formRules = {
   projectName: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
   projectType: [{ required: true, message: '请选择项目类型', trigger: 'change' }],
-  priority: [{ required: true, message: '请选择优先级', trigger: 'change' }],
+  priority: [{ required: false }],
   projectManagerId: [{ required: true, message: '请选择项目经理', trigger: 'change' }],
-  deptId: [{ required: true, message: '请选择所属部门', trigger: 'change' }],
-  planStartDate: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
-  planEndDate: [{ required: true, message: '请选择结束日期', trigger: 'change' }]
+  deptId: [{ required: false }],
+  planStartDate: [{ required: false }],
+  planEndDate: [{ required: false }]
 }
 
 // 用户和部门（P1-02: 项目经理使用远程搜索，其余保留全量列表兼容批量操作）

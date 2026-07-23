@@ -127,7 +127,7 @@ function editMember(row: any) {
 
 async function saveMember() {
   if (!form.userId) { ElMessage.warning('请选择成员'); return }
-  if (!form.roleCode) { ElMessage.warning('请选择项目角色'); return }
+  // roleCode 选填，默认 developer
   try {
     const data = {
       memberId: form.memberId,

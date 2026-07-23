@@ -392,9 +392,9 @@ const taskForm = reactive({
 })
 const taskFormRules = {
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-  stageId: [{ required: true, message: '请选择所属阶段', trigger: 'change' }],
+  stageId: [{ required: false }],
   planStartDate: [
-    { required: true, message: '请选择计划开始日期', trigger: 'change' },
+    { required: false },
     {
       validator: (_rule: any, value: string, callback: any) => {
         if (value && project.value?.planStartDate && new Date(value) < new Date(project.value.planStartDate)) {
@@ -404,7 +404,7 @@ const taskFormRules = {
     }
   ],
   planEndDate: [
-    { required: true, message: '请选择计划结束日期', trigger: 'change' },
+    { required: false },
     {
       validator: (_rule: any, value: string, callback: any) => {
         if (value && taskForm.planStartDate && new Date(value) < new Date(taskForm.planStartDate)) {

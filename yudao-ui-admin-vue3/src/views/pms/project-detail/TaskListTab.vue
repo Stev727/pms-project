@@ -152,8 +152,8 @@
     <el-dialog v-model="submitConfirmVisible" title="提交完成确认" width="480px">
       <div class="submit-confirm-content">
         <el-alert
-          v-if="!hasDeliverable"
-          title="请先上传输出物文件"
+          v-if="submitTarget?.isOutputRequired && !hasDeliverable"
+          title="此任务需要输出物，请先上传"
           type="warning"
           :closable="false"
           show-icon
@@ -171,7 +171,7 @@
       </div>
       <template #footer>
         <el-button @click="submitConfirmVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!hasDeliverable" @click="confirmSubmit">确认提交</el-button>
+        <el-button type="primary" :disabled="submitTarget?.isOutputRequired && !hasDeliverable" @click="confirmSubmit">确认提交</el-button>
       </template>
     </el-dialog>
 

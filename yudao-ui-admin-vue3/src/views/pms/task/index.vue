@@ -392,11 +392,11 @@ const taskForm = reactive<TaskVO & { projectId?: string | number; helperIds?: nu
 const taskFormRules = reactive<FormRules>({
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   projectId: [{ required: true, message: '请选择项目', trigger: 'change' }],
-  stageId: [{ required: true, message: '请选择阶段', trigger: 'change' }],
-  taskType: [{ required: true, message: '请选择任务类型', trigger: 'change' }],
-  priority: [{ required: true, message: '请选择优先级', trigger: 'change' }],
-  planStartDate: [{ required: true, message: '请选择计划开始日期', trigger: 'change' }],
-  planEndDate: [{ required: true, message: '请选择计划结束日期', trigger: 'change' }]
+  stageId: [{ required: false }],
+  taskType: [{ required: false }],
+  priority: [{ required: false }],
+  planStartDate: [{ required: false }],
+  planEndDate: [{ required: false }]
 })
 
 const resetTaskForm = () => {

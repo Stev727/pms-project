@@ -138,9 +138,9 @@ const formData = reactive<ProjectVO>({ ...defaultForm })
 const formRules = reactive({
   projectName: [{ required: true, message: '请输入项目名称', trigger: 'blur' }],
   projectType: [{ required: true, message: '请选择项目类型', trigger: 'change' }],
-  planStartDate: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
+  planStartDate: [{ required: false }],
   planEndDate: [
-    { required: true, message: '请选择结束日期', trigger: 'change' },
+    { required: false },
     {
       validator: (_rule: any, value: string, callback: any) => {
         if (value && formData.planStartDate && new Date(value) <= new Date(formData.planStartDate)) {
@@ -153,7 +153,7 @@ const formRules = reactive({
     }
   ],
   projectManagerId: [{ required: true, message: '请选择项目经理', trigger: 'change' }],
-  deptId: [{ required: true, message: '请选择所属部门', trigger: 'change' }]
+  deptId: [{ required: false }]
 })
 
 const open = async (type: 'create' | 'update', data?: ProjectVO) => {

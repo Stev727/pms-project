@@ -206,8 +206,8 @@
   <!-- 提交完成确认弹窗 -->
   <el-dialog v-model="showSubmitDialog" title="提交完成确认" width="480px" append-to-body>
     <el-alert
-      v-if="!hasDeliverable"
-      title="请先上传输出物文件"
+      v-if="task?.isOutputRequired && !hasDeliverable"
+      title="此任务需要输出物，请先上传"
       type="warning"
       :closable="false"
       show-icon
@@ -221,7 +221,7 @@
     </el-form>
     <template #footer>
       <el-button @click="showSubmitDialog = false">取消</el-button>
-      <el-button type="primary" :disabled="!hasDeliverable" @click="confirmSubmitComplete">确认提交</el-button>
+      <el-button type="primary" :disabled="task?.isOutputRequired && !hasDeliverable" @click="confirmSubmitComplete">确认提交</el-button>
     </template>
   </el-dialog>
 
@@ -470,8 +470,9 @@ const handleSubmitComplete = async () => {
 
 const confirmSubmitComplete = async () => {
   if (!task.value) return
-  if (!hasDeliverable.value) {
-    message.warning('请先上传输出物文件后再提交完成')
+  // 输出物不强制：仅当任务标记为需要输出物时才校验
+  if (task.value?.isOutputRequired && !hasDeliverable.value) {
+    message.warning('此任务需要输出物，请先上传')
     return
   }
   try {
