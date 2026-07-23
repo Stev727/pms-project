@@ -18,4 +18,6 @@ public interface TaskService {
 
     List<PmsTaskDO> getTaskList();
 
+    List<PmsTaskDO> getTaskList(Long mainOwnerId, Long projectId);
+
 }

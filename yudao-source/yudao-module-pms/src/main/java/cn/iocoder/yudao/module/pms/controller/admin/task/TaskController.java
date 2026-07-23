@@ -57,8 +57,11 @@ public class TaskController {
     @GetMapping("/list")
     @Operation(summary = "获取任务列表")
     @PreAuthorize("@ss.hasPermission('pms:task:query')")
-    public CommonResult<List<PmsTaskDO>> list() {
-        return success(taskService.getTaskList());
+    public CommonResult<List<PmsTaskDO>> list(
+            @RequestParam(value = "mainOwnerId", required = false) Long mainOwnerId,
+            @RequestParam(value = "projectId", required = false) Long projectId) {
+        List<PmsTaskDO> list = taskService.getTaskList(mainOwnerId, projectId);
+        return success(list);
     }
 
 }
