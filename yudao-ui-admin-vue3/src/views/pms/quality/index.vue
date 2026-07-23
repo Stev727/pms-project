@@ -220,7 +220,7 @@ const filteredList = computed(() => qualityList.value.filter(i => {
   return true
 }))
 
-const handleSearch = () => {}
+const handleSearch = () => { fetchList() }
 const handleReset = () => Object.assign(queryParams, { issueNo: '', projectId: '', status: '', severity: '', owner: '', dateRange: [] })
 
 const selectedRows = ref<any[]>([])
@@ -239,7 +239,7 @@ const fetchList = async () => {
       foundDate: item.createTime || '',
       phase: item.rootCauseCategory || '',
       description: item.impactScope || item.rootCauseDetail || '',
-      timeline: []
+      timeline: item.timeline || item.historyList || []
     }))
   } catch {
     qualityList.value = []
@@ -251,12 +251,21 @@ const fetchList = async () => {
 // ==================== 批量关闭 ====================
 const batchClose = async () => {
   if (!selectedRows.value.length) return
+  try {
+    await ElMessageBox.confirm(`确认关闭选中的 ${selectedRows.value.length} 个问题？`, '批量关闭', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' })
+  } catch { return }
   saving.value = true
   try {
-    for (const row of selectedRows.value) {
-      await updateQualityIssue({ issueId: row.issueId, status: 'closed' } as QualityIssueVO)
+    const results = await Promise.allSettled(
+      selectedRows.value.map(row => updateQualityIssue({ issueId: row.issueId, status: 'closed' } as QualityIssueVO))
+    )
+    const succeeded = results.filter(r => r.status === 'fulfilled').length
+    const failed = results.filter(r => r.status === 'rejected').length
+    if (failed > 0) {
+      message.warning(`已关闭 ${succeeded} 个，${failed} 个失败`)
+    } else {
+      message.success(`已关闭 ${succeeded} 个问题`)
     }
-    message.success(`已关闭 ${selectedRows.value.length} 个问题`)
     await fetchList()
   } catch {
     message.error('批量关闭失败')
@@ -290,10 +299,13 @@ const submitAction = async () => {
   if (!actionForm.action || !currentIssue.value) return
   saving.value = true
   try {
+    // Extract raw file objects from upload component file-list
+    const attachments = (actionForm.files || []).map((f: any) => f.raw || f).filter(Boolean)
     await updateQualityIssue({
       issueId: currentIssue.value.issueId,
       status: actionForm.action,
-      solution: actionForm.description
+      solution: actionForm.description,
+      attachments: attachments.length > 0 ? attachments : undefined
     } as QualityIssueVO)
     message.success('操作已提交')
     Object.assign(actionForm, { action: '', description: '', files: [] })

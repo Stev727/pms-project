@@ -56,7 +56,7 @@
       </el-table-column>
       <el-table-column label="操作" width="120" align="center">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="viewDetail(row)">详���</el-button>
+          <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
           <template v-if="row.approvalStatus === 'pending'">
             <el-button link type="success" size="small" @click="doApprove(row, true)" v-if="checkPermi(['pms:approval:update'])">通过</el-button>
             <el-button link type="danger" size="small" @click="doApprove(row, false)" v-if="checkPermi(['pms:approval:update'])">驳回</el-button>
@@ -84,12 +84,32 @@
         </el-descriptions>
       </template>
     </el-dialog>
+
+    <!-- 审批意见输入弹窗 -->
+    <el-dialog v-model="approvalCommentVisible" :title="approvalAction ? '通过审批' : '驳回审批'" width="480px">
+      <el-form label-width="90px">
+        <el-form-item label="审批意见">
+          <el-input
+            v-model="approvalComment"
+            type="textarea"
+            :rows="3"
+            :placeholder="approvalAction ? '请输入通过理由（可选）' : '请输入驳回原因'"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="approvalCommentVisible = false">取消</el-button>
+        <el-button :type="approvalAction ? 'success' : 'danger'" @click="confirmApproval">
+          {{ approvalAction ? '确认通过' : '确认驳回' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getApprovalRecordList, updateApprovalRecord } from '@/api/pms/approval'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
@@ -106,6 +126,10 @@ const filterType = ref('')
 const filterStatus = ref('')
 const detailVisible = ref(false)
 const detailData = ref<any>(null)
+const approvalCommentVisible = ref(false)
+const approvalComment = ref('')
+const approvalTarget = ref<any>(null)
+const approvalAction = ref(false)
 
 const filteredList = computed(() => {
   let list = approvalList.value
@@ -144,22 +168,39 @@ function viewDetail(row: any) {
 
 async function doApprove(row: any, approve: boolean) {
   try {
+    await ElMessageBox.confirm(
+      `确认${approve ? '通过' : '驳回'}审批「${row.approvalTitle || row.approvalNo}」？`,
+      '操作确认',
+      { confirmButtonText: approve ? '通过' : '驳回', cancelButtonText: '取消', type: approve ? 'success' : 'warning' }
+    )
+    approvalTarget.value = row
+    approvalAction.value = approve
+    approvalComment.value = ''
+    approvalCommentVisible.value = true
+  } catch (e) {
+    // user cancelled
+  }
+}
+
+async function confirmApproval() {
+  if (!approvalTarget.value) return
+  try {
     await updateApprovalRecord({
-      ...row,
-      approvalStatus: approve ? 'approved' : 'rejected'
+      ...approvalTarget.value,
+      approvalStatus: approvalAction.value ? 'approved' : 'rejected',
+      approvalOpinion: approvalComment.value
     })
-    row.approvalStatus = approve ? 'approved' : 'rejected'
-    ElMessage.success(`已${approve ? '通过' : '驳回'}`)
-  } catch (e) { console.error(e); ElMessage.error('操作���败') }
+    approvalCommentVisible.value = false
+    ElMessage.success(`已${approvalAction.value ? '通过' : '驳回'}`)
+    loadApprovals()
+  } catch (e) { console.error(e); ElMessage.error('操作失败') }
 }
 
 async function loadApprovals() {
   loading.value = true
   try {
-    const data = await getApprovalRecordList()
-    approvalList.value = ((data as any[]) || []).filter(
-      a => String(a.projectId) === String(props.projectId)
-    ).map(a => ({
+    const data = await getApprovalRecordList({ projectId: props.projectId })
+    approvalList.value = ((data as any[]) || []).map(a => ({
       ...a,
       approvalTitle: a.approvalNo || `${getTypeLabel(a.approvalType)}-${a.approvalId}`
     }))

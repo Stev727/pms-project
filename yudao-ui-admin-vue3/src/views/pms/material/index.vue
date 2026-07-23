@@ -196,7 +196,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Close } from '@element-plus/icons-vue'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getMaterialTrackList, createMaterialTrack } from '@/api/pms/material'
+import { getMaterialTrackList, createMaterialTrack, updateMaterialTrack } from '@/api/pms/material'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 
@@ -231,7 +231,7 @@ const filteredData = computed(() => {
 })
 
 const statCards = computed(() => {
-  const data = tableData.value
+  const data = filteredData.value
   return [
     { key: 'total', label: '总物料数', value: data.length, iconRef: 'ep:box', color: '#2468F2', bg: '#DCE7FF' },
     { key: 'normal', label: '正常', value: data.filter(m => m.warningStatus === 'normal').length, iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' },
@@ -299,10 +299,25 @@ function openDetail(row: any) {
   drawerVisible.value = true
 }
 
-function urge(row: any) {
-  ElMessage.success(`已向「${row.supplier}」发送催交通知`)
-  if (!row.urgeLogs) row.urgeLogs = []
-  row.urgeLogs.push({ date: new Date().toLocaleString(), operator: '当前用户', result: '催交通知已发送' })
+async function urge(row: any) {
+  try {
+    await updateMaterialTrack({
+      trackId: row.trackId,
+      materialName: row.materialName,
+      supplier: row.supplier,
+      planOrderDate: row.planOrderDate,
+      planDeliveryDate: row.planDeliveryDate,
+      currentStatus: row.currentStatus || 'delayed',
+      warningStatus: row.warningStatus
+    })
+    // 同时更新前端记录
+    if (!row.urgeLogs) row.urgeLogs = []
+    row.urgeLogs.push({ date: new Date().toLocaleString(), operator: '当前用户', result: '催交通知已发送' })
+    ElMessage.success(`已向「${row.supplier}」发送催交通知`)
+  } catch (e) {
+    console.error('催交请求失败', e)
+    ElMessage.error('催交通知发送失败')
+  }
 }
 
 function exportData() { console.log('导出物料列表') }

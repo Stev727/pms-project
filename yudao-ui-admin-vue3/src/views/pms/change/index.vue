@@ -206,7 +206,7 @@ const filteredList = computed(() => {
   return r
 })
 
-const newChange = reactive({ title: '', type: 'content', urgent: false, beforeContent: '', afterContent: '', reason: '', projectId: '' })
+const newChange = reactive({ title: '', type: 'schedule', urgent: false, beforeContent: '', afterContent: '', reason: '', projectId: '' })
 
 // ==================== 数据加载 ====================
 const fetchList = async () => {
@@ -224,8 +224,8 @@ const fetchList = async () => {
       approver: item.approverId ? getUserName(item.approverId) : '',
       applyTime: item.createTime || '',
       urgent: item.scheduleImpact ? Number(item.scheduleImpact) > 0 : false,
-      beforeContent: '',
-      afterContent: '',
+      beforeContent: item.beforeContent || '',
+      afterContent: item.afterContent || '',
       reason: item.changeReason || '',
       impacts: [
         ...(item.costImpact ? [`成本影响: ${item.costImpact}元`] : []),
@@ -254,11 +254,15 @@ async function submitChange() {
       changeType: newChange.type,
       changeReason: newChange.reason,
       projectId: newChange.projectId,
+      beforeContent: newChange.beforeContent,
+      afterContent: newChange.afterContent,
+      urgent: newChange.urgent,
+      scheduleImpact: newChange.scheduleImpact,
       approvalStatus: 'pending'
     } as ChangeRecordVO)
     ElMessage.success('变更已提交')
     showForm.value = false
-    Object.assign(newChange, { title: '', type: 'content', urgent: false, beforeContent: '', afterContent: '', reason: '', projectId: '' })
+    Object.assign(newChange, { title: '', type: 'schedule', urgent: false, beforeContent: '', afterContent: '', reason: '', projectId: '' })
     await fetchList()
   } catch {
     ElMessage.error('提交失败')
@@ -269,12 +273,17 @@ async function submitChange() {
 
 async function submitApproval() {
   if (!selected.value) return
+  try {
+    await ElMessageBox.confirm('确认提交审批结果？', '提示', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' })
+  } catch { return }
   saving.value = true
   try {
     const newStatus = approveResult.value === 'approve' ? 'approved' : approveResult.value === 'reject' ? 'rejected' : 'pending'
     await updateChangeRecord({
       changeId: selected.value.changeId,
-      approvalStatus: newStatus
+      approvalStatus: newStatus,
+      approveOpinion: approveOpinion.value,
+      autoAdjust: autoAdjust.value
     } as ChangeRecordVO)
     ElMessage.success('审批已提交')
     drawerVisible.value = false

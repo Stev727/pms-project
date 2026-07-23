@@ -731,13 +731,38 @@ async function submitCreate() {
       ...projectForm,
       createMethod: 'template',
       templateId: selectedTemplate.value,
-      status: 'initiating'
+      status: 'initiating',
+      // P1-1: 将复选框值传入 API 参数
+      notifyMembers: notifyMembers.value,
+      autoGantt: autoGantt.value,
+      // P0-1: 将 adjustedTasks 传入创建数据
+      tasks: adjustedTasks.value.map(t => ({
+        taskName: t.taskName,
+        stageName: t.stageName,
+        stageId: t.stageId,
+        taskType: t.taskType || 'design',
+        cycle: t.cycle || 5,
+        priority: t.priority || 'normal',
+        isMilestone: !!t.isMilestone,
+        mainOwnerId: t.mainOwnerId,
+        helperIds: t.helperIds || [],
+        description: t.description || '',
+        outputRequirement: t.outputRequirement || '',
+        planStartDate: t.planStartDate,
+        planEndDate: t.planEndDate,
+        roleName: t.roleName
+      }))
     }
     const res = await createProject(projectData)
-    clearDraft() // 创建成功后清除草稿
+    clearDraft()
     ElMessage.success('项目创建成功！')
-    // 跳转项目详情页 (MINOR-4 修复)
-    const projectId = (res as any)?.projectId || (res as any)
+    // P1-2: 安全提取 projectId，res 为 undefined 时有合理的错误处理
+    const projectId = res ? ((res as any)?.projectId || (res as any)) : undefined
+    if (!projectId) {
+      ElMessage.error('创建成功但未获取到项目ID，请刷新列表查看')
+      router.push('/pms/project')
+      return
+    }
     router.push(`/pms/project-detail/${projectId}`)
   } catch (e) {
     console.error('创建项目失败', e)

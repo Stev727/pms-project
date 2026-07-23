@@ -47,6 +47,7 @@ import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { gantt } from 'dhtmlx-gantt'
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'GanttTab' })
@@ -56,6 +57,10 @@ const props = defineProps<{
   tasks: TaskVO[]
   stages: StageVO[]
   dependencies?: any[]
+}>()
+
+const emit = defineEmits<{
+  taskClick: [task: TaskVO]
 }>()
 
 const { getUserName } = useUserNames()
@@ -247,6 +252,9 @@ const buildGanttData = () => {
   }
 
   // 如果没有外部依赖数据，从任务的 parentTaskId 构建
+  // 注意：这里使用 parentTaskId 字段作为前置依赖的数据来源。
+  // parentTaskId 表示该任务的前置任务，语义上相当于 finish-to-start 依赖关系。
+  // 如果后续引入独立的 dependency 表，应优先使用 props.dependencies 中的外部数据。
   if (showLinks.value && links.length === 0) {
     for (const task of props.tasks) {
       if (task.parentTaskId) {
@@ -282,7 +290,7 @@ const renderGantt = () => {
   const ganttData = buildGanttData()
   gantt.parse(ganttData)
 
-  // 拖拽事件 — 先分离旧的再绑定新的
+  // 拖拽事件 - 先分离旧的再绑定新的
   if (dragEventId) gantt.detachEvent(dragEventId)
   dragEventId = gantt.attachEvent('onAfterTaskDrag', async (id: any, mode: any, e: any) => {
     const task = gantt.getTask(id)
@@ -295,12 +303,22 @@ const renderGantt = () => {
       } as TaskVO)
     } catch (err) {
       console.error('甘特图拖拽保存失败', err)
+      ElMessage.error('拖拽保存失败，正在回滚...')
+      // 重新加载甘特图数据回滚 UI
+      renderGantt()
     }
   })
 
-  // 点击事件 — 先分离旧的再绑定新的
+  // 点击事件 - 先分离旧的再绑定新的
   if (clickEventId) gantt.detachEvent(clickEventId)
   clickEventId = gantt.attachEvent('onTaskClick', (id: any, e: any) => {
+    const task = gantt.getTask(id)
+    if (task.type === 'project') return true
+    // 从 props.tasks 中找到对应的 TaskVO 并 emit 给父组件打开详情
+    const taskVO = props.tasks.find(t => String(t.taskId) === String(id))
+    if (taskVO) {
+      emit('taskClick', taskVO)
+    }
     return true
   })
 }

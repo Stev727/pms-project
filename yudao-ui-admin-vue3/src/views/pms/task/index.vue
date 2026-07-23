@@ -86,10 +86,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button>
             <el-button link type="primary" size="small" @click.stop="handleEdit(row)" v-if="checkPermi(['pms:task:update'])">编辑</el-button>
+            <el-button link type="danger" size="small" @click.stop="handleDelete(row)" v-if="checkPermi(['pms:task:delete'])">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -234,7 +235,7 @@
 </template>
 
 <script setup lang="ts">
-import { getTaskList, createTask, updateTask, TaskVO } from '@/api/pms/task'
+import { getTaskList, createTask, updateTask, deleteTask, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
@@ -243,6 +244,7 @@ import {
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 
 defineOptions({ name: 'PmsTask' })
@@ -449,6 +451,23 @@ const handleEdit = (task: TaskVO) => {
     progress: task.progress || 0
   })
   taskDialogVisible.value = true
+}
+
+const handleDelete = async (task: TaskVO) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除任务「${task.taskName}」？`,
+      '提示',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await deleteTask(String(task.taskId))
+    ElMessage.success('任务已删除')
+    await loadList()
+  } catch (e) {
+    if (e !== 'cancel') {
+      console.error('删除任务失败', e)
+    }
+  }
 }
 
 const submitTask = async () => {

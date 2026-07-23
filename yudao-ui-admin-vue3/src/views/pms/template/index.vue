@@ -235,9 +235,16 @@
           <el-tab-pane label="阶段任务" name="tasks">
             <div class="flex justify-between items-center mb-12px">
               <span class="text-14px font-600">阶段与任务</span>
-              <el-button type="primary" size="small" @click="openAddTask" v-hasPermi="['pms:template:update']">
-                <Icon icon="ep:plus" /> 添加任务
-              </el-button>
+              <div class="flex gap-8px">
+                <el-button type="success" size="small" @click="openAddStage" v-hasPermi="['pms:template:update']">
+                  <Icon icon="ep:plus" /> 添加阶段
+                </el-button>
+                <el-tooltip :content="editStageList.length === 0 ? '请先添加阶段' : ''" :disabled="editStageList.length > 0">
+                  <el-button type="primary" size="small" :disabled="editStageList.length === 0" @click="openAddTask" v-hasPermi="['pms:template:update']">
+                    <Icon icon="ep:plus" /> 添加任务
+                  </el-button>
+                </el-tooltip>
+              </div>
             </div>
             <el-table
               :data="editStageTreeData"
@@ -606,6 +613,7 @@ const saveEdit = async () => {
     return
   }
   editSaving.value = true
+  const errors: string[] = []
   try {
     // 1. 保存模板基本信息
     await updateProject({
@@ -617,38 +625,57 @@ const saveEdit = async () => {
       description: editForm.description
     } as ProjectVO)
 
-    // 2. 保存修改的阶段
-    for (const stage of editStageList.value) {
-      if (stage.stageId && !editDeletedStageIds.value.includes(stage.stageId)) {
-        await updateStage(stage)
-      }
-    }
+    // 2. 保存修改的阶段（并行，收集错误）
+    const stageResults = await Promise.allSettled(
+      editStageList.value
+        .filter(stage => stage.stageId && !editDeletedStageIds.value.includes(stage.stageId))
+        .map(stage => updateStage(stage))
+    )
+    stageResults.forEach((r, i) => {
+      if (r.status === 'rejected') errors.push(`阶段「${editStageList.value[i]?.stageName || '未知'}」保存失败: ${r.reason}`)
+    })
 
-    // 3. 保存修改的任务（新增/更新）
-    for (const task of editTaskList.value) {
-      if (editDeletedTaskIds.value.includes(task.taskId)) continue
-      const taskData = {
-        ...task,
-        projectId: editForm.projectId
-      }
-      if (task.taskId && !String(task.taskId).startsWith('new_')) {
-        await updateTask(taskData)
-      } else {
-        await createTask({
-          ...taskData,
-          taskId: undefined
+    // 3. 保存修改的任务（新增/更新，并行，收集错误）
+    const taskResults = await Promise.allSettled(
+      editTaskList.value
+        .filter(task => !editDeletedTaskIds.value.includes(task.taskId))
+        .map(task => {
+          const taskData = {
+            ...task,
+            projectId: editForm.projectId
+          }
+          if (task.taskId && !String(task.taskId).startsWith('new_')) {
+            return updateTask(taskData)
+          } else {
+            return createTask({
+              ...taskData,
+              taskId: undefined
+            })
+          }
         })
+    )
+    taskResults.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        const filteredTasks = editTaskList.value.filter(task => !editDeletedTaskIds.value.includes(task.taskId))
+        errors.push(`任务「${filteredTasks[i]?.taskName || '未知'}」保存失败: ${r.reason}`)
       }
-    }
+    })
 
     // 4. 删除标记的任务
-    for (const id of editDeletedTaskIds.value) {
-      if (!String(id).startsWith('new_')) {
-        await deleteTask(String(id))
-      }
-    }
+    const deleteResults = await Promise.allSettled(
+      editDeletedTaskIds.value
+        .filter(id => !String(id).startsWith('new_'))
+        .map(id => deleteTask(String(id)))
+    )
+    deleteResults.forEach((r, i) => {
+      if (r.status === 'rejected') errors.push(`删除任务失败: ${r.reason}`)
+    })
 
-    message.success('模板保存成功')
+    if (errors.length > 0) {
+      message.warning(`部分操作失败 (${errors.length} 项):\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? '\n...' : ''}`)
+    } else {
+      message.success('模板保存成功')
+    }
     editVisible.value = false
     getList()
   } catch (e) {
@@ -685,6 +712,16 @@ const openEditTask = (row: any) => {
   taskEditVisible.value = true
 }
 
+const openAddStage = () => {
+  Object.assign(taskEditForm, {
+    taskId: 'new_stage_' + Date.now(),
+    taskName: '',
+    isStage: true,
+    isNew: true
+  })
+  taskEditVisible.value = true
+}
+
 const openAddTask = () => {
   if (editStageList.value.length === 0) {
     message.warning('没有可用阶段，无法添加任务')
@@ -711,9 +748,19 @@ const saveTaskEdit = () => {
     return
   }
   if (taskEditForm.isStage) {
-    const stage = editStageList.value.find(s => s.stageId === taskEditForm.taskId)
-    if (stage) {
-      stage.stageName = taskEditForm.taskName
+    if (taskEditForm.isNew) {
+      // 新增阶段
+      editStageList.value.push({
+        stageId: taskEditForm.taskId,
+        projectId: editForm.projectId,
+        stageName: taskEditForm.taskName,
+        sortOrder: editStageList.value.length + 1
+      } as StageVO)
+    } else {
+      const stage = editStageList.value.find(s => s.stageId === taskEditForm.taskId)
+      if (stage) {
+        stage.stageName = taskEditForm.taskName
+      }
     }
   } else if (taskEditForm.isNew) {
     editTaskList.value.push({

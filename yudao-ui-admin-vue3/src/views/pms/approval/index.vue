@@ -125,6 +125,7 @@ const submitCreateApproval = async () => {
       approvalType: createForm.approvalType,
       projectId: String(createForm.projectId),
       approvalNo: createForm.approvalTitle,
+      remark: createForm.remark,
       approvalStatus: 'pending'
     } as any)
     ElMessage.success('审批已发起，将推送至OA系统')
@@ -152,8 +153,8 @@ function getProjectName(projectId?: number): string {
   return p?.projectName || '-'
 }
 
-function getTypeLabel(t: string): string { return { change: '变更', quality: '质量', delay: '延期', project_init: '立项' }[t] || t }
-function getTypeTag(t: string): string { return { change: 'warning', quality: 'danger', delay: '', project_init: 'success' }[t] || 'info' }
+function getTypeLabel(t: string): string { return { change: '变更', quality: '质量', delay: '延期', project_init: '立项', mold_open: '开模', design_review: '设计评审', trial_to_mass: '试产转量产' }[t] || t }
+function getTypeTag(t: string): string { return { change: 'warning', quality: 'danger', delay: '', project_init: 'success', mold_open: 'info', design_review: 'primary', trial_to_mass: 'success' }[t] || 'info' }
 function getStatusColor(s: string): string { return { pending: '#FF7D00', approved: '#00B42A', rejected: '#F53F3F' }[s] || '#86909C' }
 function getStatusLabel(s: string): string { return { pending: '待审批', approved: '已通过', rejected: '已驳回' }[s] || s }
 

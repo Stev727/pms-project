@@ -101,7 +101,9 @@
 
     <!-- 最近动态 -->
     <div class="activity-card mt-16px">
-      <div class="card-title">最近动态</div>
+      <div class="card-title">最近动态
+        <el-tag size="small" type="info" effect="plain" style="margin-left: 8px">基于任务状态推测</el-tag>
+      </div>
       <el-timeline v-if="recentActivities.length > 0">
         <el-timeline-item
           v-for="(activity, index) in recentActivities"
@@ -180,11 +182,13 @@ const milestones = computed(() => {
     .sort((a, b) => {
       if (!a.planEndDate) return 1
       if (!b.planEndDate) return -1
-      return String(a.planEndDate).localeCompare(String(b.planEndDate))
+      return new Date(a.planEndDate).getTime() - new Date(b.planEndDate).getTime()
     })
 })
 
 // ==================== 最近动态（基于任务状态变化模拟） ====================
+// 注意：当前 recentActivities 是基于任务数据（已完成/延期状态）模拟生成，并非真实操作日志。
+// 如果后续有操作日志 API（如 getOperationLog），应改为调用真实 API 获取动态数据。
 const recentActivities = computed(() => {
   const activities: any[] = []
   const recent = [...props.tasks]
@@ -192,7 +196,7 @@ const recentActivities = computed(() => {
     .sort((a, b) => {
       if (!a.actualCompleteDate) return 1
       if (!b.actualCompleteDate) return -1
-      return String(b.actualCompleteDate).localeCompare(String(a.actualCompleteDate))
+      return new Date(b.actualCompleteDate).getTime() - new Date(a.actualCompleteDate).getTime()
     })
     .slice(0, 5)
 

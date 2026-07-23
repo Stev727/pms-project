@@ -59,7 +59,7 @@
         </el-descriptions-item>
         <el-descriptions-item label="实际开始">{{ formatDate(project.actualStartDate) }}</el-descriptions-item>
         <el-descriptions-item label="项目经理">{{ getManagerName(project) }}</el-descriptions-item>
-        <el-descriptions-item label="所属部门">{{ getDeptName(project.deptId) }}</el-descriptions-item>
+        <el-descriptions-item label="所属部门">{{ deptDisplayName }}</el-descriptions-item>
         <el-descriptions-item label="项目预算">{{ project.budget ? `￥${project.budget}` : '-' }}</el-descriptions-item>
         <el-descriptions-item label="优先级">
           <el-tag :color="priorityMap[project.priority || 'normal']?.color" effect="plain" size="small">
@@ -167,6 +167,9 @@
     <!-- 任务详情抽屉 -->
     <TaskDetailDrawer ref="taskDrawerRef" @refresh="loadProjectData" />
 
+    <!-- P0: 项目编辑弹窗 -->
+    <ProjectForm ref="projectFormRef" @success="loadProjectData" />
+
     <!-- 创建任务弹窗 -->
     <el-dialog v-model="createTaskDialogVisible" title="新建任务" width="620px">
       <el-form ref="taskFormRef" :model="taskForm" :rules="taskFormRules" label-width="100px">
@@ -268,6 +271,7 @@ import DocumentsTab from './DocumentsTab.vue'
 import ApprovalTab from './ApprovalTab.vue'
 import ChangesTab from './ChangesTab.vue'
 import QualityTab from './QualityTab.vue'
+import ProjectForm from '../project/ProjectForm.vue'
 import {
   projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
   taskTypeOptions, priorityOptions, taskStatusMap, formatDate, calcDuration, calcDelayDays
@@ -289,12 +293,43 @@ const projectId = computed(() => route.params.id as string)
 const projectTasks = ref<TaskVO[]>([])
 const projectStages = ref<StageVO[]>([])
 const taskDependencies = ref<any[]>([])
+
+// P1: 从任务列表中提取依赖关系，每次加载后自动计算
+const updateTaskDependencies = () => {
+  const deps: any[] = []
+  projectTasks.value.forEach(t => {
+    if (t.predecessorTaskIds) {
+      const predIds = t.predecessorTaskIds.split(',').map(id => id.trim()).filter(Boolean)
+      predIds.forEach(predId => {
+        deps.push({
+          from: predId,
+          to: t.taskId,
+          type: 'FS' // Finish-to-Start 默认类型
+        })
+      })
+    }
+    // 阶段内顺序依赖：同一 stageId 内的任务按 sortOrder 连接
+    if (t.stageId && t.sortOrder != null && t.sortOrder > 0) {
+      const sameStageTasks = projectTasks.value
+        .filter(o => String(o.stageId) === String(t.stageId) && o.taskId !== t.taskId)
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+      const prevTask = sameStageTasks
+        .filter(o => (o.sortOrder || 0) < (t.sortOrder || 0))
+        .sort((a, b) => (b.sortOrder || 0) - (a.sortOrder || 0))[0]
+      if (prevTask && !deps.some(d => d.from === prevTask.taskId && d.to === t.taskId)) {
+        deps.push({ from: prevTask.taskId, to: t.taskId, type: 'FS' })
+      }
+    }
+  })
+  taskDependencies.value = deps
+}
 const taskDrawerRef = ref()
 const membersTabRef = ref()
 const documentsTabRef = ref()
 const approvalTabRef = ref()
 const qualityTabRef = ref()
 const changesTabRef = ref()
+const projectFormRef = ref()
 
 // ==================== 任务创建弹窗 ====================
 const createTaskDialogVisible = ref(false)
@@ -378,6 +413,8 @@ const loadProjectData = async () => {
     project.value = proj
     projectTasks.value = (tasks || []).filter((t: TaskVO) => String(t.projectId) === String(projectId.value))
     projectStages.value = (stages || []).filter((s: StageVO) => String(s.projectId) === String(projectId.value))
+    // P1: 每次加载数据后更新任务依赖关系
+    updateTaskDependencies()
   } catch (e) {
     console.error('加载项目详情失败', e)
   } finally {
@@ -450,7 +487,12 @@ const submitCreateTask = async () => {
   } finally { submittingTask.value = false }
 }
 
-const handleEdit = () => { push({ name: 'PmsProject', query: { edit: projectId.value } }) }
+const handleEdit = () => {
+  // P0: 在当前页面弹窗编辑，不再跳转到 project/index 带 edit 参数
+  if (project.value) {
+    projectFormRef.value?.open('update', { ...project.value })
+  }
+}
 
 const handleStartChange = () => {
   activeTab.value = 'changes'
@@ -495,13 +537,20 @@ const handleDelete = () => {
 
 const goBack = () => { back() }
 
-// 部门名称解析
+// 部门名称解析 — P1: 改为 computed 确保 deptList 加载后自动刷新
 const deptList = ref<any[]>([])
 const getDeptName = (deptId?: number) => {
   if (!deptId) return '-'
   const dept = deptList.value.find(d => d.id === deptId)
   return dept?.name || `部门${deptId}`
 }
+
+// P1: 为模板中直接使用的 deptName 提供 computed 响应式版本
+const deptDisplayName = computed(() => {
+  if (!project.value?.deptId) return '-'
+  const dept = deptList.value.find(d => d.id === project.value.deptId)
+  return dept?.name || `部门${project.value.deptId}`
+})
 
 onMounted(async () => {
   ensureUsersLoaded()

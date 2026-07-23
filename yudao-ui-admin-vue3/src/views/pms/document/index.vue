@@ -18,7 +18,7 @@
               <el-input v-model="searchName" placeholder="搜索文档名" clearable style="width: 180px" />
               <el-button @click="searchDocs">查询</el-button>
             </div>
-            <el-upload action="/admin-api/infra/file/upload" :show-file-list="false" :on-success="handleUploadSuccess" v-if="checkPermi(['pms:document:create'])">
+            <el-upload action="/admin-api/infra/file/upload" :headers="uploadHeaders" :show-file-list="false" :on-success="handleUploadSuccess" v-if="checkPermi(['pms:document:create'])">
               <el-button type="primary" size="small"><el-icon><Upload /></el-icon> 上传文档</el-button>
             </el-upload>
           </div>
@@ -101,6 +101,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { getAccessToken } from '@/utils/auth'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getDocumentList, createDocument, updateDocument, deleteDocument } from '@/api/pms/document'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -108,6 +109,10 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 defineOptions({ name: 'PmsDocument' })
 
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+
+const uploadHeaders = computed(() => ({
+  Authorization: 'Bearer ' + getAccessToken()
+}))
 
 const searchName = ref('')
 const currentPage = ref(1)

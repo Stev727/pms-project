@@ -111,7 +111,7 @@
           <template #default="{ row }">
             <span v-if="row.trend > 0" style="color: #00B42A">↑+{{ row.trend.toFixed(1) }}</span>
             <span v-else-if="row.trend < 0" style="color: #F53F3F">↓{{ row.trend.toFixed(1) }}</span>
-            <span v-else style="color: #86909C">→0.0</span>
+            <span v-else style="color: #86909C" title="暂无趋势数据（需上月数据对比）">暂无趋势</span>
           </template>
         </el-table-column>
       </el-table>
@@ -256,10 +256,13 @@ const rankingData = computed(() => {
 })
 
 function calculateScore(u: any): number {
+  // 权重说明：按时完成率 40 + 任务质量（完成率）30 + 协作能力（任务量）20 + 创新能力 10 = 满分 100
   const onTimeRate = u.completedTasks ? u.onTimeTasks / u.completedTasks : 0
   const completionRate = u.totalTasks ? u.completedTasks / u.totalTasks : 0
   const volumeWeight = Math.min(u.totalTasks / 20, 1)
-  return onTimeRate * 40 + completionRate * 30 + volumeWeight * 20 + 70 * 0.1
+  // 创新能力基于协助任务占比
+  const innovationWeight = u.assistTasks ? Math.min(u.assistTasks / 10, 1) : 0
+  return onTimeRate * 40 + completionRate * 30 + volumeWeight * 20 + innovationWeight * 10
 }
 
 // 部门对比
@@ -280,8 +283,9 @@ const deptCompareData = computed(() => {
     ...d,
     onTimeRate: d.completedTasks ? d.onTimeTasks / d.completedTasks : 0,
     avgDuration: d.completedTasks ? d.totalDuration / d.completedTasks : 0,
-    score: d.onTimeRate * 40 + (d.completedTasks / d.totalTasks) * 30 + 50,
-    trend: 0 // 不再使用随机数
+    // 部门综合评分使用与个人评分一致的权重体系：按时完成率 40 + 完成率 30 + 20 + 10 = 满分 100
+    score: d.onTimeRate * 40 + (d.completedTasks / Math.max(d.totalTasks, 1)) * 30 + Math.min(d.totalTasks / 20, 1) * 20 + 10,
+    trend: 0 // 暂无上月数据用于趋势对比，显示时标注"暂无"
   }))
 })
 

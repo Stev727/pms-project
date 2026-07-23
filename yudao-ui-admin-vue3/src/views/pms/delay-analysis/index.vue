@@ -135,7 +135,34 @@ const byPhaseChartRef = ref<HTMLElement>()
 let charts: echarts.ECharts[] = []
 
 const delayTasks = computed(() => {
-  return allTasks.value.filter(t => t.completeStatus === 'delayed' || (t.planEndDate && calcDelayDays(t.planEndDate, t.completeStatus) > 0))
+  let tasks = allTasks.value.filter(t => t.completeStatus === 'delayed' || (t.planEndDate && calcDelayDays(t.planEndDate, t.completeStatus) > 0))
+  // 按时间范围过滤
+  if (timeRange.value && tasks.length > 0) {
+    const now = new Date()
+    let startDate: Date
+    switch (timeRange.value) {
+      case 'week':
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
+        break
+      case 'month':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
+        break
+      case 'quarter':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+        break
+      case 'year':
+        startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
+        break
+      default:
+        return tasks
+    }
+    tasks = tasks.filter(t => {
+      if (!t.planEndDate) return false
+      const endDate = new Date(t.planEndDate)
+      return endDate >= startDate
+    })
+  }
+  return tasks
 })
 
 const filteredDelayTasks = computed(() => {
@@ -206,7 +233,10 @@ function initCharts() {
   delayTasks.value.forEach(t => {
     const user = t.mainOwnerId ? getUserName(t.mainOwnerId) : '未分配'
     byUser[user] = (byUser[user] || 0) + 1
-    const dept = getProjectName(t.projectId)
+    // 按部门分组：根据负责人的部门信息统计（fallback 到项目名）
+    const userId = t.mainOwnerId ? String(t.mainOwnerId) : ''
+    const userObj = userList.value.find(u => String(u.id) === userId)
+    const dept = userObj?.deptName || userObj?.deptId || getProjectName(t.projectId)
     byDept[dept] = (byDept[dept] || 0) + 1
     const stage = stages.value.find(s => s.stageId === t.stageId)?.stageName || '未分组'
     byPhase[stage] = (byPhase[stage] || 0) + 1
@@ -252,7 +282,12 @@ function initCharts() {
       yAxis: { type: 'category', data: entries.map(e => e[0]), inverse: true },
       series: [{
         type: 'bar', barWidth: 18,
-        data: entries.map(e => ({ value: e[1], itemStyle: { color: phaseColorMap[e[0]]?.color || '#2468F2' } })),
+        data: entries.map(e => {
+          // 用阶段名称查找颜色，同时也尝试 stageCode（如 stages 可能有 code 字段）
+          const stageObj = stages.value.find(s => s.stageName === e[0])
+          const colorKey = stageObj?.stageName || e[0]
+          return { value: e[1], itemStyle: { color: phaseColorMap[colorKey]?.color || phaseColorMap[e[0]]?.color || '#2468F2' } }
+        }),
         label: { show: true, position: 'right' }
       }]
     })

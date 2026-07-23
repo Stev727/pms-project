@@ -15,6 +15,7 @@
         </el-select>
         <el-upload
           action="/admin-api/infra/file/upload"
+          :headers="uploadHeaders"
           :show-file-list="false"
           :on-success="handleUploadSuccess"
           v-if="checkPermi(['pms:document:create'])"
@@ -115,6 +116,7 @@ import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { formatDate, phaseColorMap } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { getAccessToken } from '@/utils/auth'
 
 defineOptions({ name: 'DocumentsTab' })
 
@@ -122,7 +124,9 @@ const props = defineProps<{
   projectId: string
 }>()
 
-const loading = ref(false)
+const uploadHeaders = computed(() => ({
+  Authorization: 'Bearer ' + getAccessToken()
+}))
 const searchName = ref('')
 const filterCategory = ref('')
 const documentList = ref<any[]>([])
@@ -216,12 +220,12 @@ async function handleUploadSuccess(response: any, uploadFile: any) {
     const fileName = uploadFile?.name || fileUrl?.split('/').pop() || '未命名文档'
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
     const fileSize = uploadFile?.size || 0
-    // 检查同名文档是否存在，自动递增版本号
+    // 检查同名文档是否存在，自动递增版本号（整数递增避免浮点精度问题）
     const existing = documentList.value.find(d => d.fileName === fileName)
-    let versionNo = '1.0'
+    let versionNo = '1'
     if (existing) {
-      const prevVersion = parseFloat(existing.versionNo || '1.0')
-      versionNo = (prevVersion + 0.1).toFixed(1)
+      const prevVersion = parseInt(existing.versionNo || '1', 10)
+      versionNo = String(prevVersion + 1)
     }
     await createDocument({
       fileName,

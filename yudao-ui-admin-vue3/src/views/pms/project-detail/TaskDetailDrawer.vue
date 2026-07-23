@@ -109,8 +109,8 @@
                 <template #default="{ row }">{{ formatDate(row.createTime, 'MM-DD') }}</template>
               </el-table-column>
               <el-table-column label="操作" width="80">
-                <template #default>
-                  <el-button link type="primary" size="small">查看</el-button>
+                <template #default="{ row }">
+                  <el-button link type="primary" size="small" @click="viewDeliverable(row)">查看</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -219,11 +219,21 @@
       <el-button type="primary" :disabled="!hasDeliverable" @click="confirmSubmitComplete">确认提交</el-button>
     </template>
   </el-dialog>
+
+  <!-- 隐藏的文件上传 input -->
+  <input
+    ref="fileInputRef"
+    type="file"
+    style="display: none"
+    @change="onFileSelected"
+    multiple
+  />
 </template>
 
 <script setup lang="ts">
 import { TaskVO, updateTask } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
+import { getChangeRecordList } from '@/api/pms/change'
 import {
   taskStatusMap, priorityMap, taskTypeOptions,
   formatDate, calcDelayDays
@@ -233,7 +243,11 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'TaskDetailDrawer' })
 
-const emit = defineEmits<{ refresh: [] }>()
+const emit = defineEmits<{
+  (e: 'refresh'): void
+  (e: 'edit', task: TaskVO): void
+  (e: 'create-change', task: TaskVO): void
+}>()
 const message = useMessage()
 const { getUserName, getUserNamesFromStr } = useUserNames()
 
@@ -242,7 +256,7 @@ const activeTab = ref('info')
 const task = ref<TaskVO | null>(null)
 const showProgressDialog = ref(false)
 
-// 模拟数据
+// 列表数据
 const progressList = ref<any[]>([])
 const outputList = ref<any[]>([])
 const changeList = ref<any[]>([])
@@ -280,10 +294,53 @@ const open = async (taskData: TaskVO) => {
   activeTab.value = 'info'
   progressForm.progress = taskData.progress || 0
 
-  // 加载进度记录、输出物、变更记录（模拟空数据）
-  progressList.value = []
-  outputList.value = []
-  changeList.value = []
+  // 加载进度记录、输出物、变更记录
+  await loadProgressList()
+  await loadOutputList()
+  await loadChangeList()
+}
+
+const loadProgressList = async () => {
+  if (!task.value) return
+  try {
+    // 进度记录通过 task 的 progress 字段构建单条记录
+    if (task.value.progress !== undefined && task.value.progress > 0) {
+      progressList.value = [{
+        progress: task.value.progress,
+        reporter: '',
+        remark: '当前进度',
+        createTime: task.value.createTime || new Date().toISOString()
+      }]
+    } else {
+      progressList.value = []
+    }
+  } catch {
+    progressList.value = []
+  }
+}
+
+const loadOutputList = async () => {
+  if (!task.value) return
+  try {
+    const res = await getDocumentList()
+    const docs = ((res as any)?.data || (res as any[]) || []).filter(
+      (d: any) => String(d.taskId) === String(task.value!.taskId)
+    )
+    outputList.value = docs
+  } catch {
+    outputList.value = []
+  }
+}
+
+const loadChangeList = async () => {
+  if (!task.value) return
+  try {
+    const res = await getChangeRecordList()
+    const changes = ((res as any)?.data || (res as any[]) || [])
+    changeList.value = changes
+  } catch {
+    changeList.value = []
+  }
 }
 
 const getStatusStyle = (status?: string) => {
@@ -307,7 +364,9 @@ const formatFileSize = (bytes?: number) => {
 
 // ==================== 操作 ====================
 const handleEdit = () => {
-  message.info('请前往任务列表页面进行编辑操作')
+  if (task.value) {
+    emit('edit', task.value)
+  }
 }
 
 const handleReportProgress = () => {
@@ -335,7 +394,9 @@ const submitProgress = async () => {
 }
 
 const handleCreateChange = () => {
-  message.info('请在项目详情「变更记录」Tab中发起变更')
+  if (task.value) {
+    emit('create-change', task.value)
+  }
 }
 
 const handlePause = () => {
@@ -388,7 +449,41 @@ const confirmSubmitComplete = async () => {
 }
 
 const handleUpload = () => {
-  message.info('请在项目详情「文档」Tab中上传文件并关联到此任务')
+  fileInputRef.value?.click()
+}
+
+const viewDeliverable = (row: any) => {
+  if (row.storagePath) {
+    window.open(row.storagePath, '_blank')
+  } else if (row._file) {
+    message.info(`文件 "${row.fileName}" 尚未上传到服务器`)
+  } else {
+    message.info(`文件 "${row.fileName}" 暂无在线预览地址`)
+  }
+}
+
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+const onFileSelected = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  if (!files || files.length === 0) return
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    // 临时添加到列表供预览，实际上传应由父组件处理
+    outputList.value.push({
+      fileName: file.name,
+      fileSize: file.size,
+      version: 'v1',
+      createTime: new Date().toISOString(),
+      storagePath: '',
+      _file: file
+    })
+  }
+  message.success(`已选择 ${files.length} 个文件`)
+  // 清空 input 以支持重复选择同一文件
+  input.value = ''
 }
 
 const handleSubmitReview = async () => {
@@ -404,7 +499,8 @@ const handleSubmitReview = async () => {
     }
     const updateData: any = {
       taskId: task.value.taskId,
-      completeStatus: statusMap[reviewForm.result] || task.value.completeStatus
+      completeStatus: statusMap[reviewForm.result] || task.value.completeStatus,
+      opinion: reviewForm.opinion
     }
     // 审核通过时设置实际完成日期为当前时间（PM审核通过时间）
     if (reviewForm.result === 'approved') {

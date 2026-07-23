@@ -164,18 +164,26 @@ function getChannelLabel(ch: string): string {
 
 function getEventLabel(e: string): string {
   const map: Record<string, string> = {
-    task_t_minus_3: 'T-3提醒', task_due_soon: '任务到期', task_overdue: '任务延期',
+    task_t_minus_3: 'T-3提醒', task_t_minus_1: 'T-1提醒', task_d_plus_1: 'D+1提醒',
+    task_overdue_3: '延期超3天', task_overdue_7: '延期超7天',
+    task_dispatched: '任务派发', task_submitted: '提交完成',
+    task_approved: '审核通过', task_rejected: '审核驳回',
     stage_starting: '阶段开始', milestone_reached: '里程碑达成',
-    quality_created: '质量问题', change_pending: '变更待审'
+    quality_created: '质量问题', change_pending: '变更待审',
+    monthly_performance: '月度绩效'
   }
   return map[e] || e
 }
 
 function getEventTagType(e: string): string {
   const map: Record<string, string> = {
-    task_t_minus_3: 'warning', task_due_soon: 'warning', task_overdue: 'danger',
+    task_t_minus_3: 'warning', task_t_minus_1: 'warning', task_d_plus_1: 'warning',
+    task_overdue_3: 'danger', task_overdue_7: 'danger',
+    task_dispatched: 'primary', task_submitted: 'primary',
+    task_approved: 'success', task_rejected: 'danger',
     stage_starting: 'primary', milestone_reached: 'success',
-    quality_created: 'danger', change_pending: 'warning'
+    quality_created: 'danger', change_pending: 'warning',
+    monthly_performance: 'info'
   }
   return map[e] || 'info'
 }
@@ -200,6 +208,9 @@ function openForm(row?: any) {
       channels: parseChannels(row.notifyChannel),
       notifyTargets: parseChannels(row.notifyTarget || 'main_owner,helper'),
       timeRule: row.timeRule || '',
+      doNotDisturb: row.doNotDisturb || false,
+      dndStartTime: row.dndStartTime || '',
+      dndEndTime: row.dndEndTime || '',
       escalationFlag: row.escalationFlag || false,
       escalationCondition: row.escalationCondition || '',
       escalationTarget: row.escalationTarget || '',
@@ -231,6 +242,9 @@ async function saveRule() {
     notifyChannel: form.channels.join(','),
     notifyTarget: form.notifyTargets ? form.notifyTargets.join(',') : '',
     timeRule: form.timeRule,
+    doNotDisturb: form.doNotDisturb,
+    dndStartTime: form.doNotDisturb ? form.dndStartTime : null,
+    dndEndTime: form.doNotDisturb ? form.dndEndTime : null,
     escalationFlag: form.escalationFlag,
     escalationCondition: form.escalationFlag ? form.escalationCondition : null,
     escalationTarget: form.escalationFlag ? form.escalationTarget : null,

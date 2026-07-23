@@ -1,6 +1,23 @@
 <template>
   <div class="pms-dict">
+    <el-alert
+      title="当前字典数据存储在浏览器本地 (localStorage)，仅对当前设备生效。建议定期导出备份。"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="mb-12px"
+    />
     <ContentWrap>
+      <div class="dict-global-toolbar">
+        <el-button size="small" @click="exportDict"><Icon icon="ep:download" class="mr-4px" />导出数据</el-button>
+        <el-upload
+          :show-file-list="false"
+          :before-upload="importDict"
+          accept=".json"
+        >
+          <el-button size="small"><Icon icon="ep:upload" class="mr-4px" />导入数据</el-button>
+        </el-upload>
+      </div>
       <el-tabs v-model="activeType" type="card">
         <el-tab-pane v-for="group in dictGroups" :key="group.key" :label="group.label" :name="group.key">
           <div class="dict-toolbar">
@@ -246,6 +263,42 @@ function handleDelete(key: string, row: any) {
   }).catch(() => {})
 }
 
+function exportDict() {
+  const json = JSON.stringify(dictData.value, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `pms_dict_backup_${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success('字典数据已导出')
+}
+
+function importDict(file: File) {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target?.result as string)
+      if (typeof data !== 'object') throw new Error('格式错误')
+      // 合并导入数据（只导入匹配的 group key）
+      let imported = 0
+      for (const key of Object.keys(dictData.value)) {
+        if (data[key] && Array.isArray(data[key])) {
+          dictData.value[key] = data[key]
+          imported++
+        }
+      }
+      localStorage.setItem('pms_dict_data', JSON.stringify(dictData.value))
+      ElMessage.success(`导入成功，已更新 ${imported} 个分组`)
+    } catch (err) {
+      ElMessage.error('导入失败：JSON 格式错误')
+    }
+  }
+  reader.readAsText(file)
+  return false // 阻止 el-upload 自动上传
+}
+
 let saveTimer: any = null
 onMounted(() => {
   // 初始化时从 localStorage 加载（模拟数据库持久化）
@@ -274,6 +327,9 @@ onUnmounted(() => {
 
 <style scoped>
 .pms-dict { }
+.dict-global-toolbar {
+  display: flex; gap: 8px; margin-bottom: 12px;
+}
 .dict-toolbar {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
 }

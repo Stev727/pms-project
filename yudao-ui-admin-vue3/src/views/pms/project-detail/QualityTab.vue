@@ -109,7 +109,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getQualityIssueList, createQualityIssue, updateQualityIssue } from '@/api/pms/quality'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
@@ -146,20 +146,21 @@ function getCategoryLabel(c: string): string {
   return { design: '设计问题', process: '工艺问题', material: '物料问题', testing: '测试问题', other: '其他' }[c] || c
 }
 function getStatusLabel(s: string): string {
-  return { open: '待处理', in_progress: '处理中', closed: '已关闭' }[s] || s
+  return { open: '待处理', assigned: '已指派', in_progress: '处理中', processing: '处理中', pending_verify: '待验证', closed: '已关闭' }[s] || s
 }
 function getStatusColor(s: string): string {
-  return { open: '#F53F3F', in_progress: '#FF7D00', closed: '#00B42A' }[s] || '#86909C'
+  return { open: '#F53F3F', assigned: '#2468F2', in_progress: '#FF7D00', processing: '#FF7D00', pending_verify: '#FF7D00', closed: '#00B42A' }[s] || '#86909C'
 }
 
 function openDetail(row: any) { selected.value = row; drawerVisible.value = true }
 
 async function closeIssue(row: any) {
   try {
+    await ElMessageBox.confirm('确认关闭该质量问题？', '提示', { confirmButtonText: '确认关闭', type: 'warning' })
     await updateQualityIssue({ issueId: row.issueId, status: 'closed', closeTime: new Date().toISOString().split('T')[0] } as any)
     await fetchList()
     ElMessage.success('问题已关闭')
-  } catch (e) { console.error(e) }
+  } catch (e) { if (e !== 'cancel') console.error(e) }
 }
 
 async function submitIssue() {
@@ -170,8 +171,10 @@ async function submitIssue() {
       issueDescription: newIssue.description,
       severity: newIssue.severity,
       rootCauseCategory: newIssue.category,
+      responsiblePerson: newIssue.responsiblePerson,
       rootCauseDetail: newIssue.rootCause,
       solution: newIssue.solution,
+      source: newIssue.source,
       impactScope: newIssue.source,
       projectId: props.projectId,
       status: 'open'

@@ -166,7 +166,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getChangeRecordList, createChangeRecord, updateChangeRecord, ChangeRecordVO } from '@/api/pms/change'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
@@ -219,7 +219,7 @@ const filteredList = computed(() => {
 })
 
 const newChange = reactive({
-  title: '', type: 'content', urgent: false, beforeContent: '', afterContent: '',
+  title: '', type: 'requirement', urgent: false, beforeContent: '', afterContent: '',
   reason: '', affectedTasks: '', costImpact: 0, scheduleImpact: 0
 })
 
@@ -239,8 +239,8 @@ async function fetchList() {
         approver: item.approverId ? getUserName(item.approverId) : '',
         applyTime: item.createTime || '',
         urgent: item.scheduleImpact ? Number(item.scheduleImpact) > 0 : false,
-        beforeContent: '',
-        afterContent: '',
+        beforeContent: item.beforeContent || '',
+        afterContent: item.afterContent || '',
         reason: item.changeReason || '',
         impacts: [
           ...(item.costImpact ? [`成本: ${item.costImpact}元`] : []),
@@ -265,12 +265,16 @@ async function submitChange() {
       changeReason: newChange.reason,
       projectId: Number(props.projectId),
       affectedTasks: newChange.affectedTasks,
+      beforeContent: newChange.beforeContent,
+      afterContent: newChange.afterContent,
+      urgent: newChange.urgent,
       costImpact: newChange.costImpact,
+      scheduleImpact: newChange.scheduleImpact,
       approvalStatus: 'pending'
     } as ChangeRecordVO)
     ElMessage.success('变更已提交')
     showForm.value = false
-    Object.assign(newChange, { title: '', type: 'content', urgent: false, beforeContent: '', afterContent: '', reason: '', affectedTasks: '', costImpact: 0 })
+    Object.assign(newChange, { title: '', type: 'requirement', urgent: false, beforeContent: '', afterContent: '', reason: '', affectedTasks: '', costImpact: 0, scheduleImpact: 0 })
     await fetchList()
   } catch (e) { console.error(e); ElMessage.error('提交失败') }
   finally { saving.value = false }
@@ -278,10 +282,18 @@ async function submitChange() {
 
 async function submitApproval() {
   if (!selected.value) return
+  try {
+    await ElMessageBox.confirm('确认提交审批结果？', '提示', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' })
+  } catch { return }
   saving.value = true
   try {
     const newStatus = approveResult.value === 'approve' ? 'approved' : approveResult.value === 'reject' ? 'rejected' : 'pending'
-    await updateChangeRecord({ changeId: selected.value.changeId, approvalStatus: newStatus } as ChangeRecordVO)
+    await updateChangeRecord({
+      changeId: selected.value.changeId,
+      approvalStatus: newStatus,
+      approveOpinion: approveOpinion.value,
+      autoAdjust: autoAdjust.value
+    } as ChangeRecordVO)
     ElMessage.success('审批已提交')
     drawerVisible.value = false
     await fetchList()

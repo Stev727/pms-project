@@ -49,11 +49,11 @@ import { getTaskList, updateTask, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { calcDelayDays } from '../pms-utils'
 import { gantt } from 'dhtmlx-gantt'
+import { ElMessage } from 'element-plus'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsGantt' })
 
-const message = useMessage()
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const selectedProjectId = ref<string | undefined>()
 const projectList = ref<ProjectVO[]>([])
@@ -65,6 +65,8 @@ const showCritical = ref(true)
 const showToday = ref(true)
 const showLinks = ref(true)
 let ganttReady = false
+// 引用 renderGantt 用于拖拽失败回滚
+let renderGanttFn: (() => void) | null = null
 
 const loadProjects = async () => {
   projectList.value = (await getProjectList()).filter((p: ProjectVO) => p.projectType !== 'standard_template')
@@ -132,10 +134,12 @@ const configGantt = () => {
         planStartDate: task.start_date ? new Date(task.start_date).toISOString().split('T')[0] : undefined,
         cycle: task.duration || 1
       } as TaskVO)
-      message.success(`任务「${task.text}」日期已更新`)
+      ElMessage.success(`任务「${task.text}」日期已更新`)
     } catch (e) {
       console.error('保存任务日期失败', e)
-      message.error('保存失败，请重试')
+      ElMessage.error('拖拽保存失败，正在回滚...')
+      // 重新加载甘特图数据回滚 UI
+      if (renderGanttFn) renderGanttFn()
     }
   })
 
@@ -143,7 +147,7 @@ const configGantt = () => {
   gantt.attachEvent('onTaskDblClick', (id: any, _e: any) => {
     const task = gantt.getTask(id)
     if (task.type === 'project') return
-    message.info(`任务「${task.text}」— 请前往任务管理页面编辑详情`)
+    ElMessage.info(`任务「${task.text}」— 请前往任务管理页面编辑详情`)
   })
 }
 
@@ -264,6 +268,9 @@ const renderGantt = () => {
   }
   gantt.parse(buildGanttData())
 }
+
+// 保存 renderGantt 引用用于拖拽失败回滚
+renderGanttFn = renderGantt
 
 const changeScale = () => {
   setScaleConfig(scale.value)

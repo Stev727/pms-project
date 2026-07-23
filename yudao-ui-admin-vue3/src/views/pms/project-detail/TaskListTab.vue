@@ -187,6 +187,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed, reactive } from 'vue'
 import { TaskVO } from '@/api/pms/task'
 import { updateTask } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
@@ -194,6 +195,8 @@ import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useCache } from '@/hooks/web/useCache'
 
 defineOptions({ name: 'TaskListTab' })
 
@@ -210,7 +213,6 @@ const emit = defineEmits<{
   'start-change': [task: TaskVO]
 }>()
 
-const message = useMessage()
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const searchKeyword = ref('')
 const filterStage = ref<string | undefined>()
@@ -252,7 +254,22 @@ const filteredTreeData = computed<TreeRow[]>(() => {
   }
   // 我的任务筛选 (MINOR-5 修复)
   if (filterAssignee.value === 'mine') {
-    // TODO: 获取当前用户ID，筛选我负责的任务
+    const userInfo = useCache().wsCache.get('userInfo')
+    const currentUserId = userInfo?.id
+    if (currentUserId) {
+      tasks = tasks.filter(t => String(t.mainOwnerId) === String(currentUserId))
+    }
+  }
+  if (filterAssignee.value === 'involved') {
+    const userInfo = useCache().wsCache.get('userInfo')
+    const currentUserId = userInfo?.id
+    if (currentUserId) {
+      tasks = tasks.filter(t => {
+        const isOwner = String(t.mainOwnerId) === String(currentUserId)
+        const isHelper = t.helperIds ? t.helperIds.split(',').some((id: string) => String(id.trim()) === String(currentUserId)) : false
+        return isOwner || isHelper
+      })
+    }
   }
 
   // 按阶段分组
@@ -303,7 +320,20 @@ function canTransition(row: TreeRow, action: string): boolean {
   if (row.isStageRow) return false
   const rule = transitionRules[action]
   if (!rule) return false
-  return rule.from.includes(row.completeStatus || '')
+  // 检查状态流转条件
+  if (!rule.from.includes(row.completeStatus || '')) return false
+  // 检查角色权限：当前用户必须是任务负责人或具有对应角色权限
+  const userInfo = useCache().wsCache.get('userInfo')
+  const currentUserId = userInfo?.id
+  if (!currentUserId) return false
+  const isOwner = String(row.mainOwnerId) === String(currentUserId)
+  // pm 角色可执行所有流转操作
+  const hasPmPerm = checkPermi(['pms:task:update'])
+  // assignee 角色仅可执行自己的任务操作
+  if (rule.roles.includes('pm') && hasPmPerm) return true
+  if (rule.roles.includes('assignee') && isOwner) return true
+  if (rule.roles.includes('reviewer') && hasPmPerm) return true
+  return false
 }
 
 async function handleTransition(row: TreeRow, action: string) {
@@ -338,16 +368,16 @@ async function handleTransition(row: TreeRow, action: string) {
       taskId: row.taskId,
       completeStatus: rule.to
     } as TaskVO)
-    message.success(`任务已${rule.label}`)
+    ElMessage.success(`任务已${rule.label}`)
     emit('refresh')
   } catch (e: any) {
-    message.error(e?.message || '操作失败')
+    ElMessage.error(e?.message || '操作失败')
   }
 }
 
 async function confirmDelay() {
-  if (!delayForm.exceptionReason) { message.warning('请填写异常原因'); return }
-  if (!delayForm.improvementPlan) { message.warning('请填写改善方案'); return }
+  if (!delayForm.exceptionReason) { ElMessage.warning('请填写异常原因'); return }
+  if (!delayForm.improvementPlan) { ElMessage.warning('请填写改善方案'); return }
   if (!delayTarget.value) return
   try {
     await updateTask({
@@ -356,11 +386,11 @@ async function confirmDelay() {
       exceptionReason: delayForm.exceptionReason,
       improvementPlan: delayForm.improvementPlan
     } as TaskVO)
-    message.success('延期已记录')
+    ElMessage.success('延期已记录')
     delayFormVisible.value = false
     emit('refresh')
   } catch (e: any) {
-    message.error(e?.message || '操作失败')
+    ElMessage.error(e?.message || '操作失败')
   }
 }
 
@@ -370,13 +400,14 @@ async function confirmSubmit() {
     await updateTask({
       taskId: submitTarget.value.taskId,
       completeStatus: 'pending_review',
-      actualCompleteDate: submitForm.actualCompleteDate
+      actualCompleteDate: submitForm.actualCompleteDate,
+      completionNote: submitForm.completionNote
     } as any)
-    message.success('任务已提交审核')
+    ElMessage.success('任务已提交审核')
     submitConfirmVisible.value = false
     emit('refresh')
   } catch (e: any) {
-    message.error(e?.message || '提交失败')
+    ElMessage.error(e?.message || '提交失败')
   }
 }
 

@@ -73,6 +73,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, defineAsyncComponent } from 'vue'
 import * as echarts from 'echarts'
 import { ArrowRight } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
@@ -193,12 +194,19 @@ async function loadTasks() {
   try {
     const userInfo = wsCache.get('userInfo')
     const currentUserId = userInfo?.id
+    if (!currentUserId) {
+      ElMessage.warning('用户信息未加载，请刷新页面或重新登录')
+      allTasks.value = []
+      loading.value = false
+      return
+    }
     const [taskRes, projectRes] = await Promise.all([getTaskList(), getProjectList()])
     allTasks.value = (taskRes as TaskVO[]).filter(t => String(t.mainOwnerId) === String(currentUserId))
     projects.value = projectRes as ProjectVO[]
     await ensureUsersLoaded()
   } catch (e) {
     console.error('加载任务失败', e)
+    ElMessage.error('加载任务失败，请稍后重试')
   } finally {
     loading.value = false
   }
