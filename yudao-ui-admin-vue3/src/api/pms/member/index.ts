@@ -3,7 +3,7 @@ import request from '@/config/axios'
 export interface ProjectMemberVO {
   memberId: string
   projectId?: string
-  userId?: number
+  userId?: string  // 雪花ID，前端统一使用 string 避免 JS 精度丢失
   roleCode?: string
   isExternal?: boolean
   joinTime?: string

@@ -207,14 +207,14 @@
           <el-col :span="12">
             <el-form-item label="责任人" prop="mainOwnerId">
               <el-select v-model="taskForm.mainOwnerId" filterable placeholder="请选择" class="w-full">
-                <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="u.nickname" :value="String(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="协助人">
               <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选" class="w-full">
-                <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="u.nickname" :value="String(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -288,6 +288,7 @@ import {
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 
 defineOptions({ name: 'PmsProjectDetail' })
 
@@ -295,6 +296,7 @@ const route = useRoute()
 const { push, back } = useRouter()
 const message = useMessage()
 const { userList, getUserName, getUserNamesFromStr, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const { projectMemberUsers, loadProjectMembers } = useProjectMembers()
 
 const loading = ref(false)
 const activeTab = ref('overview')
@@ -363,8 +365,30 @@ const taskForm = reactive({
 const taskFormRules = {
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   stageId: [{ required: true, message: '请选择所属阶段', trigger: 'change' }],
-  planStartDate: [{ required: true, message: '请选择计划开始日期', trigger: 'change' }],
-  planEndDate: [{ required: true, message: '请选择计划结束日期', trigger: 'change' }],
+  planStartDate: [
+    { required: true, message: '请选择计划开始日期', trigger: 'change' },
+    {
+      validator: (_rule: any, value: string, callback: any) => {
+        if (value && project.value?.planStartDate && new Date(value) < new Date(project.value.planStartDate)) {
+          callback(new Error(`开始日期不能早于项目开始日期`))
+        } else { callback() }
+      }, trigger: 'change'
+    }
+  ],
+  planEndDate: [
+    { required: true, message: '请选择计划结束日期', trigger: 'change' },
+    {
+      validator: (_rule: any, value: string, callback: any) => {
+        if (value && taskForm.planStartDate && new Date(value) < new Date(taskForm.planStartDate)) {
+          callback(new Error('结束日期不能早于开始日期')); return
+        }
+        if (value && project.value?.planEndDate && new Date(value) > new Date(project.value.planEndDate)) {
+          callback(new Error('结束日期不能晚于项目结束日期')); return
+        }
+        callback()
+      }, trigger: 'change'
+    }
+  ],
   mainOwnerId: [{ required: true, message: '请选择责任人', trigger: 'change' }]
 }
 const submittingTask = ref(false)
@@ -488,6 +512,8 @@ const openCreateTaskDialog = () => {
     mainOwnerId: undefined, helperIds: [], isMilestone: false, completionStandard: '', estimatedHours: undefined,
     description: '', outputRequirement: ''
   })
+  // 加载当前项目成员列表作为责任人/协助人下拉数据源
+  loadProjectMembers(projectId.value)
   createTaskDialogVisible.value = true
 }
 

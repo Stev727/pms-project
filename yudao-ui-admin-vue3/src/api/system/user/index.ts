@@ -1,7 +1,7 @@
 import request from '@/config/axios'
 
 export interface UserVO {
-  id: number
+  id: string  // 雪花ID，前端统一使用 string 避免 JS 精度丢失
   username: string
   nickname: string
   deptId: number

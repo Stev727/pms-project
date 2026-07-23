@@ -51,7 +51,8 @@ const service: AxiosInstance = axios.create({
         try {
           // 替换 JSON 中超过安全整数范围的数字为字符串
           // 雪花ID为19位 > JS安全整数 9007199254740991 (16位)
-          return JSON.parse(data.replace(/:(\d{16,})/g, ':"$1"'))
+          // 允许冒号后有空格，避免 Jackson INDENT_OUTPUT 导致漏匹配
+          return JSON.parse(data.replace(/:\s*(\d{16,})/g, ':"$1"'))
         } catch {
           return data
         }

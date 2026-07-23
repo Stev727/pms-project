@@ -273,8 +273,9 @@ const filteredList = computed(() => {
   if (queryParams.projectId) {
     list = list.filter(t => String(t.projectId) === String(queryParams.projectId))
   }
-  if (queryParams.taskName) {
-    list = list.filter(t => t.taskName?.includes(queryParams.taskName))
+  if (queryParams.taskName && queryParams.taskName.trim()) {
+    const keyword = queryParams.taskName.trim().toLowerCase()
+    list = list.filter(t => t.taskName && t.taskName.toLowerCase().includes(keyword))
   }
   if (queryParams.completeStatus) {
     list = list.filter(t => t.completeStatus === queryParams.completeStatus)

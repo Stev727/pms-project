@@ -108,17 +108,24 @@ const editing = ref<any>(null)
 const form = reactive({
   memberId: undefined as any,
   userId: undefined as any,
-  roleCode: 'developer',
+  roleCode: 'helper',  // 默认项目角色：协助人（有效的项目角色）
   isExternal: false,
   status: 'active'
 })
 
-const roleLabelMap: Record<string, string> = {
-  pm: '项目经理', dept_head: '部门负责人', main_owner: '主责任人',
-  helper: '协助人', management: '管理层', external: '外部成员', admin: '系统管理员',
+// 项目角色映射（影响项目内数据权限）
+const projectRoleMap: Record<string, string> = {
+  pm: '项目经理', main_owner: '主责任人',
+  helper: '协助人', external: '外部成员'
+}
+// 组织岗位映射（独立展示，不参与项目权限判定）
+const positionMap: Record<string, string> = {
+  dept_head: '部门负责人', management: '管理层', admin: '系统管理员',
   developer: '开发工程师', hw_engineer: '硬件工程师', sw_engineer: '软件工程师',
   mechanical_engineer: '结构工程师', project_manager: '项目经理'
 }
+// 合并映射用于展示（兼容旧数据）
+const roleLabelMap: Record<string, string> = { ...projectRoleMap, ...positionMap }
 
 function getRoleLabel(code: string): string { return roleLabelMap[code] || code || '-' }
 function getRoleTagType(role: string): string {
@@ -133,7 +140,7 @@ function handleAdd() {
   editing.value = null
   form.memberId = undefined
   form.userId = undefined
-  form.roleCode = 'developer'
+  form.roleCode = 'helper'
   form.isExternal = false
   form.status = 'active'
   showDialog.value = true
@@ -156,7 +163,7 @@ async function saveMember() {
     const data = {
       memberId: form.memberId,
       projectId: props.projectId,
-      userId: form.userId,
+      userId: String(form.userId),  // 显式转字符串，防止雪花ID精度丢失
       roleCode: form.roleCode,
       isExternal: form.isExternal,
       status: form.status

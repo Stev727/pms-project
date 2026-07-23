@@ -56,8 +56,8 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="项目经理" prop="projectManagerId">
-            <el-select v-model="formData.projectManagerId" placeholder="请选择" filterable clearable style="width: 100%">
-              <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+            <el-select v-model="formData.projectManagerId" placeholder="请选择" filterable remote clearable :remote-method="searchUsers" :loading="remoteLoading" style="width: 100%">
+              <el-option v-for="u in remoteUserList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -95,9 +95,10 @@
 
 <script setup lang="ts">
 import { createProject, updateProject, ProjectVO } from '@/api/pms/project'
+import { createProjectMember } from '@/api/pms/member'
 import { projectTypeOptions, priorityOptions } from '../pms-utils'
 import * as DeptApi from '@/api/system/dept'
-import * as UserApi from '@/api/system/user'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'ProjectForm' })
 
@@ -109,7 +110,8 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const mode = ref<'create' | 'update'>('create')
 const deptTree = ref<any[]>([])
-const userList = ref<any[]>([])
+// P1-02: 使用 useUserNames 的远程搜索功能替代全量加载
+const { ensureLoaded: ensureUsers, getUserName, searchUsers, remoteUserList, remoteLoading } = useUserNames()
 
 const defaultForm: ProjectVO = {
   projectId: undefined,
@@ -159,16 +161,13 @@ const open = async (type: 'create' | 'update', data?: ProjectVO) => {
   dialogTitle.value = type === 'create' ? '新建项目' : '编辑项目'
   dialogVisible.value = true
 
-  // 加载部门和用户数据
+  // 加载部门数据（用户列表改用远程搜索，不再全量加载）
   try {
-    const [depts, users] = await Promise.all([
-      DeptApi.getSimpleDeptList(),
-      UserApi.getSimpleUserList()
-    ])
+    const depts = await DeptApi.getSimpleDeptList()
     deptTree.value = depts || []
-    userList.value = users || []
+    await ensureUsers()  // 确保用户名称解析可用
   } catch (e) {
-    console.error('加载部门/用户数据失败', e)
+    console.error('加载部门数据失败', e)
   }
 
   if (data) {
@@ -191,7 +190,16 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (mode.value === 'create') {
-      await createProject(formData)
+      const res = await createProject(formData)
+      // P1-03: 自动将项目经理添加为项目成员
+      if (formData.projectManagerId && (res as any)?.projectId) {
+        createProjectMember({
+          projectId: String((res as any).projectId),
+          userId: String(formData.projectManagerId),
+          roleCode: 'pm',
+          status: 'active'
+        }).catch(() => { /* 非阻塞 */ })
+      }
       message.success('创建成功')
     } else {
       await updateProject(formData)

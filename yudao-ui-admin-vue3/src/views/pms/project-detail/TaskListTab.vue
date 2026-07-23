@@ -242,9 +242,10 @@ interface TreeRow extends TaskVO {
 const filteredTreeData = computed<TreeRow[]>(() => {
   let tasks = props.tasks
 
-  // 搜索过滤
-  if (searchKeyword.value) {
-    tasks = tasks.filter(t => t.taskName?.includes(searchKeyword.value))
+  // 搜索过滤（大小写不敏感 + 自动 trim）
+  if (searchKeyword.value && searchKeyword.value.trim()) {
+    const keyword = searchKeyword.value.trim().toLowerCase()
+    tasks = tasks.filter(t => t.taskName && t.taskName.toLowerCase().includes(keyword))
   }
   if (filterStage.value) {
     tasks = tasks.filter(t => String(t.stageId) === String(filterStage.value))

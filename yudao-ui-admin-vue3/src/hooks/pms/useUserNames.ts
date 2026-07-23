@@ -2,14 +2,22 @@
  * PMS 全局用户名解析 composable
  * 解决多处硬编码 `用户${id}` 的问题
  * 使用单例模式，所有组件共享同一份用户数据
+ *
+ * P1-02: 新增远程搜索功能，支持 el-select remote 模式
+ * 使用 300ms debounce 避免频繁请求
  */
 import { ref } from 'vue'
-import { getSimpleUserList } from '@/api/system/user'
+import { getSimpleUserList, getSimpleUserListByNickname } from '@/api/system/user'
 
 // 全局单例
 const userList = ref<any[]>([])
 const loaded = ref(false)
 let loadingPromise: Promise<void> | null = null
+
+// 远程搜索相关
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+const remoteUserList = ref<any[]>([])
+const remoteLoading = ref(false)
 
 export function useUserNames() {
   /**
@@ -28,6 +36,29 @@ export function useUserNames() {
       }
     })()
     return loadingPromise
+  }
+
+  /**
+   * 远程搜索用户（用于 el-select 的 remote-method）
+   * P1-02: 300ms debounce，避免频繁请求
+   */
+  function searchUsers(query: string) {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    if (!query || query.trim() === '') {
+      remoteUserList.value = []
+      return
+    }
+    remoteLoading.value = true
+    debounceTimer = setTimeout(async () => {
+      try {
+        const users = await getSimpleUserListByNickname(query.trim())
+        remoteUserList.value = (users as any[]) || []
+      } catch {
+        remoteUserList.value = []
+      } finally {
+        remoteLoading.value = false
+      }
+    }, 300)
   }
 
   /**
@@ -72,6 +103,10 @@ export function useUserNames() {
     getUserName,
     getUserNames,
     getUserNamesFromStr,
-    getRawUserList
+    getRawUserList,
+    // P1-02: 远程搜索
+    remoteUserList,
+    remoteLoading,
+    searchUsers
   }
 }

@@ -88,8 +88,8 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="项目经理" prop="projectManagerId">
-                <el-select v-model="projectForm.projectManagerId" filterable placeholder="请选择" class="w-full">
-                  <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+                <el-select v-model="projectForm.projectManagerId" filterable remote placeholder="请选择" class="w-full" :remote-method="searchUsers" :loading="remoteLoading">
+                  <el-option v-for="u in remoteUserList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -99,7 +99,7 @@
                   v-model="projectForm.deptId"
                   :data="deptTree"
                   :props="{ label: 'name', value: 'id', children: 'children' }"
-                  check-strictly
+                  check-strictly clearable filterable
                   placeholder="请选择部门"
                   class="w-full"
                 />
@@ -368,9 +368,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Document, CircleCheckFilled, ArrowRight, ArrowLeft, Plus, Folder, Star, Check } from '@element-plus/icons-vue'
 import { getProjectList, getProject, createProject, ProjectVO } from '@/api/pms/project'
+import { createProjectMember } from '@/api/pms/member'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { getTaskList, TaskVO } from '@/api/pms/task'
-import { getSimpleUserList } from '@/api/system/user'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 import { getSimpleDeptList } from '@/api/system/dept'
 import {
   phaseColorMap, projectTypeOptions, taskTypeOptions, priorityOptions,
@@ -419,8 +420,8 @@ const formRules = {
   planEndDate: [{ required: true, message: '请选择结束日期', trigger: 'change' }]
 }
 
-// 用户和部门
-const userList = ref<any[]>([])
+// 用户和部门（P1-02: 项目经理使用远程搜索，其余保留全量列表兼容批量操作）
+const { userList, ensureLoaded: ensureUsersLoaded, searchUsers, remoteUserList, remoteLoading } = useUserNames()
 const deptTree = ref<any[]>([])
 
 // 任务数据
@@ -785,6 +786,15 @@ async function submitCreate() {
       router.push('/pms/project')
       return
     }
+    // P1-03: 自动将项目经理添加为项目成员
+    if (projectForm.projectManagerId) {
+      createProjectMember({
+        projectId: String(projectId),
+        userId: String(projectForm.projectManagerId),
+        roleCode: 'pm',
+        status: 'active'
+      }).catch(() => { /* 非阻塞，成员添加失败不影响项目创建流程 */ })
+    }
     router.push(`/pms/project-detail/${projectId}`)
   } catch (e) {
     console.error('创建项目失败', e)
@@ -826,8 +836,7 @@ onMounted(async () => {
     ElMessage.error('加载模板列表失败')
   }
   try {
-    const users = await getSimpleUserList()
-    userList.value = users || []
+    await ensureUsersLoaded()
   } catch (e) {
     console.error('加载用户列表失败', e)
   }
