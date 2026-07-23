@@ -33,7 +33,7 @@
           </div>
         </div>
         <div class="header-right">
-          <el-button @click="handleCopyProject" v-if="checkPermi(['pms:project:create'])" :disabled="true">
+          <el-button @click="handleCopyProject" v-if="false">
             <Icon icon="ep:copy-document" class="mr-5px" />复制项目
           </el-button>
           <el-button @click="handleEdit" v-if="checkPermi(['pms:project:update'])">
@@ -48,7 +48,7 @@
             <el-button>更多<Icon icon="ep:arrow-down" class="ml-5px" /></el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="handleExport" :disabled="true">导出项目</el-dropdown-item>
+                <el-dropdown-item @click="handleExport" v-if="false">导出项目</el-dropdown-item>
                 <el-dropdown-item @click="handleShareLink">分享链接</el-dropdown-item>
                 <el-dropdown-item @click="handleArchive" v-if="project.status !== 'archived' && checkPermi(['pms:project:update'])">归档项目</el-dropdown-item>
                 <el-dropdown-item divided @click="handleDelete" v-if="checkPermi(['pms:project:delete'])">
@@ -94,7 +94,7 @@
         <!-- 审核中心 Tab (NEW - PRD-003) -->
         <el-tab-pane label="审核中心" name="review-center">
           <template v-if="activeTab === 'review-center'">
-            <ReviewCenterTab :project-id="projectId" @reviewed="loadProjectData" />
+            <ReviewCenterTab :project-id="projectId" @reviewed="onTaskDataRefresh" />
           </template>
         </el-tab-pane>
 
@@ -102,7 +102,7 @@
         <el-tab-pane label="任务列表" name="tasks">
           <template v-if="activeTab === 'tasks'">
             <TaskListTab :project-id="projectId" :tasks="projectTasks" :stages="projectStages"
-              @task-click="openTaskDrawer" @refresh="loadProjectData" @create-task="openCreateTaskDialog"
+              @task-click="openTaskDrawer" @refresh="onTaskDataRefresh" @create-task="openCreateTaskDialog"
               @start-change="handleStartChange" />
           </template>
         </el-tab-pane>
@@ -182,7 +182,7 @@
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
-    <TaskDetailDrawer ref="taskDrawerRef" @refresh="loadProjectData" />
+    <TaskDetailDrawer ref="taskDrawerRef" @refresh="onTaskDataRefresh" />
 
     <!-- P0: 项目编辑弹窗 -->
     <ProjectForm ref="projectFormRef" @success="loadProjectData" />
@@ -224,14 +224,14 @@
           <el-col :span="12">
             <el-form-item label="责任人" prop="mainOwnerId">
               <el-select v-model="taskForm.mainOwnerId" filterable placeholder="请选择" class="w-full">
-                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="协助人">
               <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选" class="w-full">
-                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -286,7 +286,7 @@
 </template>
 
 <script setup lang="ts">
-import { getProject, ProjectVO } from '@/api/pms/project'
+import { getProject, updateProject, ProjectVO } from '@/api/pms/project'
 import { getTaskList, createTask, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import GanttTab from './GanttTab.vue'
@@ -501,6 +501,31 @@ const loadProjectData = async () => {
   }
 }
 
+// P1-9: 任务状态变更后检查项目是否需要自动启动
+const checkProjectAutoStart = async () => {
+  if (project.value?.status === 'initiating' || project.value?.status === 'planning') {
+    const hasInProgress = projectTasks.value.some(t =>
+      t.completeStatus === 'in_progress' || t.completeStatus === 'completed'
+    )
+    if (hasInProgress) {
+      try {
+        await updateProject({
+          ...project.value,
+          status: 'in_progress',
+          actualStartDate: new Date().toISOString().split('T')[0]
+        } as any)
+        await loadProjectData()
+      } catch (e) { console.error('自动启动项目失败', e) }
+    }
+  }
+}
+
+// 任务数据刷新包装器：重新加载数据后检查项目自动启动
+const onTaskDataRefresh = async () => {
+  await loadProjectData()
+  await checkProjectAutoStart()
+}
+
 const handleTabChange = (tab: string) => {
   // 懒加载 — 首次切换时刷新子组件数据
   if (tab === 'members') { nextTick(() => membersTabRef.value?.refresh?.()) }
@@ -576,6 +601,7 @@ const submitCreateTask = async () => {
     message.success('任务创建成功')
     createTaskDialogVisible.value = false
     await loadProjectData()
+    await checkProjectAutoStart()
   } catch (e: any) {
     message.error(e?.message || '任务创建失败')
   } finally { submittingTask.value = false }

@@ -78,13 +78,17 @@ import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { useCache } from '@/hooks/web/useCache'
+import { useUserStore } from '@/store/modules/user'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'PmsWorkbench' })
 
 const { wsCache } = useCache()
+const userStore = useUserStore()
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const TaskDetailDrawer = defineAsyncComponent(() => import('../project-detail/TaskDetailDrawer.vue'))
+
+const currentUserId = computed(() => String(userStore.getUserInfo?.id || ''))
 
 const activeTab = ref('not_started')
 const allTasks = ref<TaskVO[]>([])
@@ -99,8 +103,11 @@ let volumeChart: echarts.ECharts | null = null
 
 // Tab 配置
 const tabConfig = [
-  { label: '待办', name: 'not_started' },
+  { label: '待接收', name: 'pending_accept' },
+  { label: '未开始', name: 'not_started' },
   { label: '进行中', name: 'in_progress' },
+  { label: '已暂停', name: 'paused' },
+  { label: '待审核', name: 'pending_review' },
   { label: '已延期', name: 'delayed' },
   { label: '已完成', name: 'completed' }
 ]
@@ -192,16 +199,15 @@ function getProjectName(projectId: any): string {
 async function loadTasks() {
   loading.value = true
   try {
-    const userInfo = wsCache.get('userInfo')
-    const currentUserId = userInfo?.id
-    if (!currentUserId) {
+    const uid = currentUserId.value
+    if (!uid) {
       ElMessage.warning('用户信息未加载，请刷新页面或重新登录')
       allTasks.value = []
       loading.value = false
       return
     }
     const [taskRes, projectRes] = await Promise.all([getTaskList(), getProjectList()])
-    allTasks.value = (taskRes as TaskVO[]).filter(t => String(t.mainOwnerId) === String(currentUserId))
+    allTasks.value = (taskRes as TaskVO[]).filter(t => String(t.mainOwnerId) === uid)
     projects.value = projectRes as ProjectVO[]
     await ensureUsersLoaded()
   } catch (e) {

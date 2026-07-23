@@ -126,7 +126,8 @@ const props = defineProps<{
 }>()
 
 const uploadHeaders = computed(() => ({
-  Authorization: 'Bearer ' + getAccessToken()
+  Authorization: 'Bearer ' + getAccessToken(),
+  'tenant-id': '1'
 }))
 const loading = ref(false)
 const searchName = ref('')

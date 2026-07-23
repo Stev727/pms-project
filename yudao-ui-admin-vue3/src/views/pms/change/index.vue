@@ -76,13 +76,13 @@
           <el-col :span="12">
             <div class="compare-block before">
               <div class="compare-label">变更前</div>
-              <pre>{{ selected.beforeContent || '无' }}</pre>
+              <pre>{{ selected.beforeContent || '--' }}</pre>
             </div>
           </el-col>
           <el-col :span="12">
             <div class="compare-block after">
               <div class="compare-label">变更后</div>
-              <pre>{{ selected.afterContent || '无' }}</pre>
+              <pre>{{ selected.afterContent || '--' }}</pre>
             </div>
           </el-col>
         </el-row>
@@ -258,6 +258,7 @@ async function submitChange() {
       afterContent: newChange.afterContent,
       urgent: newChange.urgent,
       scheduleImpact: newChange.scheduleImpact,
+      changeCode: `CR-${Date.now().toString().slice(-6)}`,
       approvalStatus: 'pending'
     } as ChangeRecordVO)
     ElMessage.success('变更已提交')

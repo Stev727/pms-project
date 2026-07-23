@@ -9,11 +9,12 @@
 
     <!-- 任务统计 (PRD-003: 5 项数字) -->
     <div class="task-stats mb-16px">
-      <div class="stat-item">总任务 <b>{{ totalCount }}</b></div>
-      <div class="stat-item">已完成 <b class="text-success">{{ completedCount }}</b></div>
+      <div class="stat-item">未开始 <b>{{ notStartedCount }}</b></div>
       <div class="stat-item">进行中 <b class="text-primary">{{ inProgressCount }}</b></div>
-      <div class="stat-item">延期 <b class="text-danger">{{ delayedCount }}</b></div>
-      <div class="stat-item">完成率 <b class="text-warning">{{ completionRate }}%</b></div>
+      <div class="stat-item">已暂停 <b>{{ pausedCount }}</b></div>
+      <div class="stat-item">待审核 <b class="text-warning">{{ pendingReviewCount }}</b></div>
+      <div class="stat-item">已完成 <b class="text-success">{{ completedCount }}</b></div>
+      <div class="stat-item">已延期 <b class="text-danger">{{ delayedCount }}</b></div>
     </div>
 
     <!-- 阶段进度卡片 (PRD-003) -->
@@ -36,13 +37,14 @@
           :key="ms.taskId"
           :timestamp="formatDate(ms.planEndDate)"
           placement="top"
-          :type="ms.completeStatus === 'completed' ? 'success' : ms.isDelayed ? 'danger' : 'primary'"
-          :hollow="ms.completeStatus !== 'completed'"
+          :type="ms.milestoneStatus === 'completed' ? 'success' : ms.isDelayed ? 'danger' : 'primary'"
+          :hollow="ms.milestoneStatus !== 'completed'"
         >
           <div class="milestone-item">
             <span class="milestone-name">{{ ms.taskName }}</span>
-            <el-tag v-if="ms.completeStatus === 'completed'" size="small" type="success">已完成</el-tag>
+            <el-tag v-if="ms.milestoneStatus === 'completed'" size="small" type="success">已完成</el-tag>
             <el-tag v-else-if="ms.isDelayed" size="small" type="danger">已延期</el-tag>
+            <el-tag v-else-if="ms.milestoneStatus === 'not_started'" size="small" type="info">未开始</el-tag>
             <el-tag v-else size="small" type="primary">进行中</el-tag>
           </div>
         </el-timeline-item>
@@ -92,6 +94,9 @@ const delayedCount = computed(() => props.tasks.filter(t => {
   if (t.completeStatus === 'completed' || t.completeStatus === 'cancelled') return false
   return calcDelayDays(t.planEndDate, t.completeStatus) > 0
 }).length)
+const notStartedCount = computed(() => props.tasks.filter(t => t.completeStatus === 'not_started').length)
+const pausedCount = computed(() => props.tasks.filter(t => t.completeStatus === 'paused').length)
+const pendingReviewCount = computed(() => props.tasks.filter(t => t.completeStatus === 'pending_review').length)
 const completionRate = computed(() => {
   if (!totalCount.value) return 0
   return Math.round(completedCount.value / totalCount.value * 100)
@@ -118,6 +123,7 @@ const milestones = computed(() => {
     .filter(t => t.isMilestone)
     .map(t => ({
       ...t,
+      milestoneStatus: t.completeStatus || 'not_started',
       isDelayed: calcDelayDays(t.planEndDate, t.completeStatus) > 0
     }))
     .sort((a, b) => {

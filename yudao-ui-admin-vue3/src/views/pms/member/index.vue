@@ -9,7 +9,9 @@
       </div>
 
       <el-table :data="memberList" border size="small" v-loading="loading">
-        <el-table-column prop="userId" label="用户ID" width="100" />
+        <el-table-column label="成员" min-width="120">
+          <template #default="{ row }">{{ getUserName(row.userId) }}</template>
+        </el-table-column>
         <el-table-column prop="roleCode" label="项目角色" width="120">
           <template #default="{ row }">
             <el-tag size="small" :type="getRoleTag(row.roleCode)">{{ getRoleLabel(row.roleCode) }}</el-tag>
@@ -42,7 +44,7 @@
 
     <el-dialog v-model="showAdd" :title="editing ? '编辑成员' : '添加成员'" width="480px">
       <el-form label-width="80px">
-        <el-form-item label="成员"><el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full"><el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" /></el-select></el-form-item>
+        <el-form-item label="成员"><el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full"><el-option v-for="u in userList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="u.id" /></el-select></el-form-item>
         <el-form-item label="项目角色"><el-select v-model="form.roleCode" class="w-full"><el-option label="项目经理" value="pm" /><el-option label="技术负责人" value="tech_lead" /><el-option label="硬件工程师" value="hw_engineer" /><el-option label="软件工程师" value="sw_engineer" /><el-option label="测试工程师" value="qa_engineer" /><el-option label="结构工程师" value="mech_engineer" /><el-option label="采购" value="procurement" /></el-select></el-form-item>
         <el-form-item label="是否外部"><el-switch v-model="form.isExternal" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="form.status" class="w-full"><el-option label="活跃" value="active" /><el-option label="停用" value="inactive" /></el-select></el-form-item>
@@ -79,6 +81,8 @@ const form = reactive({
 })
 
 const memberList = ref<any[]>([])
+const getUserName = (userId?: string | number) =>
+  userList.value.find(u => String(u.id) === String(userId))?.nickname || '-'
 
 const roleLabelMap: Record<string, string> = {
   pm: '项目经理',

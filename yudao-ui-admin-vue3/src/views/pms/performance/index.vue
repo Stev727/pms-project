@@ -7,7 +7,7 @@
         <el-select v-model="selectedDept" placeholder="部门" clearable style="width: 160px">
           <el-option v-for="d in deptList" :key="d.id" :label="d.name" :value="d.id" />
         </el-select>
-        <el-button @click="exportReport" :disabled="true" v-if="checkPermi(['pms:performance:query'])">
+        <el-button @click="exportReport" v-if="false">
           <el-icon><Download /></el-icon> 导出报表
         </el-button>
       </div>

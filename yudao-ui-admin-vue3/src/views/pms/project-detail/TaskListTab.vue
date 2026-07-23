@@ -129,6 +129,10 @@
               link type="warning" size="small" @click.stop="handleTransition(row, 'mark_delayed')"
             >标记延期</el-button>
             <el-button
+              v-if="canTransition(row, 'pause')"
+              link type="warning" size="small" @click.stop="handleTransition(row, 'pause')"
+            >暂停</el-button>
+            <el-button
               v-if="canTransition(row, 'resume')"
               link type="primary" size="small" @click.stop="handleTransition(row, 'resume')"
             >恢复</el-button>
@@ -319,6 +323,7 @@ const transitionRules: Record<string, { from: string[]; to: string; label: strin
   approve: { from: ['pending_review'], to: 'completed', label: '审核通过', roles: ['pm', 'reviewer'] },
   reject_review: { from: ['pending_review'], to: 'in_progress', label: '驳回', roles: ['pm', 'reviewer'] },
   mark_delayed: { from: ['in_progress'], to: 'delayed', label: '标记延期', roles: ['pm', 'assignee'] },
+  pause: { from: ['in_progress'], to: 'paused', label: '暂停', roles: ['assignee', 'pm'] },
   resume: { from: ['delayed', 'paused'], to: 'in_progress', label: '恢复', roles: ['assignee', 'pm'] }
 }
 

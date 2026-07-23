@@ -96,7 +96,11 @@
           </el-col>
         </el-row>
         <el-row :gutter="16">
-          <el-col :span="12"><el-form-item label="责任人"><el-input v-model="newIssue.responsiblePerson" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="责任人">
+            <el-select v-model="newIssue.responsiblePerson" filterable clearable placeholder="请选择责任人" class="w-full">
+              <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
+            </el-select>
+          </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="来源"><el-input v-model="newIssue.source" placeholder="测试/评审/现场" /></el-form-item></el-col>
         </el-row>
         <el-form-item label="根因分析"><el-input v-model="newIssue.rootCause" type="textarea" :rows="2" /></el-form-item>
@@ -113,10 +117,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getQualityIssueList, createQualityIssue, updateQualityIssue } from '@/api/pms/quality'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 
 defineOptions({ name: 'QualityTab' })
 
 const props = defineProps<{ projectId: string }>()
+const { projectMemberUsers, loadProjectMembers } = useProjectMembers()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -168,6 +174,7 @@ async function submitIssue() {
   saving.value = true
   try {
     await createQualityIssue({
+      issueCode: `QI-${Date.now().toString().slice(-6)}`,
       issueDescription: newIssue.description,
       severity: newIssue.severity,
       rootCauseCategory: newIssue.category,
@@ -196,7 +203,10 @@ async function fetchList() {
   finally { loading.value = false }
 }
 
-onMounted(() => { fetchList() })
+onMounted(() => {
+  loadProjectMembers(props.projectId)
+  fetchList()
+})
 defineExpose({ refresh: fetchList })
 </script>
 

@@ -67,7 +67,7 @@
           <!-- 进度填报 -->
           <el-tab-pane label="进度填报" name="progress">
             <div style="margin-bottom: 12px">
-              <el-button type="primary" size="small" @click="showProgressDialog = true" v-if="canReportProgress && task?.completeStatus !== 'completed'">
+              <el-button type="primary" size="small" @click="showProgressDialog = true" v-if="canReportProgress && task?.completeStatus !== 'completed' && task?.completeStatus !== 'paused'">
                 <Icon icon="ep:edit" class="mr-4px" />进度填报
               </el-button>
             </div>
@@ -169,6 +169,9 @@
           <el-button @click="handlePause" v-if="task?.completeStatus === 'in_progress' && checkPermi(['pms:task:update'])">
             <Icon icon="ep:video-pause" class="mr-4px" />暂停任务
           </el-button>
+          <el-button type="warning" @click="handleResume" v-if="task?.completeStatus === 'paused' && checkPermi(['pms:task:update'])">
+            <Icon icon="ep:video-play" class="mr-4px" />恢复任务
+          </el-button>
           <el-button type="success" @click="handleSubmitComplete" v-if="task?.completeStatus === 'in_progress' || task?.completeStatus === 'delayed'">
             <Icon icon="ep:circle-check" class="mr-4px" />提交完成
           </el-button>
@@ -227,8 +230,7 @@
     ref="fileInputRef"
     type="file"
     style="display: none"
-    @change="onFileSelected"
-    multiple
+    @change="handleFileSelect"
   />
 </template>
 
@@ -241,6 +243,7 @@ import {
   formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { getAccessToken } from '@/utils/auth'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'TaskDetailDrawer' })
@@ -437,6 +440,16 @@ const handlePause = () => {
   }).catch(() => {})
 }
 
+const handleResume = () => {
+  message.confirm('确认恢复此任务？').then(async () => {
+    if (!task.value) return
+    await updateTask({ taskId: task.value.taskId, completeStatus: 'in_progress' })
+    message.success('任务已恢复')
+    task.value.completeStatus = 'in_progress'
+    emit('refresh')
+  }).catch(() => {})
+}
+
 // 提交完成 — 走待审核流程，需校验输出物
 const showSubmitDialog = ref(false)
 const submitForm = reactive({ completionNote: '' })
@@ -477,9 +490,7 @@ const confirmSubmitComplete = async () => {
 }
 
 const handleUpload = () => {
-  if (task.value) {
-    emit('upload', task.value)
-  }
+  fileInputRef.value?.click()
 }
 
 const handleViewOutput = (item: any) => {
@@ -494,26 +505,48 @@ const handleViewOutput = (item: any) => {
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-const onFileSelected = (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const files = input.files
-  if (!files || files.length === 0) return
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]
-    // 临时添加到列表供预览，实际上传应由父组件处理
-    outputList.value.push({
-      fileName: file.name,
-      fileSize: file.size,
-      version: 'v1',
-      createTime: new Date().toISOString(),
-      storagePath: '',
-      _file: file
-    })
+const handleFileSelect = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  if (!target.files || !target.files.length) return
+  const file = target.files[0]
+  // 校验文件大小
+  if (file.size > 50 * 1024 * 1024) {
+    message.error('文件不能超过 50MB')
+    return
   }
-  message.success(`已选择 ${files.length} 个文件`)
-  // 清空 input 以支持重复选择同一文件
-  input.value = ''
+  // 上传文件
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const token = getAccessToken()
+    const res = await fetch('/admin-api/infra/file/upload', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'tenant-id': '1' },
+      body: formData
+    })
+    const data = await res.json()
+    if (data.code === 0) {
+      // 上传成功，添加到输出物列表
+      const fileUrl = data.data
+      outputList.value.push({
+        fileName: file.name,
+        fileType: file.name.split('.').pop() || 'unknown',
+        storagePath: fileUrl,
+        fileSize: file.size,
+        version: 'v1',
+        createTime: new Date().toISOString(),
+        uploadTime: new Date().toISOString()
+      })
+      message.success('文件上传成功')
+    } else {
+      message.error('上传失败: ' + (data.msg || '未知错误'))
+    }
+  } catch (e) {
+    console.error('文件上传失败', e)
+    message.error('文件上传失败')
+  }
+  // 重置 input 以支持重复选择同一文件
+  target.value = ''
 }
 
 const handleSubmitReview = async () => {

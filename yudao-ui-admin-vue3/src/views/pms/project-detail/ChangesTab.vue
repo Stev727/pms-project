@@ -83,13 +83,13 @@
           <el-col :span="12">
             <div class="compare-block before">
               <div class="compare-label">变更前</div>
-              <pre>{{ selected.beforeContent || '无' }}</pre>
+              <pre>{{ selected.beforeContent || '--' }}</pre>
             </div>
           </el-col>
           <el-col :span="12">
             <div class="compare-block after">
               <div class="compare-label">变更后</div>
-              <pre>{{ selected.afterContent || '无' }}</pre>
+              <pre>{{ selected.afterContent || '--' }}</pre>
             </div>
           </el-col>
         </el-row>
@@ -223,6 +223,12 @@ const newChange = reactive({
   reason: '', affectedTasks: '', costImpact: 0, scheduleImpact: 0
 })
 
+const getTaskCode = (taskId: any) => {
+  if (!taskId) return ''
+  const task = tasks.value.find(t => String(t.taskId) === String(taskId))
+  return task ? (task.taskCode || task.taskName || '') : String(taskId)
+}
+
 async function fetchList() {
   loading.value = true
   try {
@@ -246,7 +252,7 @@ async function fetchList() {
           ...(item.costImpact ? [`成本: ${item.costImpact}元`] : []),
           ...(item.scheduleImpact ? [`工期: ${item.scheduleImpact}天`] : [])
         ],
-        taskName: item.affectedTasks || ''
+        taskName: getTaskCode(item.affectedTasks)
       }))
   } catch (e) { console.error(e); changeList.value = [] }
   finally { loading.value = false }
@@ -270,6 +276,7 @@ async function submitChange() {
       urgent: newChange.urgent,
       costImpact: newChange.costImpact,
       scheduleImpact: newChange.scheduleImpact,
+      changeCode: `CR-${Date.now().toString().slice(-6)}`,
       approvalStatus: 'pending'
     } as ChangeRecordVO)
     ElMessage.success('变更已提交')

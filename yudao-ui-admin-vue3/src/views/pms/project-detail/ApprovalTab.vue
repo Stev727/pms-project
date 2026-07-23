@@ -113,8 +113,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getApprovalRecordList, updateApprovalRecord } from '@/api/pms/approval'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'ApprovalTab' })
+
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const props = defineProps<{
   projectId: string
@@ -199,10 +202,18 @@ async function confirmApproval() {
 async function loadApprovals() {
   loading.value = true
   try {
+    await ensureUsersLoaded()
     const data = await getApprovalRecordList({ projectId: props.projectId })
-    approvalList.value = ((data as any[]) || []).map(a => ({
+    const allApprovals = (data as any[]) || []
+    // P0-5: 前端增加 null 检查 + 项目隔离过滤
+    const projectApprovals = allApprovals.filter(a =>
+      a.projectId && String(a.projectId) === String(props.projectId)
+    )
+    approvalList.value = projectApprovals.map(a => ({
       ...a,
-      approvalTitle: a.approvalNo || `${getTypeLabel(a.approvalType)}-${a.approvalId}`
+      approvalTitle: a.approvalNo || `${getTypeLabel(a.approvalType)}-${a.approvalId}`,
+      initiatorName: a.initiatorName || (a.initiatorId ? getUserName(a.initiatorId) : '-'),
+      approverName: a.approverName || (a.approverId ? getUserName(a.approverId) : '-')
     }))
   } catch (e) { console.error(e); approvalList.value = [] }
   finally { loading.value = false }

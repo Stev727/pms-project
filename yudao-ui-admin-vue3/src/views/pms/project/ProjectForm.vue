@@ -57,7 +57,7 @@
         <el-col :span="12">
           <el-form-item label="项目经理" prop="projectManagerId">
             <el-select v-model="formData.projectManagerId" placeholder="请选择" filterable remote clearable :remote-method="searchUsers" :loading="remoteLoading" style="width: 100%">
-              <el-option v-for="u in remoteUserList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+              <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
             </el-select>
           </el-form-item>
         </el-col>

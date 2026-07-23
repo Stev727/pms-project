@@ -49,7 +49,7 @@
           <el-button size="small" @click="handleBatchArchive" :disabled="selectedProjects.length === 0" v-if="checkPermi(['pms:project:update'])">
             <Icon icon="ep:box" class="mr-4px" />批量归档
           </el-button>
-          <el-button size="small" @click="handleExport" v-if="checkPermi(['pms:project:export'])" :disabled="true">
+          <el-button size="small" @click="handleExport" v-if="false">
             <Icon icon="ep:download" class="mr-4px" />导出Excel
           </el-button>
           <span style="color: #86909C; font-size: 14px">共 {{ filteredList.length }} 个项目</span>
@@ -92,9 +92,9 @@
               <div class="card-progress">
                 <div class="progress-info">
                   <span style="font-size: 13px; color: #4E5969">进度</span>
-                  <span style="font-size: 16px; font-weight: 600; color: #1D2129">{{ project.progress || 0 }}%</span>
+                  <span style="font-size: 16px; font-weight: 600; color: #1D2129">{{ getCompletionRate(project) }}%</span>
                 </div>
-                <el-progress :percentage="project.progress || 0" :stroke-width="6" :show-text="false" :color="getProgressColor(project)" />
+                <el-progress :percentage="getCompletionRate(project)" :stroke-width="6" :show-text="false" :color="getProgressColor(project)" />
               </div>
 
               <div class="card-meta">
@@ -161,7 +161,7 @@
         </el-table-column>
         <el-table-column label="进度" width="160">
           <template #default="{ row }">
-            <el-progress :percentage="row.progress || 0" :stroke-width="8" :color="getProgressColor(row)" />
+            <el-progress :percentage="getCompletionRate(row)" :stroke-width="8" :color="getProgressColor(row)" />
           </template>
         </el-table-column>
         <el-table-column label="完成率" width="100" align="center">

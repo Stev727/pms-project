@@ -36,7 +36,7 @@
       <el-table-column label="操作" width="140" align="center">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="editMember(row)" v-if="checkPermi(['pms:member:update'])">编辑</el-button>
-          <el-button link type="danger" size="small" @click="removeMember(row)" v-if="checkPermi(['pms:member:delete'])">移除</el-button>
+          <el-button link type="danger" size="small" @click="removeMember(row)" v-if="row.roleCode !== 'pm' && row.roleCode !== 'project_manager' && checkPermi(['pms:member:delete'])">移除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -48,7 +48,7 @@
       <el-form label-width="80px">
         <el-form-item label="成员" required>
           <el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full" :disabled="!!editing">
-            <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+            <el-option v-for="u in availableUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目角色" required>
@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectMemberList, createProjectMember, updateProjectMember, deleteProjectMember } from '@/api/pms/member'
 import { formatDate } from '../pms-utils'
@@ -136,6 +136,15 @@ function getUserNameLocal(userId?: number): string {
   return getUserName(userId)
 }
 
+const availableUsers = computed(() => {
+  const memberUserIds = memberList.value.map(m => String(m.userId))
+  return userList.value.filter(u => {
+    // 编辑模式下保留当前正在编辑的成员，避免 select 显示异常
+    if (editing.value && form.userId && String(u.id) === String(form.userId)) return true
+    return !memberUserIds.includes(String(u.id))
+  })
+})
+
 function handleAdd() {
   editing.value = null
   form.memberId = undefined
@@ -178,7 +187,15 @@ async function saveMember() {
     showDialog.value = false
     editing.value = null
     await loadMembers()
-  } catch (e) { console.error(e); ElMessage.error('操作失败') }
+  } catch (e: any) {
+    console.error(e)
+    const msg = e?.message || String(e || '')
+    if (msg.includes('重复') || msg.includes('已存在')) {
+      ElMessage.warning('该用户已经是当前项目成员')
+    } else {
+      ElMessage.error('操作失败')
+    }
+  }
 }
 
 function removeMember(row: any) {

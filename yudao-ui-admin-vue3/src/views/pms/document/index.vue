@@ -188,7 +188,7 @@ function removeDoc(row: any) {
   }).catch(() => {})
 }
 
-async function handleUploadSuccess(response: any) {
+async function handleUploadSuccess(response: any, uploadFile?: any) {
   try {
     // yudao 框架响应: { code: 0, data: 'url', msg: 'success' }
     if (response && typeof response === 'object' && response.code !== 0) {
@@ -196,15 +196,16 @@ async function handleUploadSuccess(response: any) {
       return
     }
     const fileUrl = response?.data || response
-    const fileName = fileUrl?.split('/').pop() || '未命名文档'
+    const fileName = uploadFile?.name || fileUrl?.split('/').pop() || '未命名文档'
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
+    const fileSize = uploadFile?.size || 0
     await createDocument({
       fileName: fileName,
       fileType: ext,
       category: selectedCategory.value || 'project_doc',
       storagePath: fileUrl,
       versionNo: '1.0',
-      fileSize: 0
+      fileSize: fileSize
     } as any)
     ElMessage.success('文档上传成功')
     await loadDocuments()

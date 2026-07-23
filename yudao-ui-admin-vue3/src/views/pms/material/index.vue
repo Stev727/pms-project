@@ -48,7 +48,7 @@
         <span>共 {{ filteredData.length }} 条物料记录</span>
         <div>
           <el-button type="primary" size="small" @click="openCreateDialog" v-if="checkPermi(['pms:material:create'])" class="mr-8px"><el-icon><Plus /></el-icon> 新增物料</el-button>
-          <el-button type="primary" size="small" @click="exportData" plain :disabled="true">导出</el-button>
+          <el-button type="primary" size="small" @click="exportData" plain v-if="false">导出</el-button>
         </div>
       </div>
       <el-table :data="filteredData" border size="small" v-loading="loading" @row-click="openDetail">
@@ -96,7 +96,7 @@
           <el-descriptions-item label="物料名称">{{ selectedMaterial.materialName }}</el-descriptions-item>
           <el-descriptions-item label="物料编码">{{ selectedMaterial.materialCode || '-' }}</el-descriptions-item>
           <el-descriptions-item label="所属项目">{{ getProjectName(selectedMaterial.projectId) }}</el-descriptions-item>
-          <el-descriptions-item label="关联任务">{{ selectedMaterial.taskId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关联任务">{{ selectedMaterial.taskName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="需求日期">{{ formatDate(selectedMaterial.planOrderDate) }}</el-descriptions-item>
           <el-descriptions-item label="承诺交期">{{ formatDate(selectedMaterial.planDeliveryDate) }}</el-descriptions-item>
           <el-descriptions-item label="实际交期">{{ formatDate(selectedMaterial.actualDeliveryDate) }}</el-descriptions-item>

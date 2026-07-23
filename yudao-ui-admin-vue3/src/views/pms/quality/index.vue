@@ -157,7 +157,7 @@
         </el-form-item>
         <el-form-item label="负责人">
           <el-select v-model="createForm.owner" filterable clearable placeholder="请选择负责人" style="width: 100%">
-            <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+            <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname} (${u.username})`" :value="String(u.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="问题描述" required>
@@ -173,18 +173,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getQualityIssueList, createQualityIssue, updateQualityIssue, deleteQualityIssue, QualityIssueVO } from '@/api/pms/quality'
 import { formatDate, taskStatusMap, phaseColorMap } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 
 defineOptions({ name: 'PmsQuality' })
 
 const message = useMessage()
 const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const { projectMemberUsers, loadProjectMembers } = useProjectMembers()
 const loading = ref(false)
 const saving = ref(false)
 const projectList = ref<ProjectVO[]>([])
@@ -325,6 +327,10 @@ const submitAction = async () => {
 // ==================== 新建对话框 ====================
 const dialogVisible = ref(false)
 const createForm = reactive({ title: '', projectId: '', severity: 'moderate', owner: '', description: '' })
+// P1-13: 项目变更时加载项目成员
+watch(() => createForm.projectId, (newVal) => {
+  if (newVal) loadProjectMembers(newVal)
+})
 
 const submitCreate = async () => {
   if (!createForm.title || !createForm.projectId || !createForm.description) {
@@ -333,6 +339,7 @@ const submitCreate = async () => {
   saving.value = true
   try {
     await createQualityIssue({
+      issueCode: `QI-${Date.now().toString().slice(-6)}`,
       projectId: createForm.projectId,
       issueDescription: createForm.title,
       severity: createForm.severity,
