@@ -487,6 +487,11 @@ const submitTask = async () => {
       await updateTask(data)
       message.success('任务更新成功')
     } else {
+      // 生成任务编号: TASK-阶段缩写-3位序号
+      const stageCode = stageList.value.find(s => s.stageId === data.stageId)?.stageCode || 'GEN'
+      const existingTasks = taskList.value.filter(t => String(t.stageId) === String(data.stageId))
+      const seq = String(existingTasks.length + 1).padStart(3, '0')
+      data.taskCode = `TASK-${stageCode}-${seq}`
       await createTask(data)
       message.success('任务创建成功')
     }

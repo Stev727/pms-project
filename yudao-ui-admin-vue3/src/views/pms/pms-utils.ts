@@ -48,6 +48,7 @@ export const projectStatusMap: Record<string, { label: string; type: string; col
 export const priorityMap: Record<string, { label: string; color: string }> = {
   urgent: { label: '紧急', color: '#F53F3F' },
   high: { label: '高', color: '#FF7D00' },
+  medium: { label: '中', color: '#FF7D00' },
   normal: { label: '普通', color: '#4E5969' },
   low: { label: '低', color: '#86909C' },
 }

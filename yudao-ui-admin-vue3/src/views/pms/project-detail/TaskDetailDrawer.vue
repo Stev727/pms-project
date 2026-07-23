@@ -67,7 +67,7 @@
           <!-- 进度填报 -->
           <el-tab-pane label="进度填报" name="progress">
             <div style="margin-bottom: 12px">
-              <el-button type="primary" size="small" @click="showProgressDialog = true" v-if="canReportProgress">
+              <el-button type="primary" size="small" @click="showProgressDialog = true" v-if="canReportProgress && task?.completeStatus !== 'completed'">
                 <Icon icon="ep:edit" class="mr-4px" />进度填报
               </el-button>
             </div>
@@ -162,17 +162,19 @@
 
       <!-- 底部操作栏 -->
       <div class="drawer-footer">
-        <el-button @click="handleReportProgress" v-if="canReportProgress">
-          <Icon icon="ep:edit" class="mr-4px" />进度填报
-        </el-button>
+        <template v-if="task?.completeStatus !== 'completed'">
+          <el-button @click="handleReportProgress" v-if="canReportProgress">
+            <Icon icon="ep:edit" class="mr-4px" />进度填报
+          </el-button>
+          <el-button @click="handlePause" v-if="task?.completeStatus === 'in_progress' && checkPermi(['pms:task:update'])">
+            <Icon icon="ep:video-pause" class="mr-4px" />暂停任务
+          </el-button>
+          <el-button type="success" @click="handleSubmitComplete" v-if="task?.completeStatus === 'in_progress' || task?.completeStatus === 'delayed'">
+            <Icon icon="ep:circle-check" class="mr-4px" />提交完成
+          </el-button>
+        </template>
         <el-button @click="handleCreateChange" v-if="task?.completeStatus === 'completed'">
           <Icon icon="ep:edit-pen" class="mr-4px" />发起变更
-        </el-button>
-        <el-button @click="handlePause" v-if="task?.completeStatus === 'in_progress' && checkPermi(['pms:task:update'])">
-          <Icon icon="ep:video-pause" class="mr-4px" />暂停任务
-        </el-button>
-        <el-button type="success" @click="handleSubmitComplete" v-if="task?.completeStatus === 'in_progress' || task?.completeStatus === 'delayed'">
-          <Icon icon="ep:circle-check" class="mr-4px" />提交完成
         </el-button>
       </div>
     </div>
@@ -231,7 +233,7 @@
 </template>
 
 <script setup lang="ts">
-import { TaskVO, updateTask } from '@/api/pms/task'
+import { TaskVO, updateTask, getTask } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
 import {
@@ -290,10 +292,16 @@ const delayDays = computed(() => {
 
 // ==================== 方法 ====================
 const open = async (taskData: TaskVO) => {
-  task.value = taskData
   drawerVisible.value = true
+  // 重新获取最新任务数据，避免使用旧对象 (P0 修复: 列表与详情状态不一致)
+  try {
+    const freshTask = await getTask(String(taskData.taskId))
+    task.value = freshTask || taskData
+  } catch {
+    task.value = taskData
+  }
   activeTab.value = 'info'
-  progressForm.progress = taskData.progress || 0
+  progressForm.progress = task.value?.progress || 0
 
   // 优先从 task 数据加载
   progressList.value = task.value?.progressHistory || []
@@ -383,17 +391,29 @@ const handleReportProgress = () => {
 
 const submitProgress = async () => {
   if (!task.value) return
+  // 进度=100 时不自动改状态，提示用户走提交完成流程
+  if (progressForm.progress >= 100) {
+    message.warning('进度达到100%，请点击"提交完成"按钮进入审核流程')
+    return
+  }
   try {
-    // 进度填报不自动完成，必须走提交完成→待审核流程
-    await updateTask({
+    const updateData: any = {
       taskId: task.value.taskId,
-      progress: progressForm.progress,
-      completeStatus: progressForm.progress >= 100 ? 'pending_review' : task.value.completeStatus
-    })
+      progress: progressForm.progress
+    }
+    // 自动状态流转: not_started → in_progress
+    if (progressForm.progress > 0 && task.value.completeStatus === 'not_started') {
+      updateData.completeStatus = 'in_progress'
+    }
+    await updateTask(updateData)
     message.success('进度填报成功')
     showProgressDialog.value = false
+    // 重新获取任务数据，确保状态同步
+    try {
+      const refreshed = await getTask(String(task.value.taskId))
+      if (refreshed) task.value = refreshed
+    } catch { /* ignore */ }
     emit('refresh')
-    if (task.value) task.value.progress = progressForm.progress
   } catch (e) {
     console.error('进度填报失败', e)
     message.error('进度填报失败')

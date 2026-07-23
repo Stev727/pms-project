@@ -523,12 +523,18 @@ const submitCreateTask = async () => {
   if (!valid) return
   submittingTask.value = true
   try {
+    // 生成任务编号: TASK-阶段缩写-3位序号
+    const stageCode = projectStages.value.find(s => s.stageId === taskForm.stageId)?.stageCode || 'GEN'
+    const existingTasks = projectTasks.value.filter(t => String(t.stageId) === String(taskForm.stageId))
+    const seq = String(existingTasks.length + 1).padStart(3, '0')
+    const taskCode = `TASK-${stageCode}-${seq}`
     // 关键修复: helperIds 后端期望 String 或 null, 空数组导致 500
     const submitData = {
       ...taskForm,
       projectId: projectId.value,
       completeStatus: 'not_started',
-      progress: 0
+      progress: 0,
+      taskCode: taskCode
     }
     if (Array.isArray(submitData.helperIds)) {
       submitData.helperIds = submitData.helperIds.length > 0

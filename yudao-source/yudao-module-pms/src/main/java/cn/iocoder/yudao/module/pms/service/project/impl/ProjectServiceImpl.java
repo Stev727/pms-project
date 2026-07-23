@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -51,7 +52,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         // 基于模板复制阶段、任务、依赖
         if (entity.getTemplateId() != null) {
-            copyTemplateTasks(entity.getTemplateId(), projectId);
+            copyTemplateTasks(entity, projectId);
         }
 
         return projectId;
@@ -71,8 +72,9 @@ public class ProjectServiceImpl implements ProjectService {
     /**
      * 复制模板项目的阶段、任务、依赖关系到新项目
      */
-    private void copyTemplateTasks(Long templateId, Long newProjectId) {
+    private void copyTemplateTasks(PmsProjectDO entity, Long newProjectId) {
         // 1. 复制阶段
+        Long templateId = entity.getTemplateId();
         List<PmsProjectStageDO> templateStages = projectStageMapper.selectList(PmsProjectStageDO::getProjectId, templateId);
         if (CollUtil.isEmpty(templateStages)) {
             return;
@@ -104,17 +106,31 @@ public class ProjectServiceImpl implements ProjectService {
         templateTasks.sort(Comparator.comparingInt(t -> t.getSortOrder() == null ? 0 : t.getSortOrder()));
 
         Map<Long, Long> taskIdMap = new HashMap<>();
+        // P0-02 修复: 根据项目 planStartDate 和任务 cycle 计算每个任务的计划日期
+        LocalDate projectStartDate = entity.getPlanStartDate();
+        LocalDate projectEndDate = entity.getPlanEndDate();
         for (PmsTaskDO task : templateTasks) {
             PmsTaskDO newTask = new PmsTaskDO();
             BeanUtil.copyProperties(task, newTask,
                     "taskId", "projectId", "stageId", "parentTaskId", "actualCompleteDate",
                     "completeStatus", "progress", "isDispatched", "dispatchTime",
                     "delayDate", "delayLevel", "exceptionReason", "improvementPlan",
-                    "reviewOpinion", "actualHours");
+                    "reviewOpinion", "actualHours", "planStartDate", "planEndDate");
             newTask.setProjectId(newProjectId);
             newTask.setStageId(stageIdMap.get(task.getStageId()));
             newTask.setCompleteStatus("not_started");
             newTask.setProgress(0);
+            // 计算任务计划日期: planStartDate = 项目开始日期, planEndDate = planStartDate + cycle 天
+            if (projectStartDate != null) {
+                Integer cycle = task.getCycle() != null ? task.getCycle() : 5;
+                LocalDate taskStart = projectStartDate;
+                LocalDate taskEnd = taskStart.plusDays(cycle);
+                if (projectEndDate != null && taskEnd.isAfter(projectEndDate)) {
+                    taskEnd = projectEndDate;
+                }
+                newTask.setPlanStartDate(taskStart);
+                newTask.setPlanEndDate(taskEnd);
+            }
             taskMapper.insert(newTask);
             taskIdMap.put(task.getTaskId(), newTask.getTaskId());
         }

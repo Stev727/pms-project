@@ -201,7 +201,7 @@
           <el-table-column prop="roleName" label="负责角色" width="120" />
           <el-table-column label="责任人" width="100">
             <template #default="{ row }">
-              <span v-if="!row.isStage">{{ row.ownerName || row.roleName || '未指定' }}</span>
+              <span v-if="!row.isStage">{{ row.ownerName || (row.mainOwnerId ? getManagerName(row.mainOwnerId) : '未指派') }}</span>
             </template>
           </el-table-column>
           <el-table-column label="计划开始" width="110">
@@ -213,7 +213,7 @@
           <el-table-column prop="priority" label="优先级" width="80">
             <template #default="{ row }">
               <span v-if="!row.isStage" :style="{ color: priorityMap[row.priority]?.color }">
-                {{ priorityMap[row.priority]?.label || row.priority }}
+                {{ priorityMap[row.priority]?.label || '普通' }}
               </span>
             </template>
           </el-table-column>
@@ -326,6 +326,7 @@
             <el-descriptions-item label="项目类型">{{ getTypeLabel(projectForm.projectType) }}</el-descriptions-item>
             <el-descriptions-item label="优先级">{{ priorityMap[projectForm.priority]?.label || '-' }}</el-descriptions-item>
             <el-descriptions-item label="项目经理">{{ getManagerName(projectForm.projectManagerId) }}</el-descriptions-item>
+            <el-descriptions-item label="所属部门">{{ getDeptName(projectForm.deptId) }}</el-descriptions-item>
             <el-descriptions-item label="计划周期">{{ projectForm.planStartDate }} ~ {{ projectForm.planEndDate }} ({{ totalDays }}天)</el-descriptions-item>
             <el-descriptions-item label="项目预算">{{ projectForm.budget ? '￥' + projectForm.budget : '-' }}</el-descriptions-item>
             <el-descriptions-item label="重点项目">{{ projectForm.isKeyProject ? '是' : '否' }}</el-descriptions-item>
@@ -478,8 +479,27 @@ function getTypeLabel(type: string): string {
   return projectTypeOptions.find(o => o.value === type)?.label || type || '-'
 }
 
-function getManagerName(id?: number): string {
-  return userList.value.find(u => u.id === id)?.nickname || '-'
+function getManagerName(id?: number | string): string {
+  if (id === undefined || id === null) return '-'
+  const idStr = String(id)
+  return userList.value.find(u => String(u.id) === idStr)?.nickname || '-'
+}
+
+// P2-01: 确认页显示所属部门
+function getDeptName(id?: number | string): string {
+  if (!id) return '-'
+  const idStr = String(id)
+  const findDept = (nodes: any[]): any => {
+    for (const n of nodes || []) {
+      if (String(n.id) === idStr) return n
+      if (n.children) {
+        const found = findDept(n.children)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  return findDept(deptTree.value)?.name || '-'
 }
 
 async function selectTemplate(id: number | string) {

@@ -93,6 +93,10 @@
           <template v-if="!row.isStageRow">
             <!-- 状态流转按钮 -->
             <el-button
+              v-if="canTransition(row, 'start')"
+              link type="primary" size="small" @click.stop="handleTransition(row, 'start')"
+            >开始任务</el-button>
+            <el-button
               v-if="canTransition(row, 'dispatch')"
               link type="primary" size="small" @click.stop="handleTransition(row, 'dispatch')"
             >派发</el-button>
@@ -306,6 +310,7 @@ const filteredTreeData = computed<TreeRow[]>(() => {
 
 // ==================== 状态流转逻辑 ====================
 const transitionRules: Record<string, { from: string[]; to: string; label: string; roles: string[] }> = {
+  start: { from: ['not_started'], to: 'in_progress', label: '开始任务', roles: ['main_owner', 'pm'] },
   dispatch: { from: ['not_started'], to: 'pending_accept', label: '派发任务', roles: ['pm'] },
   accept: { from: ['pending_accept'], to: 'in_progress', label: '接收任务', roles: ['assignee'] },
   reject: { from: ['pending_accept'], to: 'rejected', label: '拒绝任务', roles: ['assignee'] },
@@ -333,6 +338,7 @@ function canTransition(row: TreeRow, action: string): boolean {
   // assignee 角色仅可执行自己的任务操作
   if (rule.roles.includes('pm') && hasPmPerm) return true
   if (rule.roles.includes('assignee') && isOwner) return true
+  if (rule.roles.includes('main_owner') && isOwner) return true
   if (rule.roles.includes('reviewer') && hasPmPerm) return true
   return false
 }

@@ -111,7 +111,7 @@ const dialogTitle = ref('')
 const mode = ref<'create' | 'update'>('create')
 const deptTree = ref<any[]>([])
 // P1-02: 使用 useUserNames 的远程搜索功能替代全量加载
-const { ensureLoaded: ensureUsers, getUserName, searchUsers, remoteUserList, remoteLoading } = useUserNames()
+const { ensureLoaded: ensureUsers, getUserName, userList, searchUsers, remoteUserList, remoteLoading } = useUserNames()
 
 const defaultForm: ProjectVO = {
   projectId: undefined,
@@ -172,6 +172,18 @@ const open = async (type: 'create' | 'update', data?: ProjectVO) => {
 
   if (data) {
     Object.assign(formData, data)
+    // P1-02: 确保 projectManagerId 为字符串，与 el-option :value="String(u.id)" 类型匹配
+    if (formData.projectManagerId !== undefined && formData.projectManagerId !== null) {
+      const mgrIdStr = String(formData.projectManagerId)
+      formData.projectManagerId = mgrIdStr as any
+      // P1-02: 将当前项目经理加入 remoteUserList，使 el-select 能显示姓名
+      if (!remoteUserList.value.find(u => String(u.id) === mgrIdStr)) {
+        const mgrUser = userList.value.find(u => String(u.id) === mgrIdStr)
+        if (mgrUser) {
+          remoteUserList.value = [mgrUser]
+        }
+      }
+    }
   } else {
     Object.assign(formData, defaultForm)
     // 自动生成项目编号
