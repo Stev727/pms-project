@@ -214,6 +214,7 @@ import { useAppStore } from '@/store/modules/app'
 defineOptions({ name: 'PmsProject' })
 
 const { push } = useRouter()
+const route = useRoute()
 const message = useMessage()
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const appStore = useAppStore()
@@ -421,9 +422,17 @@ const goDetail = (project: ProjectVO) => {
   push({ name: 'PmsProjectDetail', params: { id: project.projectId } })
 }
 
-onMounted(() => {
+onMounted(async () => {
   ensureUsersLoaded()
-  loadList()
+  await loadList()
+  // 检查是否从详情页跳转过来编辑
+  const editId = route.query.edit
+  if (editId) {
+    const target = projectList.value.find(p => String(p.projectId) === String(editId))
+    if (target) {
+      handleEdit(target)
+    }
+  }
 })
 </script>
 

@@ -60,6 +60,10 @@
             <el-option label="管理层" value="management" />
             <el-option label="外部成员" value="external" />
             <el-option label="系统管理员" value="admin" />
+            <el-option label="开发工程师" value="developer" />
+            <el-option label="硬件工程师" value="hw_engineer" />
+            <el-option label="软件工程师" value="sw_engineer" />
+            <el-option label="结构工程师" value="mechanical_engineer" />
           </el-select>
         </el-form-item>
         <el-form-item label="是否外部">
@@ -104,14 +108,16 @@ const editing = ref<any>(null)
 const form = reactive({
   memberId: undefined as any,
   userId: undefined as any,
-  roleCode: 'hw_engineer',
+  roleCode: 'developer',
   isExternal: false,
   status: 'active'
 })
 
 const roleLabelMap: Record<string, string> = {
   pm: '项目经理', dept_head: '部门负责人', main_owner: '主责任人',
-  helper: '协助人', management: '管理层', external: '外部成员', admin: '系统管理员'
+  helper: '协助人', management: '管理层', external: '外部成员', admin: '系统管理员',
+  developer: '开发工程师', hw_engineer: '硬件工程师', sw_engineer: '软件工程师',
+  mechanical_engineer: '结构工程师', project_manager: '项目经理'
 }
 
 function getRoleLabel(code: string): string { return roleLabelMap[code] || code || '-' }
@@ -127,7 +133,7 @@ function handleAdd() {
   editing.value = null
   form.memberId = undefined
   form.userId = undefined
-  form.roleCode = 'hw_engineer'
+  form.roleCode = 'developer'
   form.isExternal = false
   form.status = 'active'
   showDialog.value = true

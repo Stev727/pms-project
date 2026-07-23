@@ -126,6 +126,7 @@ const submitCreateApproval = async () => {
       projectId: String(createForm.projectId),
       approvalNo: createForm.approvalTitle,
       remark: createForm.remark,
+      approvalOpinion: createForm.remark || '',
       approvalStatus: 'pending'
     } as any)
     ElMessage.success('审批已发起，将推送至OA系统')
@@ -169,8 +170,8 @@ async function doApprove(row: any, approve: boolean) {
       ...row,
       approvalStatus: approve ? 'approved' : 'rejected'
     })
-    row.approvalStatus = approve ? 'approved' : 'rejected'
     ElMessage.success(`已${approve ? '通过' : '驳回'}`)
+    await loadData()
   } catch (e) {
     if (e !== 'cancel') {
       console.error(e)

@@ -333,7 +333,9 @@ const submitCreate = async () => {
       projectId: createForm.projectId,
       issueDescription: createForm.title,
       severity: createForm.severity,
-      assigneeId: createForm.owner ? Number(createForm.owner) : undefined,      impactScope: createForm.description,
+      assigneeId: createForm.owner ? Number(createForm.owner) : undefined,
+      responsiblePerson: createForm.owner || '',
+      impactScope: createForm.description,
       status: 'new'
     } as QualityIssueVO)
     message.success('质量问题已创建')

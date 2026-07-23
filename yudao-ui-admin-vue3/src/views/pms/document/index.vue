@@ -111,7 +111,8 @@ defineOptions({ name: 'PmsDocument' })
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const uploadHeaders = computed(() => ({
-  Authorization: 'Bearer ' + getAccessToken()
+  Authorization: 'Bearer ' + getAccessToken(),
+  'tenant-id': '1'
 }))
 
 const searchName = ref('')

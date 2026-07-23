@@ -110,7 +110,7 @@
               </el-table-column>
               <el-table-column label="操作" width="80">
                 <template #default="{ row }">
-                  <el-button link type="primary" size="small" @click="viewDeliverable(row)">查看</el-button>
+                  <el-button link type="primary" size="small" @click="handleViewOutput(row)">查看</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -246,6 +246,7 @@ defineOptions({ name: 'TaskDetailDrawer' })
 const emit = defineEmits<{
   (e: 'refresh'): void
   (e: 'edit', task: TaskVO): void
+  (e: 'upload', task: TaskVO): void
   (e: 'create-change', task: TaskVO): void
 }>()
 const message = useMessage()
@@ -293,6 +294,11 @@ const open = async (taskData: TaskVO) => {
   drawerVisible.value = true
   activeTab.value = 'info'
   progressForm.progress = taskData.progress || 0
+
+  // 优先从 task 数据加载
+  progressList.value = task.value?.progressHistory || []
+  outputList.value = task.value?.outputList || []
+  changeList.value = task.value?.changeList || []
 
   // 加载进度记录、输出物、变更记录
   await loadProgressList()
@@ -366,6 +372,7 @@ const formatFileSize = (bytes?: number) => {
 const handleEdit = () => {
   if (task.value) {
     emit('edit', task.value)
+    drawerVisible.value = false
   }
 }
 
@@ -396,6 +403,7 @@ const submitProgress = async () => {
 const handleCreateChange = () => {
   if (task.value) {
     emit('create-change', task.value)
+    drawerVisible.value = false
   }
 }
 
@@ -449,16 +457,18 @@ const confirmSubmitComplete = async () => {
 }
 
 const handleUpload = () => {
-  fileInputRef.value?.click()
+  if (task.value) {
+    emit('upload', task.value)
+  }
 }
 
-const viewDeliverable = (row: any) => {
-  if (row.storagePath) {
-    window.open(row.storagePath, '_blank')
-  } else if (row._file) {
-    message.info(`文件 "${row.fileName}" 尚未上传到服务器`)
+const handleViewOutput = (item: any) => {
+  if (item?.storagePath) {
+    window.open(item.storagePath, '_blank')
+  } else if (item?.fileName) {
+    message.info('文档: ' + item.fileName)
   } else {
-    message.info(`文件 "${row.fileName}" 暂无在线预览地址`)
+    message.info('暂无可查看的内容')
   }
 }
 
@@ -500,7 +510,8 @@ const handleSubmitReview = async () => {
     const updateData: any = {
       taskId: task.value.taskId,
       completeStatus: statusMap[reviewForm.result] || task.value.completeStatus,
-      opinion: reviewForm.opinion
+      opinion: reviewForm.opinion,
+      reviewOpinion: reviewForm.opinion || ''
     }
     // 审核通过时设置实际完成日期为当前时间（PM审核通过时间）
     if (reviewForm.result === 'approved') {

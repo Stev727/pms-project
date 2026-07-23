@@ -757,7 +757,7 @@ async function submitCreate() {
     clearDraft()
     ElMessage.success('项目创建成功！')
     // P1-2: 安全提取 projectId，res 为 undefined 时有合理的错误处理
-    const projectId = res ? ((res as any)?.projectId || (res as any)) : undefined
+    const projectId = res ? ((res as any)?.projectId || (res as any)?.data || (res as any)) : undefined
     if (!projectId) {
       ElMessage.error('创建成功但未获取到项目ID，请刷新列表查看')
       router.push('/pms/project')

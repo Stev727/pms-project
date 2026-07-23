@@ -142,16 +142,20 @@ const delayTasks = computed(() => {
     let startDate: Date
     switch (timeRange.value) {
       case 'week':
+        // 7天前
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
         break
       case 'month':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
+        // 本月1日
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1)
         break
       case 'quarter':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+        // 本季度首日
+        startDate = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
         break
       case 'year':
-        startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
+        // 本年1月1日
+        startDate = new Date(now.getFullYear(), 0, 1)
         break
       default:
         return tasks

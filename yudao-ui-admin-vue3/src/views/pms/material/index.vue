@@ -302,15 +302,13 @@ function openDetail(row: any) {
 async function urge(row: any) {
   try {
     await updateMaterialTrack({
-      trackId: row.trackId,
-      materialName: row.materialName,
-      supplier: row.supplier,
-      planOrderDate: row.planOrderDate,
-      planDeliveryDate: row.planDeliveryDate,
-      currentStatus: row.currentStatus || 'delayed',
-      warningStatus: row.warningStatus
+      ...row,
+      lastUrgeTime: Date.now(),
+      urgeCount: (row.urgeCount || 0) + 1
     })
-    // 同时更新前端记录
+    // 更新前端记录
+    row.urgeCount = (row.urgeCount || 0) + 1
+    row.lastUrgeTime = Date.now()
     if (!row.urgeLogs) row.urgeLogs = []
     row.urgeLogs.push({ date: new Date().toLocaleString(), operator: '当前用户', result: '催交通知已发送' })
     ElMessage.success(`已向「${row.supplier}」发送催交通知`)

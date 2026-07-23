@@ -146,10 +146,10 @@ function getCategoryLabel(c: string): string {
   return { design: '设计问题', process: '工艺问题', material: '物料问题', testing: '测试问题', other: '其他' }[c] || c
 }
 function getStatusLabel(s: string): string {
-  return { open: '待处理', assigned: '已指派', in_progress: '处理中', processing: '处理中', pending_verify: '待验证', closed: '已关闭' }[s] || s
+  return { new: '新建', open: '待处理', assigned: '已指派', in_progress: '处理中', processing: '处理中', pending_verify: '待验证', resolved: '已解决', closed: '已关闭' }[s] || s
 }
 function getStatusColor(s: string): string {
-  return { open: '#F53F3F', assigned: '#2468F2', in_progress: '#FF7D00', processing: '#FF7D00', pending_verify: '#FF7D00', closed: '#00B42A' }[s] || '#86909C'
+  return { new: '#86909C', open: '#F53F3F', assigned: '#2468F2', in_progress: '#FF7D00', processing: '#FF7D00', pending_verify: '#FF7D00', resolved: '#00B42A', closed: '#00B42A' }[s] || '#86909C'
 }
 
 function openDetail(row: any) { selected.value = row; drawerVisible.value = true }
