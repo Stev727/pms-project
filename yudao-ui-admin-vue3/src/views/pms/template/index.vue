@@ -346,7 +346,7 @@
 <script setup lang="ts">
 import { getProjectList, updateProject, createProject, ProjectVO } from '@/api/pms/project'
 import { getTaskList, updateTask, createTask, deleteTask, TaskVO } from '@/api/pms/task'
-import { getStageList, updateStage, StageVO } from '@/api/pms/stage'
+import { getStageList, createStage, updateStage, StageVO } from '@/api/pms/stage'
 import { dateFormatter } from '@/utils/formatTime'
 
 defineOptions({ name: 'PmsTemplate' })
@@ -625,24 +625,56 @@ const saveEdit = async () => {
       description: editForm.description
     } as ProjectVO)
 
-    // 2. 保存修改的阶段（并行，收集错误）
+    // 2. 保存修改的阶段（新增/更新，并行，收集错误）
+    // 关键: 记录临时 stageId -> 真实 stageId 的映射，供后续任务使用
+    const stageIdMap: Record<string, string> = {}
+    const stagesToSave = editStageList.value
+      .filter(stage => stage.stageId && !editDeletedStageIds.value.includes(stage.stageId))
     const stageResults = await Promise.allSettled(
-      editStageList.value
-        .filter(stage => stage.stageId && !editDeletedStageIds.value.includes(stage.stageId))
-        .map(stage => updateStage(stage))
+      stagesToSave.map(stage => {
+        const oldStageId = String(stage.stageId)
+        const stageData = {
+          ...stage,
+          projectId: editForm.projectId
+        }
+        if (oldStageId.startsWith('new_')) {
+          return createStage({
+            ...stageData,
+            stageId: undefined
+          }).then(res => {
+            if (res && res.data) {
+              stageIdMap[oldStageId] = String(res.data)
+              // 同步更新前端 editStageList 中的 stageId 为真实ID
+              const idx = editStageList.value.findIndex(s => String(s.stageId) === oldStageId)
+              if (idx !== -1) editStageList.value[idx].stageId = String(res.data)
+            }
+            return res
+          })
+        } else {
+          return updateStage(stageData)
+        }
+      })
     )
+    const filteredStages = editStageList.value.filter(stage => stage.stageId && !editDeletedStageIds.value.includes(stage.stageId))
     stageResults.forEach((r, i) => {
-      if (r.status === 'rejected') errors.push(`阶段「${editStageList.value[i]?.stageName || '未知'}」保存失败: ${r.reason}`)
+      if (r.status === 'rejected') errors.push(`阶段「${filteredStages[i]?.stageName || '未知'}」保存失败: ${r.reason}`)
     })
 
     // 3. 保存修改的任务（新增/更新，并行，收集错误）
+    // 关键: 任务的 stageId 可能引用临时阶段ID, 需要替换为真实ID
     const taskResults = await Promise.allSettled(
       editTaskList.value
         .filter(task => !editDeletedTaskIds.value.includes(task.taskId))
         .map(task => {
+          // 替换 stageId: 如果引用的是临时ID, 用映射中的真实ID
+          let realStageId = task.stageId
+          if (task.stageId && stageIdMap[String(task.stageId)]) {
+            realStageId = stageIdMap[String(task.stageId)]
+          }
           const taskData = {
             ...task,
-            projectId: editForm.projectId
+            projectId: editForm.projectId,
+            stageId: realStageId
           }
           if (task.taskId && !String(task.taskId).startsWith('new_')) {
             return updateTask(taskData)
@@ -654,9 +686,9 @@ const saveEdit = async () => {
           }
         })
     )
+    const filteredTasks = editTaskList.value.filter(task => !editDeletedTaskIds.value.includes(task.taskId))
     taskResults.forEach((r, i) => {
       if (r.status === 'rejected') {
-        const filteredTasks = editTaskList.value.filter(task => !editDeletedTaskIds.value.includes(task.taskId))
         errors.push(`任务「${filteredTasks[i]?.taskName || '未知'}」保存失败: ${r.reason}`)
       }
     })
