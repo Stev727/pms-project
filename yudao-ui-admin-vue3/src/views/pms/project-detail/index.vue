@@ -246,6 +246,16 @@
         <el-form-item label="任务描述">
           <el-input v-model="taskForm.description" type="textarea" :rows="3" placeholder="请输入任务描述" />
         </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="预估工时">
+              <el-input-number v-model="taskForm.estimatedHours" :min="0" :precision="1" :step="0.5" class="w-full" placeholder="小时" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="完成标准">
+          <el-input v-model="taskForm.completionStandard" type="textarea" :rows="2" placeholder="请输入任务完成标准" />
+        </el-form-item>
         <el-form-item label="输出物要求">
           <el-input v-model="taskForm.outputRequirement" type="textarea" :rows="2" placeholder="请输入输出物要求" />
         </el-form-item>
@@ -346,13 +356,16 @@ const taskForm = reactive({
   helperIds: [] as number[],
   isMilestone: false,
   description: '',
-  outputRequirement: ''
+  outputRequirement: '',
+  completionStandard: '',
+  estimatedHours: undefined as number | undefined
 })
 const taskFormRules = {
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   stageId: [{ required: true, message: '请选择所属阶段', trigger: 'change' }],
   planStartDate: [{ required: true, message: '请选择计划开始日期', trigger: 'change' }],
-  planEndDate: [{ required: true, message: '请选择计划结束日期', trigger: 'change' }]
+  planEndDate: [{ required: true, message: '请选择计划结束日期', trigger: 'change' }],
+  mainOwnerId: [{ required: true, message: '请选择责任人', trigger: 'change' }]
 }
 const submittingTask = ref(false)
 
@@ -411,8 +424,19 @@ const loadProjectData = async () => {
       getStageList()
     ])
     project.value = proj
-    projectTasks.value = (tasks || []).filter((t: TaskVO) => String(t.projectId) === String(projectId.value))
-    projectStages.value = (stages || []).filter((s: StageVO) => String(s.projectId) === String(projectId.value))
+    // P0-04: 确保按 projectId 过滤任务和阶段，使用字符串比较避免雪花ID精度丢失
+    projectTasks.value = (tasks || []).filter((t: TaskVO) =>
+      String(t.projectId) === String(projectId.value)
+    )
+    projectStages.value = (stages || []).filter((s: StageVO) =>
+      String(s.projectId) === String(projectId.value)
+    )
+    // P0-04: 调试日志 - 确认数据加载情况
+    console.log('[PMS] loadProjectData:', {
+      projectId: projectId.value,
+      taskCount: projectTasks.value.length,
+      stageCount: projectStages.value.length
+    })
     // P1: 每次加载数据后更新任务依赖关系
     updateTaskDependencies()
   } catch (e) {
@@ -461,7 +485,7 @@ const openCreateTaskDialog = () => {
   Object.assign(taskForm, {
     taskName: '', stageId: projectStages.value[0]?.stageId, taskType: 'design',
     priority: 'normal', cycle: 5, planStartDate: '', planEndDate: '',
-    mainOwnerId: undefined, helperIds: [], isMilestone: false,
+    mainOwnerId: undefined, helperIds: [], isMilestone: false, completionStandard: '', estimatedHours: undefined,
     description: '', outputRequirement: ''
   })
   createTaskDialogVisible.value = true
@@ -542,7 +566,8 @@ const handleDelete = () => {
   }).catch(() => {})
 }
 
-const goBack = () => { back() }
+// P1-05 修复: 返回项目列表而非 router.back()，避免回到创建页触发草稿恢复
+const goBack = () => { push('/pms/project') }
 
 // 部门名称解析 — P1: 改为 computed 确保 deptList 加载后自动刷新
 const deptList = ref<any[]>([])

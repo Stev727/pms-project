@@ -192,7 +192,7 @@ async function confirmApproval() {
     })
     approvalCommentVisible.value = false
     ElMessage.success(`已${approvalAction.value ? '通过' : '驳回'}`)
-    loadApprovals()
+    await loadApprovals()
   } catch (e) { console.error(e); ElMessage.error('操作失败') }
 }
 

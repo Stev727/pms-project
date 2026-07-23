@@ -712,6 +712,8 @@ function restoreDraft() {
 }
 
 function clearDraft() {
+  // P1-05 修复: 先停止自动保存定时器，防止竞态条件重新写入草稿
+  stopAutoSaveDraft()
   localStorage.removeItem(DRAFT_KEY)
 }
 
@@ -722,6 +724,23 @@ function startAutoSaveDraft() {
 }
 function stopAutoSaveDraft() {
   if (draftTimer) { clearInterval(draftTimer); draftTimer = null }
+}
+
+// P0-03: 日期计算辅助函数 - 根据 planStartDate + cycle 计算 planEndDate
+const addDays = (dateStr: string, days: number): string => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
+// P0-03: 计算任务的计划结束日期，并确保不超过项目 planEndDate
+const calcTaskPlanEndDate = (task: any): string => {
+  const end = task.planEndDate || addDays(projectForm.planStartDate, task.cycle || 5)
+  if (projectForm.planEndDate && end > projectForm.planEndDate) {
+    return projectForm.planEndDate
+  }
+  return end
 }
 
 async function submitCreate() {
@@ -751,8 +770,8 @@ async function submitCreate() {
           : null,
         description: t.description || '',
         outputRequirement: t.outputRequirement || '',
-        planStartDate: t.planStartDate,
-        planEndDate: t.planEndDate,
+        planStartDate: t.planStartDate || projectForm.planStartDate,
+        planEndDate: calcTaskPlanEndDate(t),
         roleName: t.roleName
       }))
     }

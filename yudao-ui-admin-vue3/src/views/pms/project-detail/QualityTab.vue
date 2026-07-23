@@ -175,7 +175,7 @@ async function submitIssue() {
       rootCauseDetail: newIssue.rootCause,
       solution: newIssue.solution,
       source: newIssue.source,
-      impactScope: newIssue.source,
+      impactScope: '',
       projectId: props.projectId,
       status: 'open'
     } as any)

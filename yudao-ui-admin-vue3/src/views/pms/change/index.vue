@@ -253,7 +253,7 @@ async function submitChange() {
       changeDescription: newChange.title,
       changeType: newChange.type,
       changeReason: newChange.reason,
-      projectId: newChange.projectId,
+      projectId: String(newChange.projectId),
       beforeContent: newChange.beforeContent,
       afterContent: newChange.afterContent,
       urgent: newChange.urgent,

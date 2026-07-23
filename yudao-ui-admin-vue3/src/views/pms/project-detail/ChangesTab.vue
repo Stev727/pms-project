@@ -263,7 +263,7 @@ async function submitChange() {
       changeDescription: newChange.title,
       changeType: newChange.type,
       changeReason: newChange.reason,
-      projectId: Number(props.projectId),
+      projectId: props.projectId,
       affectedTasks: newChange.affectedTasks,
       beforeContent: newChange.beforeContent,
       afterContent: newChange.afterContent,

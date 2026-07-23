@@ -18,7 +18,7 @@
               <el-input v-model="searchName" placeholder="搜索文档名" clearable style="width: 180px" />
               <el-button @click="searchDocs">查询</el-button>
             </div>
-            <el-upload action="/admin-api/infra/file/upload" :headers="uploadHeaders" :show-file-list="false" :on-success="handleUploadSuccess" v-if="checkPermi(['pms:document:create'])">
+            <el-upload action="/admin-api/infra/file/upload" :headers="uploadHeaders" :show-file-list="false" :on-success="handleUploadSuccess" :on-error="handleUploadError" v-if="checkPermi(['pms:document:create'])">
               <el-button type="primary" size="small"><el-icon><Upload /></el-icon> 上传文档</el-button>
             </el-upload>
           </div>
@@ -190,6 +190,11 @@ function removeDoc(row: any) {
 
 async function handleUploadSuccess(response: any) {
   try {
+    // yudao 框架响应: { code: 0, data: 'url', msg: 'success' }
+    if (response && typeof response === 'object' && response.code !== 0) {
+      ElMessage.error(response.msg || '文件上传失败')
+      return
+    }
     const fileUrl = response?.data || response
     const fileName = fileUrl?.split('/').pop() || '未命名文档'
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
@@ -207,6 +212,10 @@ async function handleUploadSuccess(response: any) {
     console.error(e)
     ElMessage.error('文档保存失败')
   }
+}
+
+function handleUploadError() {
+  ElMessage.error('文件上传失败，请检查网络或文件大小')
 }
 
 async function loadDocuments() {

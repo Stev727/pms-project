@@ -62,6 +62,16 @@ public class PmsQualityIssueDO extends TenantBaseDO {
     private String rootCauseDetail;
 
     /**
+     * 责任人
+     */
+    private String responsiblePerson;
+
+    /**
+     * 来源
+     */
+    private String source;
+
+    /**
      * 指派人ID
      */
     private Long assigneeId;

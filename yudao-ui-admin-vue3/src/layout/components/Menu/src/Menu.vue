@@ -794,4 +794,14 @@ $prefix-cls: #{$namespace}-menu-popper;
     }
   }
 }
+
+// P1-01 修复: 折叠侧栏悬浮菜单遮挡内容区点击
+// popper 容器不拦截鼠标事件，仅实际菜单列表接收事件
+// 鼠标离开侧栏后 popper 会在 ~300ms 后关闭，不再拦截内容区点击
+.#{$prefix-cls}--vertical {
+  pointer-events: none;
+  .el-menu--popup {
+    pointer-events: auto;
+  }
+}
 </style>

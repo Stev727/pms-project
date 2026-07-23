@@ -18,6 +18,7 @@
           :headers="uploadHeaders"
           :show-file-list="false"
           :on-success="handleUploadSuccess"
+          :on-error="handleUploadError"
           v-if="checkPermi(['pms:document:create'])"
         >
           <el-button type="primary" size="small"><Icon icon="ep:upload" class="mr-4px" />上传文档</el-button>
@@ -127,6 +128,7 @@ const props = defineProps<{
 const uploadHeaders = computed(() => ({
   Authorization: 'Bearer ' + getAccessToken()
 }))
+const loading = ref(false)
 const searchName = ref('')
 const filterCategory = ref('')
 const documentList = ref<any[]>([])
@@ -216,6 +218,11 @@ function handleBatchDownload() {
 
 async function handleUploadSuccess(response: any, uploadFile: any) {
   try {
+    // yudao 框架响应: { code: 0, data: 'url', msg: 'success' }
+    if (response && typeof response === 'object' && response.code !== 0) {
+      ElMessage.error(response.msg || '文件上传失败')
+      return
+    }
     const fileUrl = response?.data || response
     const fileName = uploadFile?.name || fileUrl?.split('/').pop() || '未命名文档'
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
@@ -239,6 +246,10 @@ async function handleUploadSuccess(response: any, uploadFile: any) {
     ElMessage.success(`文档上传成功（版本 v${versionNo}）`)
     await loadDocuments()
   } catch (e) { console.error(e); ElMessage.error('文档保存失败') }
+}
+
+function handleUploadError() {
+  ElMessage.error('文件上传失败，请检查网络或文件大小')
 }
 
 async function loadDocuments() {

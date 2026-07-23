@@ -10,6 +10,8 @@ export interface QualityIssueVO {
   impactScope?: string
   rootCauseCategory?: string
   rootCauseDetail?: string
+  responsiblePerson?: string
+  source?: string
   assigneeId?: number
   resolverId?: number
   verifierId?: number

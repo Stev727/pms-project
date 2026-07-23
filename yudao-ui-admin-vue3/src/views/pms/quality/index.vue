@@ -65,6 +65,9 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="来源" width="90">
+          <template #default="{ row }">{{ row.source || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="owner" label="负责人" width="90" />
         <el-table-column label="发现日期" width="110">
           <template #default="{ row }">{{ formatDate(row.foundDate) }}</template>
@@ -235,7 +238,7 @@ const fetchList = async () => {
       ...item,
       issueNo: item.issueCode || '',
       title: item.issueDescription || '',
-      owner: item.assigneeId ? getUserName(item.assigneeId) : (item.resolverId ? getUserName(item.resolverId) : '-'),
+      owner: item.responsiblePerson || (item.assigneeId ? getUserName(item.assigneeId) : (item.resolverId ? getUserName(item.resolverId) : '-')),
       foundDate: item.createTime || '',
       phase: item.rootCauseCategory || '',
       description: item.impactScope || item.rootCauseDetail || '',

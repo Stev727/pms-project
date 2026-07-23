@@ -351,13 +351,24 @@ const zoomOut = () => {
 }
 
 // ==================== 生命周期 ====================
-watch(() => props.tasks, () => {
-  nextTick(() => renderGantt())
-}, { deep: true })
+// P0-04: 同时监听 tasks、stages、dependencies，任一变化都重新渲染甘特图
+watch(
+  [() => props.tasks, () => props.stages, () => props.dependencies],
+  () => {
+    nextTick(() => renderGantt())
+  },
+  { deep: true }
+)
 
+// P0-04: onMounted 渲染增加重试机制，确保 ganttRef 就绪后再初始化
 onMounted(() => {
   nextTick(() => {
-    renderGantt()
+    if (ganttRef.value) {
+      renderGantt()
+    } else {
+      // 容错: DOM 未就绪时再等一个 tick 重试
+      nextTick(() => renderGantt())
+    }
   })
 })
 

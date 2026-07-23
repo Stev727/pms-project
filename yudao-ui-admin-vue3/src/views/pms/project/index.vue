@@ -109,6 +109,7 @@
                 <div class="meta-row">
                   <Icon icon="ep:document" class="meta-icon" />
                   <span>任务统计</span>
+                  <span style="margin-left: 4px; color: #1D2129; font-weight: 500">{{ getTaskCount(project) }}</span>
                   <el-tag v-if="project.delayCount > 0" type="danger" size="small" effect="plain" style="margin-left: auto">
                     {{ project.delayCount }} 延期
                   </el-tag>
@@ -354,6 +355,11 @@ const getDelayCountForProject = (project: ProjectVO) => {
     if (t.completeStatus === 'completed' || t.completeStatus === 'cancelled') return false
     return calcDelayDays(t.planEndDate, t.completeStatus) > 0
   }).length
+}
+
+// P2-03 修复: 统计项目任务数
+const getTaskCount = (project: ProjectVO) => {
+  return taskList.value.filter(t => String(t.projectId) === String(project.projectId)).length
 }
 
 const handleTableSelection = (rows: ProjectVO[]) => {

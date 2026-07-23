@@ -155,7 +155,7 @@ async function saveMember() {
   try {
     const data = {
       memberId: form.memberId,
-      projectId: Number(props.projectId),
+      projectId: props.projectId,
       userId: form.userId,
       roleCode: form.roleCode,
       isExternal: form.isExternal,
