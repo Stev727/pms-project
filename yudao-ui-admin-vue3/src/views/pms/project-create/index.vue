@@ -2,10 +2,25 @@
   <div class="pms-project-create">
     <ContentWrap>
       <!-- 步骤条 (3 steps) -->
-      <el-steps :active="currentStep" finish-status="success" align-center class="mb-30px">
-        <el-step title="选择模板与成员" icon="Document" />
-        <el-step title="调整任务" icon="List" />
-        <el-step title="规则与确认" icon="Check" />
+      <el-steps :active="currentStep" finish-status="success" align-center class="mb-30px" :key="currentStep">
+        <el-step
+          title="选择模板与成员"
+          :status="currentStep === 0 ? 'process' : currentStep > 0 ? 'finish' : 'wait'"
+        >
+          <template #icon><el-icon><Document /></el-icon></template>
+        </el-step>
+        <el-step
+          title="调整任务"
+          :status="currentStep === 1 ? 'process' : currentStep > 1 ? 'finish' : 'wait'"
+        >
+          <template #icon><el-icon><List /></el-icon></template>
+        </el-step>
+        <el-step
+          title="规则与确认"
+          :status="currentStep === 2 ? 'process' : 'wait'"
+        >
+          <template #icon><el-icon><Check /></el-icon></template>
+        </el-step>
       </el-steps>
 
       <!-- 步骤1: 选择模板 + 填写信息 + 选择成员 -->
@@ -462,7 +477,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { Document, CircleCheckFilled, ArrowRight, ArrowLeft, Plus, Folder, Star, Check } from '@element-plus/icons-vue'
+import { Document, List, CircleCheckFilled, ArrowRight, ArrowLeft, Plus, Folder, Star, Check } from '@element-plus/icons-vue'
 import { getProjectList, getProject, createProjectBundle, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { getTaskList, TaskVO } from '@/api/pms/task'
