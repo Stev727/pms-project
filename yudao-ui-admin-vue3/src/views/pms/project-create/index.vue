@@ -1,17 +1,17 @@
 <template>
   <div class="pms-project-create">
     <ContentWrap>
-      <!-- 步骤条 -->
+      <!-- 步骤条 (3 steps) -->
       <el-steps :active="currentStep" finish-status="success" align-center class="mb-30px">
-        <el-step title="选择模板" icon="Document" />
-        <el-step title="填写信息" icon="Edit" />
-        <el-step title="选择成员" icon="User" />
+        <el-step title="选择模板与成员" icon="Document" />
         <el-step title="调整任务" icon="List" />
         <el-step title="规则与确认" icon="Check" />
       </el-steps>
 
-      <!-- 步骤1: 选择模板 -->
+      <!-- 步骤1: 选择模板 + 填写信息 + 选择成员 -->
       <div v-if="currentStep === 0" class="step-content">
+        <!-- 模板选择 -->
+        <div class="section-title">选择项目模板</div>
         <div class="template-cards">
           <div
             v-for="tpl in templateList"
@@ -46,18 +46,9 @@
           </el-table>
         </div>
 
-        <div class="step-footer">
-          <el-button @click="goBack">取消</el-button>
-          <el-button type="primary" :disabled="!selectedTemplate" @click="nextStep">
-            下一步 <el-icon><ArrowRight /></el-icon>
-          </el-button>
-        </div>
-      </div>
-
-      <!-- 步骤2: 填写信息 -->
-      <div v-if="currentStep === 1" class="step-content">
+        <!-- 项目基本信息 -->
+        <el-divider content-position="left">项目基本信息</el-divider>
         <el-form ref="formRef" :model="projectForm" :rules="formRules" label-width="100px" class="project-form">
-          <el-divider content-position="left">基本信息</el-divider>
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="项目名称" prop="projectName">
@@ -89,7 +80,7 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="项目经理" prop="projectManagerId">
-                <el-select v-model="projectForm.projectManagerId" filterable remote placeholder="请选择" class="w-full" :remote-method="searchUsers" :loading="remoteLoading">
+                <el-select v-model="projectForm.projectManagerId" filterable remote placeholder="请选择" class="w-full" :remote-method="searchUsers" :loading="remoteLoading" @change="onManagerChange">
                   <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
                 </el-select>
               </el-form-item>
@@ -119,8 +110,6 @@
               </el-form-item>
             </el-col>
           </el-row>
-
-          <el-divider content-position="left">预算与描述</el-divider>
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="项目预算">
@@ -138,32 +127,91 @@
           </el-form-item>
         </el-form>
 
+        <!-- 项目成员 -->
+        <el-divider content-position="left">项目成员</el-divider>
+        <div class="member-toolbar">
+          <span class="member-summary">已选择 {{ selectedMembers.length }} 名成员（项目经理会自动加入）</span>
+          <el-button type="primary" size="small" @click="handleAddMember">
+            <el-icon><Plus /></el-icon> 添加成员
+          </el-button>
+        </div>
+        <el-table :data="selectedMembers" border size="small" v-if="selectedMembers.length">
+          <el-table-column label="成员" min-width="140">
+            <template #default="{ row }">
+              <span>{{ getManagerName(row.userId) }}</span>
+              <el-tag v-if="row.isExternal" size="small" type="warning" style="margin-left: 6px">外部</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="项目角色" width="200">
+            <template #default="{ row }">
+              <el-select v-model="row.roleCode" size="small" class="w-full" :disabled="row.roleCode === 'pm'">
+                <el-option label="项目经理" value="pm" />
+                <el-option label="部门负责人" value="dept_head" />
+                <el-option label="主责任人" value="main_owner" />
+                <el-option label="协助人" value="helper" />
+                <el-option label="管理层" value="management" />
+                <el-option label="外部成员" value="external" />
+                <el-option label="系统管理员" value="admin" />
+                <el-option label="开发工程师" value="developer" />
+                <el-option label="硬件工程师" value="hw_engineer" />
+                <el-option label="软件工程师" value="sw_engineer" />
+                <el-option label="结构工程师" value="mechanical_engineer" />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" align="center">
+            <template #default="{ row, $index }">
+              <el-button link type="danger" size="small" @click="removeMember($index)" v-if="row.roleCode !== 'pm'">移除</el-button>
+              <span v-else style="font-size: 12px; color: #86909C">自动</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-else description="暂未添加成员，请点击&quot;添加成员&quot;" :image-size="60" />
+
+        <!-- 添加成员弹窗 -->
+        <el-dialog v-model="showMemberDialog" title="添加成员" width="480px">
+          <el-form label-width="80px">
+            <el-form-item label="成员" required>
+              <el-select v-model="memberForm.userId" filterable remote placeholder="搜索用户名" class="w-full" :remote-method="searchUsers" :loading="remoteLoading">
+                <el-option v-for="u in availableUsers" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="项目角色" required>
+              <el-select v-model="memberForm.roleCode" class="w-full">
+                <el-option label="项目经理" value="pm" />
+                <el-option label="部门负责人" value="dept_head" />
+                <el-option label="主责任人" value="main_owner" />
+                <el-option label="协助人" value="helper" />
+                <el-option label="管理层" value="management" />
+                <el-option label="外部成员" value="external" />
+                <el-option label="系统管理员" value="admin" />
+                <el-option label="开发工程师" value="developer" />
+                <el-option label="硬件工程师" value="hw_engineer" />
+                <el-option label="软件工程师" value="sw_engineer" />
+                <el-option label="结构工程师" value="mechanical_engineer" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="是否外部">
+              <el-switch v-model="memberForm.isExternal" />
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="showMemberDialog = false">取消</el-button>
+            <el-button type="primary" @click="confirmAddMember">添加</el-button>
+          </template>
+        </el-dialog>
+
         <div class="step-footer">
-          <el-button @click="prevStep"><el-icon><ArrowLeft /></el-icon> 上一步</el-button>
-          <el-button type="primary" @click="nextStep">下一步 <el-icon><ArrowRight /></el-icon></el-button>
+          <el-button @click="goBack">取消</el-button>
+          <el-button type="primary" :disabled="!selectedTemplate" @click="nextStep">
+            下一步 <el-icon><ArrowRight /></el-icon>
+          </el-button>
         </div>
       </div>
 
-      <!-- 步骤3: 选择项目成员 -->
-      <div v-if="currentStep === 2" class="step-content">
-        <el-alert title="先选择项目成员，下一步只能从这些成员中分配任务" type="info" :closable="false" show-icon class="mb-20px" />
-        <el-form label-width="110px" class="project-form">
-          <el-form-item label="项目成员" required>
-            <el-select v-model="selectedMemberIds" multiple filterable placeholder="请选择项目成员" class="w-full">
-              <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
-            </el-select>
-          </el-form-item>
-          <el-alert :title="`已选择 ${selectedMemberIds.length} 人（项目经理会自动加入）`" type="success" :closable="false" />
-        </el-form>
-        <div class="step-footer">
-          <el-button @click="prevStep"><el-icon><ArrowLeft /></el-icon> 上一步</el-button>
-          <el-button type="primary" @click="nextStep">下一步 <el-icon><ArrowRight /></el-icon></el-button>
-        </div>
-      </div>
-
-      <!-- 步骤4: 调整任务 -->
-      <div v-if="currentStep === 3" class="step-content">
-        <!-- 批量操作栏 (FATAL-3 修复) -->
+      <!-- 步骤2: 调整任务 -->
+      <div v-if="currentStep === 1" class="step-content">
+        <!-- 批量操作栏 -->
         <div class="batch-toolbar">
           <div class="batch-actions">
             <span class="batch-label">批量操作：</span>
@@ -329,8 +377,8 @@
         </el-dialog>
       </div>
 
-      <!-- 步骤5: 默认规则与确认 -->
-      <div v-if="currentStep === 4" class="step-content">
+      <!-- 步骤3: 默认规则与确认 -->
+      <div v-if="currentStep === 2" class="step-content">
         <el-card shadow="never" class="confirm-card mb-16px">
           <template #header><span class="card-title">项目默认规则</span></template>
           <el-form-item label="通知模式" required>
@@ -354,6 +402,15 @@
             <el-descriptions-item label="计划周期">{{ projectForm.planStartDate }} ~ {{ projectForm.planEndDate }} ({{ totalDays }}天)</el-descriptions-item>
             <el-descriptions-item label="项目预算">{{ projectForm.budget ? '￥' + projectForm.budget : '-' }}</el-descriptions-item>
             <el-descriptions-item label="重点项目">{{ projectForm.isKeyProject ? '是' : '否' }}</el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+
+        <el-card shadow="never" class="confirm-card mt-16px">
+          <template #header><span class="card-title">项目成员（{{ selectedMembers.length }} 人）</span></template>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item v-for="m in selectedMembers" :key="m.userId" :label="getManagerName(m.userId)">
+              {{ getRoleLabel(m.roleCode) }}
+            </el-descriptions-item>
           </el-descriptions>
         </el-card>
 
@@ -411,7 +468,6 @@ const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const notifyMembers = ref(true)
 const autoGantt = ref(true)
-const selectedMemberIds = ref<string[]>([])
 const notifyModeList = ref<any[]>([])
 const selectedNotifyModeId = ref<string | number>()
 
@@ -422,13 +478,29 @@ const previewTasks = ref<any[]>([])
 const templateStageMap = ref<Record<string | number, number>>({})
 const templateTaskMap = ref<Record<string | number, number>>({})
 
+// 项目成员 (带角色)
+const selectedMembers = ref<Array<{
+  userId: string
+  roleCode: string
+  isExternal: boolean
+  status: string
+}>>([])
+
+// 添加成员弹窗
+const showMemberDialog = ref(false)
+const memberForm = reactive({
+  userId: undefined as string | undefined,
+  roleCode: 'helper',
+  isExternal: false
+})
+
 // 项目表单
 const projectForm = reactive({
   projectName: '',
   projectCode: '',
   projectType: '',
   priority: 'normal',
-  projectManagerId: undefined as number | undefined,
+  projectManagerId: undefined as string | undefined,
   deptId: undefined as number | undefined,
   planStartDate: '',
   planEndDate: '',
@@ -459,13 +531,80 @@ const formRules = {
   ]
 }
 
-// 用户和部门（P1-02: 项目经理使用远程搜索，其余保留全量列表兼容批量操作）
+// 用户和部门
 const { userList, ensureLoaded: ensureUsersLoaded, searchUsers, remoteUserList, remoteLoading } = useUserNames()
 const deptTree = ref<any[]>([])
+
+// 已选成员的用户信息（供任务调整步骤使用）
 const projectMemberUsers = computed(() => {
-  const ids = new Set(selectedMemberIds.value.map(String))
+  const ids = new Set(selectedMembers.value.map(m => String(m.userId)))
   return userList.value.filter(u => ids.has(String(u.id)))
 })
+
+// 可添加的成员（排除已选）
+const availableUsers = computed(() => {
+  const memberIds = new Set(selectedMembers.value.map(m => String(m.userId)))
+  return userList.value.filter(u => !memberIds.has(String(u.id)))
+})
+
+// 角色标签
+const roleLabelMap: Record<string, string> = {
+  pm: '项目经理', dept_head: '部门负责人', main_owner: '主责任人', helper: '协助人',
+  management: '管理层', external: '外部成员', admin: '系统管理员',
+  developer: '开发工程师', hw_engineer: '硬件工程师', sw_engineer: '软件工程师',
+  mechanical_engineer: '结构工程师', project_manager: '项目经理', member: '成员'
+}
+function getRoleLabel(code: string): string { return roleLabelMap[code] || code || '-' }
+
+// 项目经理变更时自动同步到成员列表
+function onManagerChange(val: string) {
+  if (!val) return
+  const idStr = String(val)
+  // 移除旧的 PM 成员
+  const oldPmIdx = selectedMembers.value.findIndex(m => m.roleCode === 'pm')
+  if (oldPmIdx > -1) selectedMembers.value.splice(oldPmIdx, 1)
+  // 添加新的 PM 成员
+  const existing = selectedMembers.value.find(m => String(m.userId) === idStr)
+  if (existing) {
+    existing.roleCode = 'pm'
+  } else {
+    selectedMembers.value.unshift({ userId: idStr, roleCode: 'pm', isExternal: false, status: 'active' })
+  }
+}
+
+// 添加成员
+function handleAddMember() {
+  memberForm.userId = undefined
+  memberForm.roleCode = 'helper'
+  memberForm.isExternal = false
+  showMemberDialog.value = true
+}
+
+function confirmAddMember() {
+  if (!memberForm.userId) { ElMessage.warning('请选择成员'); return }
+  const idStr = String(memberForm.userId)
+  if (selectedMembers.value.find(m => String(m.userId) === idStr)) {
+    ElMessage.warning('该用户已在成员列表中')
+    return
+  }
+  selectedMembers.value.push({
+    userId: idStr,
+    roleCode: memberForm.roleCode,
+    isExternal: memberForm.isExternal,
+    status: 'active'
+  })
+  showMemberDialog.value = false
+  ElMessage.success('成员已添加')
+}
+
+function removeMember(index: number) {
+  const member = selectedMembers.value[index]
+  if (member.roleCode === 'pm') {
+    ElMessage.warning('项目经理不可移除')
+    return
+  }
+  selectedMembers.value.splice(index, 1)
+}
 
 // 任务数据
 const stageList = ref<StageVO[]>([])
@@ -528,7 +667,6 @@ function getManagerName(id?: number | string): string {
   return userList.value.find(u => String(u.id) === idStr)?.nickname || '-'
 }
 
-// P2-01: 确认页显示所属部门
 function getDeptName(id?: number | string): string {
   if (!id) return '-'
   const idStr = String(id)
@@ -550,7 +688,6 @@ async function selectTemplate(id: number | string) {
   try {
     const tpl = await getProject(String(id))
     previewTasks.value = (tpl as any)?.tasks || []
-    // 同时加载阶段和任务到 adjustedTasks（保持原始 ID 类型，避免雪花 ID 精度丢失）
     await loadTemplateTasks(id)
   } catch (e) {
     console.error('预览模板失败', e)
@@ -558,8 +695,6 @@ async function selectTemplate(id: number | string) {
 }
 
 async function loadTemplateTasks(templateId: number | string) {
-  // 关键：全程使用字符串比较，雪花 ID（19位）超出 JS Number 安全整数范围，
-  // 直接 Number() 会导致末位精度丢失（如 9000000000000000001 -> 9000000000000000000）
   const tplId = String(templateId)
   try {
     const [stages, tasks] = await Promise.all([getStageList(), getTaskList()])
@@ -567,7 +702,6 @@ async function loadTemplateTasks(templateId: number | string) {
     stageList.value = tplStages
     const tplTasks = (tasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
     adjustedTasks.value = tplTasks.map(t => {
-      // stageId 比较时也用字符串，避免精度丢失
       const matchedStage = tplStages.find(s => String(s.stageId) === String(t.stageId))
       return {
         ...t,
@@ -601,25 +735,28 @@ function getTemplateTaskCount(projectId?: number | string) {
 }
 
 function nextStep() {
-  if (currentStep.value === 1) {
+  if (currentStep.value === 0) {
+    // 验证表单
     formRef.value?.validate(valid => {
       if (!valid) return
-      const managerId = String(projectForm.projectManagerId)
-      if (!selectedMemberIds.value.includes(managerId)) selectedMemberIds.value.push(managerId)
+      // 确保项目经理在成员列表中
+      const pmId = String(projectForm.projectManagerId)
+      if (pmId && !selectedMembers.value.find(m => String(m.userId) === pmId)) {
+        selectedMembers.value.unshift({ userId: pmId, roleCode: 'pm', isExternal: false, status: 'active' })
+      }
+      if (selectedMembers.value.length === 0) {
+        ElMessage.warning('请至少添加一名项目成员')
+        return
+      }
       currentStep.value++
     })
-    return
-  }
-  if (currentStep.value === 2 && selectedMemberIds.value.length === 0) {
-    ElMessage.warning('请至少选择一名项目成员')
     return
   }
   currentStep.value++
 }
 
 function prevStep() {
-  // 模板切换警告 (MINOR-2 修复)
-  if (currentStep.value === 2 && adjustedTasks.value.length > 0) {
+  if (currentStep.value === 1 && adjustedTasks.value.length > 0) {
     ElMessageBox.confirm(
       '返回上一步更换模板将丢失当前所有任务调整，是否继续？',
       '警告',
@@ -680,7 +817,6 @@ function confirmAddTask() {
     })
   }
   showAddTask.value = false
-  // 重置表单
   Object.assign(taskForm, {
     taskName: '', stageName: '', taskType: 'design', cycle: 5,
     planStartDate: '', planEndDate: '',
@@ -689,7 +825,7 @@ function confirmAddTask() {
   })
 }
 
-// 批量操作 (FATAL-3 修复)
+// 批量操作
 const batchStage = ref('')
 const batchAction = ref('')
 const batchOffsetDays = ref(0)
@@ -741,19 +877,17 @@ function applyBatchAction() {
       ElMessage.success(`已设置 ${stageTasks.length} 个任务的工期`)
       break
   }
-
-  // 重置批量操作
   batchAction.value = ''
 }
 
-// 草稿保存 (MINOR-13 修复)
+// 草稿保存
 const DRAFT_KEY = 'pms_project_create_draft'
 
 function saveDraft() {
   const draft = {
     currentStep: currentStep.value,
     projectForm: { ...projectForm },
-    selectedMemberIds: selectedMemberIds.value,
+    selectedMembers: selectedMembers.value,
     selectedNotifyModeId: selectedNotifyModeId.value,
     selectedTemplate: selectedTemplate.value,
     adjustedTasks: adjustedTasks.value,
@@ -768,7 +902,6 @@ function loadDraft(): boolean {
     if (!raw) return false
     const draft = JSON.parse(raw)
     if (!draft.savedAt) return false
-    // 24小时内有效
     if (Date.now() - new Date(draft.savedAt).getTime() > 24 * 60 * 60 * 1000) {
       localStorage.removeItem(DRAFT_KEY)
       return false
@@ -784,7 +917,17 @@ function restoreDraft() {
     const draft = JSON.parse(raw)
     currentStep.value = draft.currentStep || 0
     Object.assign(projectForm, draft.projectForm || {})
-    selectedMemberIds.value = draft.selectedMemberIds || []
+    // 兼容旧草稿：selectedMemberIds -> selectedMembers
+    if (draft.selectedMembers) {
+      selectedMembers.value = draft.selectedMembers
+    } else if (draft.selectedMemberIds) {
+      selectedMembers.value = draft.selectedMemberIds.map((id: string) => ({
+        userId: String(id),
+        roleCode: String(id) === String(draft.projectForm?.projectManagerId) ? 'pm' : 'member',
+        isExternal: false,
+        status: 'active'
+      }))
+    }
     selectedNotifyModeId.value = draft.selectedNotifyModeId
     selectedTemplate.value = draft.selectedTemplate
     adjustedTasks.value = draft.adjustedTasks || []
@@ -793,12 +936,10 @@ function restoreDraft() {
 }
 
 function clearDraft() {
-  // P1-05 修复: 先停止自动保存定时器，防止竞态条件重新写入草稿
   stopAutoSaveDraft()
   localStorage.removeItem(DRAFT_KEY)
 }
 
-// 自动保存草稿（每30秒和关键步骤切换时）
 let draftTimer: any = null
 function startAutoSaveDraft() {
   draftTimer = setInterval(saveDraft, 30000)
@@ -807,7 +948,6 @@ function stopAutoSaveDraft() {
   if (draftTimer) { clearInterval(draftTimer); draftTimer = null }
 }
 
-// P0-03: 日期计算辅助函数 - 根据 planStartDate + cycle 计算 planEndDate
 const addDays = (dateStr: string, days: number): string => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -815,7 +955,6 @@ const addDays = (dateStr: string, days: number): string => {
   return d.toISOString().split('T')[0]
 }
 
-// P0-03: 计算任务的计划结束日期，并确保不超过项目 planEndDate
 const calcTaskPlanEndDate = (task: any): string => {
   const end = task.planEndDate || addDays(projectForm.planStartDate, task.cycle || 5)
   if (projectForm.planEndDate && end > projectForm.planEndDate) {
@@ -843,11 +982,11 @@ async function submitCreate() {
       planEndDate: calcTaskPlanEndDate(t),
       roleName: t.roleName
     }))
-    const members = selectedMemberIds.value.map(userId => ({
-      userId,
-      roleCode: String(userId) === String(projectForm.projectManagerId) ? 'pm' : 'member',
-      isExternal: false,
-      status: 'active'
+    const members = selectedMembers.value.map(m => ({
+      userId: String(m.userId),
+      roleCode: m.roleCode,
+      isExternal: m.isExternal,
+      status: m.status || 'active'
     }))
     const projectId = await createProjectBundle({
       project: { ...projectForm, createMethod: 'template', templateId: selectedTemplate.value as number, status: 'initiating' },
@@ -871,7 +1010,6 @@ async function submitCreate() {
 
 // 加载初始数据
 onMounted(async () => {
-  // 草稿检测 (MINOR-13 修复)
   if (loadDraft()) {
     ElMessageBox.confirm(
       '检测到未完成的创建草稿，是否继续？',
@@ -879,7 +1017,6 @@ onMounted(async () => {
       { confirmButtonText: '继续创建', cancelButtonText: '重新开始', type: 'info' }
     ).then(() => {
       restoreDraft()
-      // 恢复模板预览
       if (selectedTemplate.value) {
         selectTemplate(selectedTemplate.value)
       }
@@ -888,7 +1025,6 @@ onMounted(async () => {
     })
   }
 
-  // 启动自动保存
   startAutoSaveDraft()
 
   try {
@@ -915,7 +1051,6 @@ onMounted(async () => {
   } catch (e) {
     console.error('加载部门列表失败', e)
   }
-  // 预加载数量时不改动当前模板预览，避免最后一个模板覆盖用户选择
   try {
     const [stages, tasks] = await Promise.all([getStageList(), getTaskList()])
     for (const tpl of templateList.value) {
@@ -938,6 +1073,8 @@ onUnmounted(() => {
 .pms-project-create {
   .step-content { min-height: 400px; }
 
+  .section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--el-text-color-primary); }
+
   .template-cards {
     display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
     .template-card {
@@ -958,6 +1095,11 @@ onUnmounted(() => {
 
   .template-preview {
     .section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+  }
+
+  .member-toolbar {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+    .member-summary { font-size: 14px; color: var(--el-text-color-secondary); }
   }
 
   .step-footer {
