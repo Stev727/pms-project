@@ -68,7 +68,7 @@
               <div class="card-header">
                 <span class="card-title" :title="project.projectName">{{ project.projectName }}</span>
                 <el-dropdown trigger="click" @click.stop placement="bottom-end" :append-to-body="false" :popper-options="{ strategy: 'fixed' }">
-                  <el-icon class="card-more"><Icon icon="ep:more-filled" /></el-icon>
+                  <el-icon class="card-more" @click.stop><Icon icon="ep:more-filled" /></el-icon>
                   <template #dropdown>
                     <el-dropdown-menu>
                       <el-dropdown-item @click="goDetail(project)">查看详情</el-dropdown-item>
