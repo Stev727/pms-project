@@ -24,6 +24,7 @@ public class TaskServiceImpl implements TaskService {
     @Resource
     private ProjectMapper projectMapper;
 
+    @Resource
     private DingTalkNotifyService dingTalkNotifyService;
 
     @Resource

@@ -645,12 +645,12 @@ const saveEdit = async () => {
             ...stageData,
             stageId: undefined
           }).then(res => {
-            if (res && res.data) {
-              stageIdMap[oldStageId] = String(res.data)
-              // 同步更新前端 editStageList 中的 stageId 为真实ID
-              const idx = editStageList.value.findIndex(s => String(s.stageId) === oldStageId)
-              if (idx !== -1) editStageList.value[idx].stageId = String(res.data)
-            }
+            const createdStageId = (res as any)?.data ?? res
+            if (!createdStageId) throw new Error('创建阶段后未返回阶段ID')
+            stageIdMap[oldStageId] = String(createdStageId)
+            // 同步更新前端 editStageList 中的 stageId 为真实ID
+            const idx = editStageList.value.findIndex(s => String(s.stageId) === oldStageId)
+            if (idx !== -1) editStageList.value[idx].stageId = String(createdStageId)
             return res
           })
         } else {

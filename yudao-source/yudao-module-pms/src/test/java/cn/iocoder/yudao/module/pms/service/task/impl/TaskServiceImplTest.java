@@ -27,6 +27,12 @@ class TaskServiceImplTest {
     }
 
     @Test
+    void dingTalkNotifyServiceIsInjectedBySpring() throws Exception {
+        var field = TaskServiceImpl.class.getDeclaredField("dingTalkNotifyService");
+        assertNotNull(field.getAnnotation(javax.annotation.Resource.class));
+    }
+
+    @Test
     void dispatchSendsDingTalkToMainOwner() {
         TaskServiceImpl service = new TaskServiceImpl();
         TaskMapper mapper = mock(TaskMapper.class);

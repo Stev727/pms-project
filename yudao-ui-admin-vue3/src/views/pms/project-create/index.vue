@@ -99,7 +99,7 @@
                 <el-tree-select
                   v-model="projectForm.deptId"
                   :data="deptTree"
-                  :props="{ label: 'name', children: 'children' }"
+                  :props="{ value: 'id', label: 'name', children: 'children' }"
                   check-strictly clearable filterable
                   placeholder="请选择部门"
                   class="w-full"
@@ -149,7 +149,7 @@
         <el-alert title="先选择项目成员，下一步只能从这些成员中分配任务" type="info" :closable="false" show-icon class="mb-20px" />
         <el-form label-width="110px" class="project-form">
           <el-form-item label="项目成员" required>
-            <el-select v-model="selectedMemberIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="请选择项目成员" class="w-full">
+            <el-select v-model="selectedMemberIds" multiple filterable placeholder="请选择项目成员" class="w-full">
               <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
             </el-select>
           </el-form-item>
@@ -568,6 +568,9 @@ async function loadTemplateTasks(templateId: number | string) {
         isMilestone: !!t.isMilestone
       }
     })
+    if (tplTasks.length === 0 && String(selectedTemplate.value) === tplId) {
+      ElMessage.warning("当前模板没有已保存的任务明细，请先到模板管理补充并保存任务")
+    }
     templateStageMap.value[tplId] = tplStages.length
     templateTaskMap.value[tplId] = tplTasks.length
   } catch (e) {
@@ -898,11 +901,17 @@ onMounted(async () => {
   } catch (e) {
     console.error('加载部门列表失败', e)
   }
-  // 预加载每个模板的阶段/任务数量（保持原始 ID 字符串，避免精度丢失）
-  for (const tpl of templateList.value) {
-    if (tpl.projectId) {
-      loadTemplateTasks(tpl.projectId).catch(() => {})
+  // 预加载数量时不改动当前模板预览，避免最后一个模板覆盖用户选择
+  try {
+    const [stages, tasks] = await Promise.all([getStageList(), getTaskList()])
+    for (const tpl of templateList.value) {
+      if (!tpl.projectId) continue
+      const templateId = String(tpl.projectId)
+      templateStageMap.value[templateId] = (stages || []).filter(s => String(s.projectId) === templateId).length
+      templateTaskMap.value[templateId] = (tasks || []).filter(t => String(t.projectId) === templateId).length
     }
+  } catch (e) {
+    console.error('加载模板统计失败', e)
   }
 })
 
