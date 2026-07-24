@@ -12,6 +12,8 @@ public interface TaskService {
 
     void simulateDingtalkConfirm(Long taskId);
 
+    void dispatchTask(Long taskId);
+
     void submitCompletion(Long taskId);
 
     void reviewCompletion(Long taskId, boolean approved, Long operatorId);

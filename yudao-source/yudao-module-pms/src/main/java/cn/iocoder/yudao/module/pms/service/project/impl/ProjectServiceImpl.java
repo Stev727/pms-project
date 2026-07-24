@@ -113,11 +113,21 @@ public class ProjectServiceImpl implements ProjectService {
             }
             taskMapper.insert(task);
         }
-        List<PmsNotifyRuleDO> rules = request.getNotifyRules() == null ? List.of() : request.getNotifyRules();
-        for (PmsNotifyRuleDO rule : rules) {
+        List<PmsNotifyRuleDO> rules;
+        if (request.getNotifyModeId() != null) {
+            rules = notifyRuleMapper.selectList(PmsNotifyRuleDO::getModeId, request.getNotifyModeId());
+        } else {
+            rules = request.getNotifyRules() == null ? List.of() : request.getNotifyRules();
+        }
+        for (PmsNotifyRuleDO sourceRule : rules) {
+            PmsNotifyRuleDO rule = new PmsNotifyRuleDO();
+            BeanUtil.copyProperties(sourceRule, rule, "ruleId", "projectId", "taskId", "scopeType", "modeId", "sourceModeId",
+                    "creator", "createTime", "updater", "updateTime", "deleted");
             rule.setProjectId(projectId);
             rule.setTaskId(null);
             rule.setScopeType("project");
+            rule.setModeId(null);
+            rule.setSourceModeId(request.getNotifyModeId());
             notifyRuleMapper.insert(rule);
         }
         return projectId;

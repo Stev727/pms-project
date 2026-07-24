@@ -14,5 +14,6 @@ public class ProjectCreateBundleReqVO {
     private PmsProjectDO project;
     private List<PmsProjectMemberDO> members = new ArrayList<>();
     private List<PmsTaskDO> tasks = new ArrayList<>();
+    private Long notifyModeId;
     private List<PmsNotifyRuleDO> notifyRules = new ArrayList<>();
 }

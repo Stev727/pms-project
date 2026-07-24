@@ -33,7 +33,8 @@ export interface ProjectCreateBundleVO {
   project: Partial<ProjectVO>
   members: any[]
   tasks: any[]
-  notifyRules: any[]
+  notifyRules?: any[]
+  notifyModeId?: string | number
 }
 
 export const createProjectBundle = (data: ProjectCreateBundleVO) => {

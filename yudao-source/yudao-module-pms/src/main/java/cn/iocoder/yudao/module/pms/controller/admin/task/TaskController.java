@@ -29,6 +29,14 @@ public class TaskController {
         return success(taskService.createTask(entity));
     }
 
+    @PostMapping("/dispatch")
+    @Operation(summary = "派发任务并通知负责人")
+    @PreAuthorize("@ss.hasPermission('pms:task:update')")
+    public CommonResult<Boolean> dispatch(@RequestParam("taskId") Long taskId) {
+        taskService.dispatchTask(taskId);
+        return success(true);
+    }
+
     @PostMapping("/completion/submit")
     @Operation(summary = "提交任务完成审核")
     @PreAuthorize("@ss.hasPermission('pms:task:update')")

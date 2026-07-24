@@ -2,6 +2,10 @@
   <div class="pms-notify">
     <ContentWrap>
       <div class="toolbar">
+        <el-select v-model="selectedModeId" placeholder="选择通知模式" style="width: 240px" @change="fetchList">
+          <el-option v-for="m in modeList" :key="m.modeId" :label="m.modeName" :value="m.modeId" />
+        </el-select>
+        <el-button @click="createMode">新建模式</el-button>
         <el-button type="primary" @click="openForm()" v-if="checkPermi(['pms:notify:create'])">
           <el-icon><Plus /></el-icon> 新建通知规则
         </el-button>
@@ -176,7 +180,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { checkPermi } from '@/utils/permission'
-import { getNotifyRuleList, createNotifyRule, updateNotifyRule, deleteNotifyRule } from '@/api/pms/notify'
+import { getNotifyRuleList, createNotifyRule, updateNotifyRule, deleteNotifyRule, getNotifyModeList, createNotifyMode } from '@/api/pms/notify'
 
 defineOptions({ name: 'PmsNotify' })
 
@@ -185,6 +189,8 @@ const saving = ref(false)
 const formVisible = ref(false)
 const editingRule = ref<any>(null)
 const ruleList = ref<any[]>([])
+const modeList = ref<any[]>([])
+const selectedModeId = ref<string | number>()
 
 const form = reactive({
   ruleName: '', triggerEvent: '', channels: ['dingtalk'],
@@ -229,11 +235,25 @@ function getEventTagType(e: string): string {
   return map[e] || 'info'
 }
 
+async function createMode() {
+  const result = await ElMessageBox.prompt("请输入通知模式名称", "新建模式", { inputPattern: /\S+/, inputErrorMessage: "名称不能为空" }).catch(() => null)
+  if (!result) return
+  const id = await createNotifyMode({ mode: { modeName: result.value, status: "enabled", defaultFlag: false }, rules: [] })
+  await loadModes()
+  selectedModeId.value = id
+  await fetchList()
+}
+
+async function loadModes() {
+  modeList.value = (await getNotifyModeList()) || []
+  if (!selectedModeId.value) selectedModeId.value = modeList.value.find((m: any) => m.defaultFlag)?.modeId || modeList.value[0]?.modeId
+}
+
 async function fetchList() {
   loading.value = true
   try {
     const res = await getNotifyRuleList()
-    ruleList.value = res || []
+    ruleList.value = (res || []).filter((r: any) => String(r.modeId) === String(selectedModeId.value))
   } catch (e) {
     ElMessage.error('加载通知规则失败')
   } finally {
@@ -278,6 +298,7 @@ async function saveRule() {
   }
   saving.value = true
   const data = {
+    modeId: selectedModeId.value, scopeType: "mode",
     ruleName: form.ruleName,
     triggerEvent: form.triggerEvent,
     notifyChannel: form.channels.join(','),
@@ -390,7 +411,8 @@ const loadTemplates = () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await loadModes()
   fetchList()
   loadTemplates()
 })

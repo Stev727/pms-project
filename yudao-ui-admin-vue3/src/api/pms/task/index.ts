@@ -46,6 +46,10 @@ export const updateTask = (data: TaskVO) => {
   return request.put({ url: '/pms/task/update', data })
 }
 
+export const dispatchTask = (taskId: string | number) => {
+  return request.post({ url: '/pms/task/dispatch', params: { taskId } })
+}
+
 export const deleteTask = (id: string) => {
   return request.delete({ url: '/pms/task/delete?id=' + id })
 }

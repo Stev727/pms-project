@@ -21,6 +21,12 @@ public class PmsNotifyRuleDO extends TenantBaseDO {
     @TableId(type = IdType.ASSIGN_ID)
     private Long ruleId;
 
+    /** 通知模式ID，仅模式模板规则使用 */
+    private Long modeId;
+
+    /** 来源模式ID，项目快照用于追溯 */
+    private Long sourceModeId;
+
     /**
      * 规则范围：project、task
      */

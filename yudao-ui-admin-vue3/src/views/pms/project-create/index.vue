@@ -336,8 +336,12 @@
       <div v-if="currentStep === 4" class="step-content">
         <el-card shadow="never" class="confirm-card mb-16px">
           <template #header><span class="card-title">项目默认规则</span></template>
-          <el-switch v-model="overdueRuleEnabled" active-text="任务延期时通过钉钉通知项目经理" />
-          <div class="text-gray mt-8px">仅处理任务延期，不推送项目创建、任务变更或完成审核消息。</div>
+          <el-form-item label="通知模式" required>
+            <el-select v-model="selectedNotifyModeId" placeholder="请选择通知模式" class="w-full">
+              <el-option v-for="mode in notifyModeList" :key="mode.modeId" :label="mode.modeName" :value="mode.modeId" />
+            </el-select>
+          </el-form-item>
+          <div class="text-gray">创建后复制所选模式的规则作为项目快照；后续修改公共模式不会影响本项目。</div>
         </el-card>
         <el-alert title="请确认以下项目信息无误，提交后将自动创建项目并生成任务" type="info" :closable="false" show-icon class="mb-20px" />
 
@@ -396,6 +400,7 @@ import { getStageList, StageVO } from '@/api/pms/stage'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { getSimpleDeptList } from '@/api/system/dept'
+import { getNotifyModeList } from '@/api/pms/notify'
 import {
   phaseColorMap, projectTypeOptions, taskTypeOptions, priorityOptions,
   priorityMap, calcDuration
@@ -410,7 +415,8 @@ const submitting = ref(false)
 const notifyMembers = ref(true)
 const autoGantt = ref(true)
 const selectedMemberIds = ref<string[]>([])
-const overdueRuleEnabled = ref(true)
+const notifyModeList = ref<any[]>([])
+const selectedNotifyModeId = ref<string | number>()
 
 // 模板数据
 const templateList = ref<ProjectVO[]>([])
@@ -731,7 +737,7 @@ function saveDraft() {
     currentStep: currentStep.value,
     projectForm: { ...projectForm },
     selectedMemberIds: selectedMemberIds.value,
-    overdueRuleEnabled: overdueRuleEnabled.value,
+    selectedNotifyModeId: selectedNotifyModeId.value,
     selectedTemplate: selectedTemplate.value,
     adjustedTasks: adjustedTasks.value,
     savedAt: new Date().toISOString()
@@ -762,7 +768,7 @@ function restoreDraft() {
     currentStep.value = draft.currentStep || 0
     Object.assign(projectForm, draft.projectForm || {})
     selectedMemberIds.value = draft.selectedMemberIds || []
-    overdueRuleEnabled.value = draft.overdueRuleEnabled !== false
+    selectedNotifyModeId.value = draft.selectedNotifyModeId
     selectedTemplate.value = draft.selectedTemplate
     adjustedTasks.value = draft.adjustedTasks || []
     ElMessage.success('已恢复未完成的创建')
@@ -802,6 +808,7 @@ const calcTaskPlanEndDate = (task: any): string => {
 }
 
 async function submitCreate() {
+  if (!selectedNotifyModeId.value) { ElMessage.warning("请选择通知模式"); return }
   submitting.value = true
   try {
     const tasks = adjustedTasks.value.map(t => ({
@@ -825,22 +832,9 @@ async function submitCreate() {
       isExternal: false,
       status: 'active'
     }))
-    const notifyRules = overdueRuleEnabled.value ? [{
-      ruleName: '任务延期通知项目经理',
-      triggerEvent: 'task_overdue',
-      triggerCondition: '{}',
-      notifyTarget: 'project_manager',
-      notifyChannel: 'dingtalk',
-      timeRule: 'daily',
-      templateTitle: '任务延期提醒',
-      templateContent: '任务已延期，请项目经理及时处理。',
-      status: 'enabled',
-      doNotDisturb: false,
-      escalationFlag: false
-    }] : []
     const projectId = await createProjectBundle({
       project: { ...projectForm, createMethod: 'template', templateId: selectedTemplate.value as number, status: 'initiating' },
-      members, tasks, notifyRules
+      members, tasks, notifyModeId: selectedNotifyModeId.value
     })
     clearDraft()
     ElMessage.success('项目创建成功！')
@@ -880,6 +874,10 @@ onMounted(async () => {
   // 启动自动保存
   startAutoSaveDraft()
 
+  try {
+    notifyModeList.value = ((await getNotifyModeList()) || []).filter((m: any) => m.status === "enabled")
+    selectedNotifyModeId.value = notifyModeList.value.find((m: any) => m.defaultFlag)?.modeId || notifyModeList.value[0]?.modeId
+  } catch (e) { ElMessage.error("加载通知模式失败") }
   try {
     const projects = await getProjectList()
     templateList.value = ((projects as ProjectVO[]) || []).filter(

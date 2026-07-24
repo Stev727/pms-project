@@ -8,7 +8,7 @@ import java.util.Set;
 public final class TaskNotificationPolicy {
 
     private static final Set<String> SUPPORTED_EVENTS = Set.of(
-            "task_overdue",
+            "task_overdue", "task_dispatched",
             "change_submitted", "change_approved", "change_rejected",
             "completion_submitted", "completion_approved", "completion_rejected");
 

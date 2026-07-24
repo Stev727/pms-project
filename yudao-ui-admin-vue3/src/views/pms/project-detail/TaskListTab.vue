@@ -203,7 +203,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { updateTask } from '@/api/pms/task'
+import { updateTask, dispatchTask } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
 import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
@@ -407,6 +407,12 @@ async function handleTransition(row: TreeRow, action: string) {
   }
 
   try {
+    if (action === 'dispatch' || action === 'redispatch') {
+      await dispatchTask(row.taskId)
+      ElMessage.success('任务已派发，钉钉通知发送成功')
+      emit('refresh')
+      return
+    }
     await updateTask({
       taskId: row.taskId,
       completeStatus: rule.to

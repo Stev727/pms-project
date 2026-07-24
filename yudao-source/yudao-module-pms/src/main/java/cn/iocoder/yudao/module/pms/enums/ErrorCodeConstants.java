@@ -10,4 +10,5 @@ public interface ErrorCodeConstants {
     ErrorCode CHANGE_NOT_EXISTS = new ErrorCode(1_040_000_004, "变更记录不存在");
     ErrorCode CHANGE_STATUS_INVALID = new ErrorCode(1_040_000_005, "变更当前状态不允许此操作");
     ErrorCode PROJECT_MANAGER_REQUIRED = new ErrorCode(1_040_000_006, "只有项目经理可以执行此操作");
+    ErrorCode DINGTALK_NOTIFY_FAILED = new ErrorCode(1_040_000_007, "钉钉通知发送失败，任务未派发");
 }

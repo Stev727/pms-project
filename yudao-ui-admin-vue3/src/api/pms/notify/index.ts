@@ -41,3 +41,16 @@ export const getNotifyRule = (id: number) => {
 export const getNotifyRuleList = () => {
   return request.get({ url: '/pms/notify-rule/list' })
 }
+
+export interface NotifyModeVO {
+  modeId?: string | number
+  modeName: string
+  description?: string
+  status?: string
+  defaultFlag?: boolean
+}
+export const getNotifyModeList = () => request.get({ url: '/pms/notify-mode/list' })
+export const getNotifyMode = (id: string | number) => request.get({ url: '/pms/notify-mode/get?id=' + id })
+export const createNotifyMode = (data: { mode: NotifyModeVO; rules: NotifyRuleVO[] }) => request.post({ url: '/pms/notify-mode/create', data })
+export const updateNotifyMode = (data: { mode: NotifyModeVO; rules: NotifyRuleVO[] }) => request.put({ url: '/pms/notify-mode/update', data })
+export const deleteNotifyMode = (id: string | number) => request.delete({ url: '/pms/notify-mode/delete?id=' + id })

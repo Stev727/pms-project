@@ -11,14 +11,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TaskNotificationPolicyTest {
 
     @Test
-    void onlySevenReviewAndOverdueEventsAreAllowed() {
+    void dispatchReviewAndOverdueEventsAreAllowed() {
         assertEquals(Set.of(
-                "task_overdue",
+                "task_overdue", "task_dispatched",
                 "change_submitted", "change_approved", "change_rejected",
                 "completion_submitted", "completion_approved", "completion_rejected"
         ), TaskNotificationPolicy.supportedEvents());
         assertFalse(TaskNotificationPolicy.isSupported("task_created"));
-        assertFalse(TaskNotificationPolicy.isSupported("task_dispatched"));
+        assertTrue(TaskNotificationPolicy.isSupported("task_dispatched"));
         assertFalse(TaskNotificationPolicy.isSupported("task_started"));
         assertTrue(TaskNotificationPolicy.isSupported("task_overdue"));
     }
