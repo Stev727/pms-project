@@ -883,7 +883,7 @@ onMounted(() => {
   // 卡片视图样式
   .template-card {
     transition: all 0.2s;
-    &:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+    &:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
     &.disabled { opacity: 0.6; }
 
     .card-header {

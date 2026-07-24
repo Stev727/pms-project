@@ -400,7 +400,7 @@ onUnmounted(() => {
 .pms-workbench {
   .stat-card {
     cursor: pointer; transition: all 0.2s;
-    &:hover { transform: translateY(-2px); }
+    &:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
     &.active { border-color: var(--el-color-primary); }
     .stat-content { display: flex; align-items: center; gap: 12px; }
     .stat-icon {

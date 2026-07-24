@@ -54,7 +54,7 @@
               <Icon icon="ep:circle-check" class="mr-5px" />审核中心
             </el-button>
           </el-badge>
-          <el-dropdown trigger="click">
+          <el-dropdown trigger="click" placement="bottom-end" @click.stop>
             <el-button>更多<Icon icon="ep:arrow-down" class="ml-5px" /></el-button>
             <template #dropdown>
               <el-dropdown-menu>
