@@ -31,7 +31,7 @@ public class TaskController {
 
     @PostMapping("/completion/submit")
     @Operation(summary = "提交任务完成审核")
-    @PreAuthorize("@ss.hasPermission(pms:task:update)")
+    @PreAuthorize("@ss.hasPermission('pms:task:update')")
     public CommonResult<Boolean> submitCompletion(@RequestParam("taskId") Long taskId) {
         taskService.submitCompletion(taskId);
         return success(true);
@@ -39,7 +39,7 @@ public class TaskController {
 
     @PutMapping("/completion/review")
     @Operation(summary = "项目经理审核任务完成")
-    @PreAuthorize("@ss.hasPermission(pms:task:update)")
+    @PreAuthorize("@ss.hasPermission('pms:task:update')")
     public CommonResult<Boolean> reviewCompletion(@RequestParam("taskId") Long taskId,
                                                    @RequestParam("approved") boolean approved) {
         taskService.reviewCompletion(taskId, approved);

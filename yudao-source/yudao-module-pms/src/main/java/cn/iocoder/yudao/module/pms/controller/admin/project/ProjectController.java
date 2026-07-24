@@ -32,7 +32,7 @@ public class ProjectController {
 
     @PostMapping("/create-bundle")
     @Operation(summary = "事务创建项目、成员、任务和默认通知规则")
-    @PreAuthorize("@ss.hasPermission(pms:project:create)")
+    @PreAuthorize("@ss.hasPermission('pms:project:create')")
     public CommonResult<Long> createBundle(@RequestBody ProjectCreateBundleReqVO request) {
         return success(projectService.createProjectBundle(request));
     }

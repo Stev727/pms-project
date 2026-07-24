@@ -59,7 +59,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getProjectMemberList, createProjectMember, updateProjectMember, deleteProjectMember } from '@/api/pms/member'
-import { getUserList } from '@/api/system/user'
+import { getSimpleUserList } from '@/api/system/user'
 import { checkPermi } from '@/utils/permission'
 import { formatDate } from '../pms-utils'
 
@@ -182,16 +182,14 @@ async function loadMembers() {
 }
 
 async function loadData() {
-  try {
-    const [projectRes, userRes] = await Promise.all([
-      getProjectList(),
-      getUserList({ pageNo: 1, pageSize: 200 })
-    ])
-    projects.value = projectRes as ProjectVO[]
-    userList.value = (userRes as any)?.list || []
-  } catch (e) {
-    console.error(e)
-  }
+  const [projectResult, userResult] = await Promise.allSettled([
+    getProjectList(),
+    getSimpleUserList()
+  ])
+  projects.value = projectResult.status === 'fulfilled' ? projectResult.value as ProjectVO[] : []
+  userList.value = userResult.status === 'fulfilled' ? userResult.value as any[] : []
+  if (projectResult.status === 'rejected') console.error(projectResult.reason)
+  if (userResult.status === 'rejected') console.error(userResult.reason)
   await loadMembers()
 }
 

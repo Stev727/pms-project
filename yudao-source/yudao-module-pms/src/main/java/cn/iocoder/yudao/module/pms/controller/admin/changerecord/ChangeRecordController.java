@@ -31,7 +31,7 @@ public class ChangeRecordController {
 
     @PutMapping("/review")
     @Operation(summary = "项目经理审核任务变更")
-    @PreAuthorize("@ss.hasPermission(pms:change:update)")
+    @PreAuthorize("@ss.hasPermission('pms:change:update')")
     public CommonResult<Boolean> review(@RequestParam("id") Long id,
                                         @RequestParam("approved") boolean approved,
                                         @RequestParam("approverId") Long approverId) {
@@ -41,7 +41,7 @@ public class ChangeRecordController {
 
     @PutMapping("/execute")
     @Operation(summary = "项目经理执行审核通过的任务变更")
-    @PreAuthorize("@ss.hasPermission(pms:change:update)")
+    @PreAuthorize("@ss.hasPermission('pms:change:update')")
     public CommonResult<Boolean> execute(@RequestParam("id") Long id) {
         changeRecordService.executeApprovedChange(id);
         return success(true);
