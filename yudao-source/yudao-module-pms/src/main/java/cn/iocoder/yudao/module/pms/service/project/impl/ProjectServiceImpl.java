@@ -89,13 +89,28 @@ public class ProjectServiceImpl implements ProjectService {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_OWNER_NOT_MEMBER);
         }
 
-        Long projectId = createProject(request.getProject());
+        PmsProjectDO project = request.getProject();
+        Long templateId = project.getTemplateId();
+        // Bundle 模式由前端提交最终任务清单，只复制模板阶段，避免 createProject 再复制一遍模板任务。
+        project.setTemplateId(null);
+        Long projectId = createProject(project);
+        Map<Long, Long> stageIdMap = copyTemplateStages(templateId, projectId);
+        if (templateId != null) {
+            PmsProjectDO templateUpdate = new PmsProjectDO();
+            templateUpdate.setProjectId(projectId);
+            templateUpdate.setTemplateId(templateId);
+            projectMapper.updateById(templateUpdate);
+            project.setTemplateId(templateId);
+        }
         for (PmsProjectMemberDO member : members) {
             member.setProjectId(projectId);
             projectMemberMapper.insert(member);
         }
         for (PmsTaskDO task : tasks) {
             task.setProjectId(projectId);
+            if (task.getStageId() != null) {
+                task.setStageId(stageIdMap.get(task.getStageId()));
+            }
             taskMapper.insert(task);
         }
         List<PmsNotifyRuleDO> rules = request.getNotifyRules() == null ? List.of() : request.getNotifyRules();
@@ -107,6 +122,34 @@ public class ProjectServiceImpl implements ProjectService {
         }
         return projectId;
     }
+    private Map<Long, Long> copyTemplateStages(Long templateId, Long projectId) {
+        Map<Long, Long> stageIdMap = new HashMap<>();
+        if (templateId == null) {
+            return stageIdMap;
+        }
+        List<PmsProjectStageDO> templateStages = projectStageMapper.selectList(
+                PmsProjectStageDO::getProjectId, templateId);
+        templateStages.sort(Comparator.comparingInt(stage ->
+                stage.getSortOrder() == null ? 0 : stage.getSortOrder()));
+        for (PmsProjectStageDO stage : templateStages) {
+            PmsProjectStageDO newStage = new PmsProjectStageDO();
+            BeanUtil.copyProperties(stage, newStage,
+                    "stageId", "projectId", "actualStartDate", "actualEndDate", "progress", "status");
+            newStage.setProjectId(projectId);
+            newStage.setStatus("not_started");
+            newStage.setProgress(0);
+            projectStageMapper.insert(newStage);
+            stageIdMap.put(stage.getStageId(), newStage.getStageId());
+        }
+        if (!templateStages.isEmpty()) {
+            PmsProjectDO projectUpdate = new PmsProjectDO();
+            projectUpdate.setProjectId(projectId);
+            projectUpdate.setCurrentStage(templateStages.get(0).getStageName());
+            projectMapper.updateById(projectUpdate);
+        }
+        return stageIdMap;
+    }
+
     /**
      * 自动生成项目编号，格式：PRJ-YYYYMMDD-NNNNNNNN，按当前最大序号递增
      * 已删除记录也参与占号，避免唯一索引冲突

@@ -5,8 +5,9 @@
       <el-steps :active="currentStep" finish-status="success" align-center class="mb-30px">
         <el-step title="选择模板" icon="Document" />
         <el-step title="填写信息" icon="Edit" />
+        <el-step title="选择成员" icon="User" />
         <el-step title="调整任务" icon="List" />
-        <el-step title="确认创建" icon="Check" />
+        <el-step title="规则与确认" icon="Check" />
       </el-steps>
 
       <!-- 步骤1: 选择模板 -->
@@ -98,7 +99,7 @@
                 <el-tree-select
                   v-model="projectForm.deptId"
                   :data="deptTree"
-                  :props="{ label: 'name', value: 'id', children: 'children' }"
+                  :props="{ label: 'name', children: 'children' }"
                   check-strictly clearable filterable
                   placeholder="请选择部门"
                   class="w-full"
@@ -143,8 +144,25 @@
         </div>
       </div>
 
-      <!-- 步骤3: 调整任务 -->
+      <!-- 步骤3: 选择项目成员 -->
       <div v-if="currentStep === 2" class="step-content">
+        <el-alert title="先选择项目成员，下一步只能从这些成员中分配任务" type="info" :closable="false" show-icon class="mb-20px" />
+        <el-form label-width="110px" class="project-form">
+          <el-form-item label="项目成员" required>
+            <el-select v-model="selectedMemberIds" multiple filterable collapse-tags collapse-tags-tooltip placeholder="请选择项目成员" class="w-full">
+              <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+            </el-select>
+          </el-form-item>
+          <el-alert :title="`已选择 ${selectedMemberIds.length} 人（项目经理会自动加入）`" type="success" :closable="false" />
+        </el-form>
+        <div class="step-footer">
+          <el-button @click="prevStep"><el-icon><ArrowLeft /></el-icon> 上一步</el-button>
+          <el-button type="primary" @click="nextStep">下一步 <el-icon><ArrowRight /></el-icon></el-button>
+        </div>
+      </div>
+
+      <!-- 步骤4: 调整任务 -->
+      <div v-if="currentStep === 3" class="step-content">
         <!-- 批量操作栏 (FATAL-3 修复) -->
         <div class="batch-toolbar">
           <div class="batch-actions">
@@ -164,7 +182,7 @@
             </template>
             <template v-if="batchAction === 'set_owner'">
               <el-select v-model="batchOwner" filterable placeholder="选择责任人" size="small" style="width: 150px">
-                <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
               </el-select>
             </template>
             <template v-if="batchAction === 'set_priority'">
@@ -288,14 +306,14 @@
               <el-col :span="12">
                 <el-form-item label="责任人">
                   <el-select v-model="taskForm.mainOwnerId" filterable placeholder="选择责任人" class="w-full" clearable>
-                    <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
+                    <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
                   </el-select>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="协助人">
                   <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选协助人" class="w-full">
-                    <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" />
+                    <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -314,8 +332,13 @@
         </el-dialog>
       </div>
 
-      <!-- 步骤4: 确认创建 -->
-      <div v-if="currentStep === 3" class="step-content">
+      <!-- 步骤5: 默认规则与确认 -->
+      <div v-if="currentStep === 4" class="step-content">
+        <el-card shadow="never" class="confirm-card mb-16px">
+          <template #header><span class="card-title">项目默认规则</span></template>
+          <el-switch v-model="overdueRuleEnabled" active-text="任务延期时通过钉钉通知项目经理" />
+          <div class="text-gray mt-8px">仅处理任务延期，不推送项目创建、任务变更或完成审核消息。</div>
+        </el-card>
         <el-alert title="请确认以下项目信息无误，提交后将自动创建项目并生成任务" type="info" :closable="false" show-icon class="mb-20px" />
 
         <el-card shadow="never" class="confirm-card">
@@ -368,17 +391,15 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Document, CircleCheckFilled, ArrowRight, ArrowLeft, Plus, Folder, Star, Check } from '@element-plus/icons-vue'
-import { getProjectList, getProject, createProject, ProjectVO } from '@/api/pms/project'
-import { createProjectMember } from '@/api/pms/member'
+import { getProjectList, getProject, createProjectBundle, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { getSimpleDeptList } from '@/api/system/dept'
 import {
   phaseColorMap, projectTypeOptions, taskTypeOptions, priorityOptions,
-  priorityMap, formatDate, calcDuration
+  priorityMap, calcDuration
 } from '../pms-utils'
-import { checkPermi } from '@/utils/permission'
 
 defineOptions({ name: 'PmsProjectCreate' })
 
@@ -388,6 +409,8 @@ const formRef = ref<FormInstance>()
 const submitting = ref(false)
 const notifyMembers = ref(true)
 const autoGantt = ref(true)
+const selectedMemberIds = ref<string[]>([])
+const overdueRuleEnabled = ref(true)
 
 // 模板数据
 const templateList = ref<ProjectVO[]>([])
@@ -424,10 +447,13 @@ const formRules = {
 // 用户和部门（P1-02: 项目经理使用远程搜索，其余保留全量列表兼容批量操作）
 const { userList, ensureLoaded: ensureUsersLoaded, searchUsers, remoteUserList, remoteLoading } = useUserNames()
 const deptTree = ref<any[]>([])
+const projectMemberUsers = computed(() => {
+  const ids = new Set(selectedMemberIds.value.map(String))
+  return userList.value.filter(u => ids.has(String(u.id)))
+})
 
 // 任务数据
 const stageList = ref<StageVO[]>([])
-const allTasks = ref<TaskVO[]>([])
 const adjustedTasks = ref<any[]>([])
 const showAddTask = ref(false)
 const editingTask = ref<any>(null)
@@ -557,11 +583,18 @@ function getTemplateTaskCount(projectId?: number | string) {
 function nextStep() {
   if (currentStep.value === 1) {
     formRef.value?.validate(valid => {
-      if (valid) currentStep.value++
+      if (!valid) return
+      const managerId = String(projectForm.projectManagerId)
+      if (!selectedMemberIds.value.includes(managerId)) selectedMemberIds.value.push(managerId)
+      currentStep.value++
     })
-  } else {
-    currentStep.value++
+    return
   }
+  if (currentStep.value === 2 && selectedMemberIds.value.length === 0) {
+    ElMessage.warning('请至少选择一名项目成员')
+    return
+  }
+  currentStep.value++
 }
 
 function prevStep() {
@@ -697,6 +730,8 @@ function saveDraft() {
   const draft = {
     currentStep: currentStep.value,
     projectForm: { ...projectForm },
+    selectedMemberIds: selectedMemberIds.value,
+    overdueRuleEnabled: overdueRuleEnabled.value,
     selectedTemplate: selectedTemplate.value,
     adjustedTasks: adjustedTasks.value,
     savedAt: new Date().toISOString()
@@ -726,6 +761,8 @@ function restoreDraft() {
     const draft = JSON.parse(raw)
     currentStep.value = draft.currentStep || 0
     Object.assign(projectForm, draft.projectForm || {})
+    selectedMemberIds.value = draft.selectedMemberIds || []
+    overdueRuleEnabled.value = draft.overdueRuleEnabled !== false
     selectedTemplate.value = draft.selectedTemplate
     adjustedTasks.value = draft.adjustedTasks || []
     ElMessage.success('已恢复未完成的创建')
@@ -767,53 +804,50 @@ const calcTaskPlanEndDate = (task: any): string => {
 async function submitCreate() {
   submitting.value = true
   try {
-    const projectData = {
-      ...projectForm,
-      createMethod: 'template',
-      templateId: selectedTemplate.value,
-      status: 'initiating',
-      // P1-1: 将复选框值传入 API 参数
-      notifyMembers: notifyMembers.value,
-      autoGantt: autoGantt.value,
-      // P0-1: 将 adjustedTasks 传入创建数据
-      tasks: adjustedTasks.value.map(t => ({
-        taskName: t.taskName,
-        stageName: t.stageName,
-        stageId: t.stageId,
-        taskType: t.taskType || 'design',
-        cycle: t.cycle || 5,
-        priority: t.priority || 'normal',
-        isMilestone: !!t.isMilestone,
-        mainOwnerId: t.mainOwnerId,
-        // 关键修复: helperIds 后端不接受空数组, 转 null
-        helperIds: Array.isArray(t.helperIds) && t.helperIds.length > 0
-          ? t.helperIds.join(',')
-          : null,
-        description: t.description || '',
-        outputRequirement: t.outputRequirement || '',
-        planStartDate: t.planStartDate || projectForm.planStartDate,
-        planEndDate: calcTaskPlanEndDate(t),
-        roleName: t.roleName
-      }))
-    }
-    const res = await createProject(projectData)
+    const tasks = adjustedTasks.value.map(t => ({
+      taskName: t.taskName,
+      stageId: t.stageId,
+      taskType: t.taskType || 'design',
+      cycle: t.cycle || 5,
+      priority: t.priority || 'normal',
+      isMilestone: !!t.isMilestone,
+      mainOwnerId: t.mainOwnerId,
+      helperIds: Array.isArray(t.helperIds) && t.helperIds.length > 0 ? t.helperIds.join(',') : null,
+      description: t.description || '',
+      outputRequirement: t.outputRequirement || '',
+      planStartDate: t.planStartDate || projectForm.planStartDate,
+      planEndDate: calcTaskPlanEndDate(t),
+      roleName: t.roleName
+    }))
+    const members = selectedMemberIds.value.map(userId => ({
+      userId,
+      roleCode: String(userId) === String(projectForm.projectManagerId) ? 'pm' : 'member',
+      isExternal: false,
+      status: 'active'
+    }))
+    const notifyRules = overdueRuleEnabled.value ? [{
+      ruleName: '任务延期通知项目经理',
+      triggerEvent: 'task_overdue',
+      triggerCondition: '{}',
+      notifyTarget: 'project_manager',
+      notifyChannel: 'dingtalk',
+      timeRule: 'daily',
+      templateTitle: '任务延期提醒',
+      templateContent: '任务已延期，请项目经理及时处理。',
+      status: 'enabled',
+      doNotDisturb: false,
+      escalationFlag: false
+    }] : []
+    const projectId = await createProjectBundle({
+      project: { ...projectForm, createMethod: 'template', templateId: selectedTemplate.value as number, status: 'initiating' },
+      members, tasks, notifyRules
+    })
     clearDraft()
     ElMessage.success('项目创建成功！')
-    // P1-2: 安全提取 projectId，res 为 undefined 时有合理的错误处理
-    const projectId = res ? ((res as any)?.projectId || (res as any)?.data || (res as any)) : undefined
     if (!projectId) {
       ElMessage.error('创建成功但未获取到项目ID，请刷新列表查看')
       router.push('/pms/project')
       return
-    }
-    // P1-03: 自动将项目经理添加为项目成员
-    if (projectForm.projectManagerId) {
-      createProjectMember({
-        projectId: String(projectId),
-        userId: String(projectForm.projectManagerId),
-        roleCode: 'pm',
-        status: 'active'
-      }).catch(() => { /* 非阻塞，成员添加失败不影响项目创建流程 */ })
     }
     router.push(`/pms/project-detail/${projectId}`)
   } catch (e) {

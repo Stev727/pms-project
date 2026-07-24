@@ -63,9 +63,9 @@ export const simulateDingtalkConfirm = (taskId: string | number) => {
 }
 
 export const submitTaskCompletion = (taskId: string | number) => {
-  return request.post({ url: /pms/task/completion/submit, params: { taskId } })
+  return request.post({ url: '/pms/task/completion/submit', params: { taskId } })
 }
 
 export const reviewTaskCompletion = (taskId: string | number, approved: boolean) => {
-  return request.put({ url: /pms/task/completion/review, params: { taskId, approved } })
+  return request.put({ url: '/pms/task/completion/review', params: { taskId, approved } })
 }
