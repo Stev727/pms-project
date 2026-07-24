@@ -37,3 +37,11 @@ export const getChangeRecord = (id: string | number) => {
 export const getChangeRecordList = () => {
   return request.get({ url: '/pms/change-record/list' })
 }
+
+export const reviewChangeRecord = (id: string | number, approved: boolean) => {
+  return request.put({ url: /pms/change-record/review, params: { id, approved } })
+}
+
+export const executeChangeRecord = (id: string | number) => {
+  return request.put({ url: /pms/change-record/execute, params: { id } })
+}

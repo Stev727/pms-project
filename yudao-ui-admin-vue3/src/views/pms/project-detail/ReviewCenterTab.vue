@@ -61,7 +61,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { updateTask, getTaskList, TaskVO } from '@/api/pms/task'
+import { reviewTaskCompletion, getTaskList, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
@@ -84,7 +84,7 @@ const reviewForm = reactive({ result: 'approve' as 'approve' | 'reject', opinion
 const pendingTasks = computed(() => {
   const stageMap = new Map(allStages.value.map(s => [String(s.stageId), s.stageName]))
   return allTasks.value
-    .filter(t => String(t.projectId) === String(props.projectId) && t.completeStatus === 'pending_review')
+    .filter(t => String(t.projectId) === String(props.projectId) && t.completeStatus === 'completion_pending_review')
     .map(t => ({
       ...t,
       mainOwnerName: t.mainOwnerId ? getUserName(t.mainOwnerId) : '-',
@@ -130,13 +130,7 @@ const submitReview = async () => {
   }
   submitting.value = true
   try {
-    const newStatus = reviewForm.result === 'approve' ? 'completed' : 'in_progress'
-    await updateTask({
-      ...currentTask.value,
-      completeStatus: newStatus,
-      reviewOpinion: reviewForm.opinion,
-      actualCompleteDate: reviewForm.result === 'approve' ? new Date().toISOString() : undefined
-    } as TaskVO)
+    await reviewTaskCompletion(currentTask.value.taskId, reviewForm.result === 'approve')
     ElMessage.success(reviewForm.result === 'approve' ? '已通过审核' : '已驳回')
     reviewDialogVisible.value = false
     await loadTasks()
@@ -156,7 +150,7 @@ const handleBatchApprove = async () => {
     for (const id of selectedIds.value) {
       const task = allTasks.value.find(t => String(t.taskId) === id)
       if (task) {
-        await updateTask({ ...task, completeStatus: 'completed', reviewOpinion: '批量通过', actualCompleteDate: new Date().toISOString() } as TaskVO)
+        await reviewTaskCompletion(task.taskId, true)
         success++
       }
     }
@@ -178,7 +172,7 @@ const handleBatchReject = async () => {
     for (const id of selectedIds.value) {
       const task = allTasks.value.find(t => String(t.taskId) === id)
       if (task) {
-        await updateTask({ ...task, completeStatus: 'in_progress', reviewOpinion: opinion } as TaskVO)
+        await reviewTaskCompletion(task.taskId, false)
         success++
       }
     }

@@ -317,7 +317,7 @@
 </template>
 
 <script setup lang="ts">
-import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi } from '@/api/pms/task'
+import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, submitTaskCompletion } from '@/api/pms/task'
 import { getProjectMemberList } from '@/api/pms/member'
 import { getDocumentList } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
@@ -644,11 +644,7 @@ const confirmSubmitComplete = async () => {
     return
   }
   try {
-    await updateTask({
-      taskId: task.value.taskId,
-      completeStatus: 'pending_review'
-      // P0-05: 不强制设 progress=100，保留当前进度值，避免列表与详情不一致
-    })
+    await submitTaskCompletion(task.value.taskId)
     message.success('已提交完成，等待项目经理审核')
     showSubmitDialog.value = false
     // P0-05: 重新获取最新任务数据，避免使用旧对象
