@@ -17,7 +17,7 @@ class ControllerPermissionExpressionTest {
         assertPermission(ProjectController.class, "createBundle", "@ss.hasPermission('pms:project:create')", ProjectCreateBundleReqVO.class);
         assertPermission(TaskController.class, "submitCompletion", "@ss.hasPermission('pms:task:update')", Long.class);
         assertPermission(TaskController.class, "reviewCompletion", "@ss.hasPermission('pms:task:update')", Long.class, boolean.class);
-        assertPermission(ChangeRecordController.class, "review", "@ss.hasPermission('pms:change:update')", Long.class, boolean.class, Long.class);
+        assertPermission(ChangeRecordController.class, "review", "@ss.hasPermission('pms:change:update')", Long.class, boolean.class);
         assertPermission(ChangeRecordController.class, "execute", "@ss.hasPermission('pms:change:update')", Long.class);
     }
 

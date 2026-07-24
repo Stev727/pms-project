@@ -42,7 +42,7 @@ public class TaskController {
     @PreAuthorize("@ss.hasPermission('pms:task:update')")
     public CommonResult<Boolean> reviewCompletion(@RequestParam("taskId") Long taskId,
                                                    @RequestParam("approved") boolean approved) {
-        taskService.reviewCompletion(taskId, approved);
+        taskService.reviewCompletion(taskId, approved, cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId());
         return success(true);
     }
 

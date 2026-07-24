@@ -12,7 +12,7 @@ public interface ChangeRecordService {
 
     void reviewChange(Long id, boolean approved, Long approverId);
 
-    void executeApprovedChange(Long id);
+    void executeApprovedChange(Long id, Long operatorId);
 
     void updateChangeRecord(PmsChangeRecordDO entity);
 

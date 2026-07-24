@@ -14,7 +14,7 @@ public interface TaskService {
 
     void submitCompletion(Long taskId);
 
-    void reviewCompletion(Long taskId, boolean approved);
+    void reviewCompletion(Long taskId, boolean approved, Long operatorId);
 
     void updateTask(PmsTaskDO entity);
 

@@ -3,6 +3,8 @@ package cn.iocoder.yudao.module.pms.service.task.impl;
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
+import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
+import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.tasklog.TaskLogMapper;
 import cn.iocoder.yudao.module.pms.dal.dataobject.tasklog.PmsTaskLogDO;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
@@ -17,6 +19,8 @@ public class TaskServiceImpl implements TaskService {
 
     @Resource
     private TaskMapper taskMapper;
+    @Resource
+    private ProjectMapper projectMapper;
 
     @Resource
     private TaskLogMapper taskLogMapper;
@@ -32,7 +36,7 @@ public class TaskServiceImpl implements TaskService {
     public void simulateDingtalkConfirm(Long taskId) {
         PmsTaskDO task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new ServiceException(500, "任务不存在");
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_NOT_EXISTS);
         }
 
         PmsTaskDO update = new PmsTaskDO();
@@ -57,17 +61,18 @@ public class TaskServiceImpl implements TaskService {
     public void submitCompletion(Long taskId) {
         PmsTaskDO task = requireTask(taskId);
         if (!"in_progress".equals(task.getCompleteStatus())) {
-            throw new IllegalStateException("只有进行中的任务可以提交完成");
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_STATUS_INVALID);
         }
         task.setCompleteStatus("completion_pending_review");
         taskMapper.updateById(task);
     }
 
     @Override
-    public void reviewCompletion(Long taskId, boolean approved) {
+    public void reviewCompletion(Long taskId, boolean approved, Long operatorId) {
         PmsTaskDO task = requireTask(taskId);
+        requireProjectManager(task, operatorId);
         if (!"completion_pending_review".equals(task.getCompleteStatus())) {
-            throw new IllegalStateException("只有待完成审核的任务可以审核");
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_STATUS_INVALID);
         }
         if (approved) {
             task.setCompleteStatus("completed");
@@ -79,10 +84,17 @@ public class TaskServiceImpl implements TaskService {
         taskMapper.updateById(task);
     }
 
+    private void requireProjectManager(PmsTaskDO task, Long operatorId) {
+        PmsProjectDO project = projectMapper.selectById(task.getProjectId());
+        if (project == null || !java.util.Objects.equals(project.getProjectManagerId(), operatorId)) {
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
+        }
+    }
+
     private PmsTaskDO requireTask(Long taskId) {
         PmsTaskDO task = taskMapper.selectById(taskId);
         if (task == null) {
-            throw new IllegalArgumentException("任务不存在");
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_NOT_EXISTS);
         }
         return task;
     }

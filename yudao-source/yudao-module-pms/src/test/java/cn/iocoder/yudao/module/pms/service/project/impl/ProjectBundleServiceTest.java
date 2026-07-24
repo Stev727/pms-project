@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.pms.service.project.impl;
 
 import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
+import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.projectmember.PmsProjectMemberDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
@@ -66,6 +67,6 @@ class ProjectBundleServiceTest {
         request.setMembers(List.of(member));
         request.setTasks(List.of(task));
 
-        assertThrows(IllegalArgumentException.class, () -> service.createProjectBundle(request));
+        assertThrows(ServiceException.class, () -> service.createProjectBundle(request));
     }
 }

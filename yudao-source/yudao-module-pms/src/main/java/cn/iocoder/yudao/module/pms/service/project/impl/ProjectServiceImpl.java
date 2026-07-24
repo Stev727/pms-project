@@ -5,6 +5,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
+import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.module.pms.dal.dataobject.notifyrule.PmsNotifyRuleDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.projectmember.PmsProjectMemberDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.notifyrule.NotifyRuleMapper;
@@ -76,7 +77,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional(rollbackFor = Exception.class)
     public Long createProjectBundle(ProjectCreateBundleReqVO request) {
         if (request == null || request.getProject() == null) {
-            throw new IllegalArgumentException("项目信息不能为空");
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_REQUIRED);
         }
         List<PmsProjectMemberDO> members = request.getMembers() == null ? List.of() : request.getMembers();
         List<PmsTaskDO> tasks = request.getTasks() == null ? List.of() : request.getTasks();
@@ -85,7 +86,7 @@ public class ProjectServiceImpl implements ProjectService {
         boolean invalidOwner = tasks.stream().map(PmsTaskDO::getMainOwnerId)
                 .filter(java.util.Objects::nonNull).anyMatch(ownerId -> !memberUserIds.contains(ownerId));
         if (invalidOwner) {
-            throw new IllegalArgumentException("任务负责人必须是项目成员");
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_OWNER_NOT_MEMBER);
         }
 
         Long projectId = createProject(request.getProject());

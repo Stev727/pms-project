@@ -33,9 +33,8 @@ public class ChangeRecordController {
     @Operation(summary = "项目经理审核任务变更")
     @PreAuthorize("@ss.hasPermission('pms:change:update')")
     public CommonResult<Boolean> review(@RequestParam("id") Long id,
-                                        @RequestParam("approved") boolean approved,
-                                        @RequestParam("approverId") Long approverId) {
-        changeRecordService.reviewChange(id, approved, approverId);
+                                        @RequestParam("approved") boolean approved) {
+        changeRecordService.reviewChange(id, approved, cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId());
         return success(true);
     }
 
@@ -43,7 +42,7 @@ public class ChangeRecordController {
     @Operation(summary = "项目经理执行审核通过的任务变更")
     @PreAuthorize("@ss.hasPermission('pms:change:update')")
     public CommonResult<Boolean> execute(@RequestParam("id") Long id) {
-        changeRecordService.executeApprovedChange(id);
+        changeRecordService.executeApprovedChange(id, cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId());
         return success(true);
     }
 
