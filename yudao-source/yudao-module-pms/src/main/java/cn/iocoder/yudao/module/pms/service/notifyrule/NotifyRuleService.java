@@ -18,4 +18,6 @@ public interface NotifyRuleService {
 
     List<PmsNotifyRuleDO> getNotifyRuleList();
 
+    List<PmsNotifyRuleDO> getEffectiveRules(Long projectId, Long taskId, String triggerEvent);
+
 }

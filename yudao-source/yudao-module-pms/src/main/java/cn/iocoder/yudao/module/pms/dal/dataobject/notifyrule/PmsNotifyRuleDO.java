@@ -22,6 +22,21 @@ public class PmsNotifyRuleDO extends TenantBaseDO {
     private Long ruleId;
 
     /**
+     * 规则范围：project、task
+     */
+    private String scopeType;
+
+    /**
+     * 所属项目
+     */
+    private Long projectId;
+
+    /**
+     * 所属任务，项目默认规则为空
+     */
+    private Long taskId;
+
+    /**
      * 规则名称
      */
     private String ruleName;
