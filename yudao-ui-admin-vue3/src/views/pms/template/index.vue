@@ -311,23 +311,6 @@
             <el-option v-for="s in editStageList" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="!taskEditForm.isStage" label="任务类型">
-          <el-select v-model="taskEditForm.taskType" placeholder="请选择" class="w-full">
-            <el-option label="设计" value="design" />
-            <el-option label="评审" value="review" />
-            <el-option label="测试" value="testing" />
-            <el-option label="采购" value="procurement" />
-            <el-option label="打样" value="prototyping" />
-            <el-option label="文档" value="documentation" />
-            <el-option label="审批" value="approval" />
-            <el-option label="供方协同" value="supplier_synergy" />
-            <el-option label="其他" value="other" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="!taskEditForm.isStage" label="计划工期">
-          <el-input-number v-model="taskEditForm.cycle" :min="1" :max="365" />
-          <span class="ml-8px">天</span>
-        </el-form-item>
         <el-form-item v-if="!taskEditForm.isStage" label="输出要求">
           <el-input v-model="taskEditForm.outputRequirement" type="textarea" :rows="2" />
         </el-form-item>

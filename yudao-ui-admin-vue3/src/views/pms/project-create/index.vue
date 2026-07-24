@@ -275,16 +275,13 @@
             </el-row>
             <el-row :gutter="16">
               <el-col :span="12">
-                <el-form-item label="任务类型">
-                  <el-select v-model="taskForm.taskType" placeholder="请选择" class="w-full">
-                    <el-option v-for="opt in taskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-                  </el-select>
+                <el-form-item label="计划开始">
+                  <el-date-picker v-model="taskForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="计划工期">
-                  <el-input-number v-model="taskForm.cycle" :min="1" :max="365" />
-                  <span class="ml-8px">天</span>
+                <el-form-item label="计划结束">
+                  <el-date-picker v-model="taskForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -480,6 +477,8 @@ const taskForm = reactive({
   stageName: '',
   taskType: 'design',
   cycle: 5,
+  planStartDate: '',
+  planEndDate: '',
   priority: 'normal',
   isMilestone: false,
   mainOwnerId: undefined as number | undefined,
@@ -645,6 +644,8 @@ function editTask(row: any, _index: number) {
     stageName: row.stageName,
     taskType: row.taskType || 'design',
     cycle: row.cycle || 5,
+    planStartDate: row.planStartDate || '',
+    planEndDate: row.planEndDate || '',
     priority: row.priority || 'normal',
     isMilestone: row.isMilestone || false,
     mainOwnerId: row.mainOwnerId || undefined,
@@ -682,6 +683,7 @@ function confirmAddTask() {
   // 重置表单
   Object.assign(taskForm, {
     taskName: '', stageName: '', taskType: 'design', cycle: 5,
+    planStartDate: '', planEndDate: '',
     priority: 'normal', isMilestone: false, mainOwnerId: undefined, helperIds: [],
     description: '', outputRequirement: ''
   })
