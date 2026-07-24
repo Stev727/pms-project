@@ -36,7 +36,7 @@ public class ChangeRecordServiceImpl implements ChangeRecordService {
         }
         record.setApproverId(approverId);
         record.setApprovalStatus(approved ? "approved" : "rejected");
-        record.setChangeStatus(approved ? "approved" : "rejected");
+        record.setChangeStatus(approved ? "approved_pending_execution" : "rejected");
         changeRecordMapper.updateById(record);
     }
 
@@ -44,11 +44,24 @@ public class ChangeRecordServiceImpl implements ChangeRecordService {
     public void executeApprovedChange(Long id, Long operatorId) {
         PmsChangeRecordDO record = requireRecord(id);
         requireProjectManager(record, operatorId);
-        if (!"approved".equals(record.getApprovalStatus()) || !"approved".equals(record.getChangeStatus())) {
+        if (!"approved".equals(record.getApprovalStatus()) || !"approved_pending_execution".equals(record.getChangeStatus())) {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.CHANGE_STATUS_INVALID);
         }
         record.setChangeStatus("executed");
         record.setExecuteTime(LocalDateTime.now());
+        changeRecordMapper.updateById(record);
+    }
+
+    @Override
+    public void executeChange(Long id) {
+        PmsChangeRecordDO record = changeRecordMapper.selectById(id);
+        if (record == null) {
+            throw new ServiceException(500, "变更记录不存在");
+        }
+        if (!"approved_pending_execution".equals(record.getChangeStatus())) {
+            throw new ServiceException(500, "只有审批通过的变更才能执行");
+        }
+        record.setChangeStatus("executed");
         changeRecordMapper.updateById(record);
     }
 

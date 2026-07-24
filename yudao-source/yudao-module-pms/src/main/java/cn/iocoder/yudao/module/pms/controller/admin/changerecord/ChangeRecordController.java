@@ -38,11 +38,12 @@ public class ChangeRecordController {
         return success(true);
     }
 
-    @PutMapping("/execute")
-    @Operation(summary = "项目经理执行审核通过的任务变更")
+    @PostMapping("/execute")
+    @Operation(summary = "执行已审批通过的变更")
+    @Parameter(name = "id", description = "变更编号", required = true)
     @PreAuthorize("@ss.hasPermission('pms:change:update')")
-    public CommonResult<Boolean> execute(@RequestParam("id") Long id) {
-        changeRecordService.executeApprovedChange(id, cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId());
+    public CommonResult<Boolean> executeChange(@RequestParam("id") Long id) {
+        changeRecordService.executeChange(id);
         return success(true);
     }
 

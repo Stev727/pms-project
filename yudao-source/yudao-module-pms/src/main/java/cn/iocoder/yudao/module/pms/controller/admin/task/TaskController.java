@@ -37,19 +37,25 @@ public class TaskController {
         return success(true);
     }
 
-    @PostMapping("/completion/submit")
-    @Operation(summary = "提交任务完成审核")
+    @PostMapping("/submit-completion")
+    @Operation(summary = "提交任务完成（进入待审核）")
+    @Parameter(name = "taskId", description = "任务编号", required = true)
     @PreAuthorize("@ss.hasPermission('pms:task:update')")
     public CommonResult<Boolean> submitCompletion(@RequestParam("taskId") Long taskId) {
         taskService.submitCompletion(taskId);
         return success(true);
     }
 
-    @PutMapping("/completion/review")
-    @Operation(summary = "项目经理审核任务完成")
+    @PostMapping("/review-completion")
+    @Operation(summary = "审核任务完成（通过/驳回）")
+    @Parameter(name = "taskId", description = "任务编号", required = true)
+    @Parameter(name = "approved", description = "是否通过", required = true)
+    @Parameter(name = "reviewOpinion", description = "审核意见")
     @PreAuthorize("@ss.hasPermission('pms:task:update')")
-    public CommonResult<Boolean> reviewCompletion(@RequestParam("taskId") Long taskId,
-                                                   @RequestParam("approved") boolean approved) {
+    public CommonResult<Boolean> reviewCompletion(
+            @RequestParam("taskId") Long taskId,
+            @RequestParam("approved") Boolean approved,
+            @RequestParam(value = "reviewOpinion", required = false) String reviewOpinion) {
         taskService.reviewCompletion(taskId, approved, cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId());
         return success(true);
     }

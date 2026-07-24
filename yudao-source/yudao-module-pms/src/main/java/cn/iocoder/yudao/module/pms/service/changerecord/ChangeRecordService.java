@@ -14,6 +14,8 @@ public interface ChangeRecordService {
 
     void executeApprovedChange(Long id, Long operatorId);
 
+    void executeChange(Long id);
+
     void updateChangeRecord(PmsChangeRecordDO entity);
 
     void deleteChangeRecord(Long id);

@@ -86,4 +86,39 @@ public class PmsNotifyLogDO extends TenantBaseDO {
      */
     private LocalDateTime readTime;
 
+    /**
+     * 项目ID
+     */
+    private Long projectId;
+
+    /**
+     * 任务ID
+     */
+    private Long taskId;
+
+    /**
+     * 接收人用户ID
+     */
+    private Long receiverUserId;
+
+    /**
+     * 接收人姓名
+     */
+    private String receiverName;
+
+    /**
+     * 钉钉用户ID
+     */
+    private String dingtalkUserId;
+
+    /**
+     * 幂等性键（防重复通知）
+     */
+    private String idempotencyKey;
+
+    /**
+     * 重试次数
+     */
+    private Integer retryCount;
+
 }

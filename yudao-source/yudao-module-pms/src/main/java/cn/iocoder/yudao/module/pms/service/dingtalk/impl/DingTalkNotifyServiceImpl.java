@@ -86,6 +86,14 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
         // 4. 获取接收人的钉钉 userid
         List<PmsDingTalkUserDO> dingTalkUsers = dingTalkUserMapper.selectListByUserIds(receiverUserIds);
+        // fail closed: 接收人缺少有效钉钉用户映射时记录失败日志
+        if (dingTalkUsers == null || dingTalkUsers.size() != receiverUserIds.size()) {
+            log.warn("[DingTalkNotify] 接收人缺少有效钉钉用户映射: userIds={}, mapped={}",
+                    receiverUserIds, dingTalkUsers != null ? dingTalkUsers.size() : 0);
+            saveNotifyLog(rule, title, content, receiverUserIds, "failed",
+                    "接收人缺少有效钉钉用户映射", businessType, businessId);
+            return false;
+        }
         String userIdList = dingTalkUsers.stream()
                 .map(PmsDingTalkUserDO::getDingtalkUserId)
                 .filter(Objects::nonNull)
@@ -93,7 +101,8 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
         if (StrUtil.isBlank(userIdList)) {
             log.warn("[DingTalkNotify] 接收人无钉钉用户映射: userIds={}", receiverUserIds);
-            saveNotifyLog(rule, title, content, receiverUserIds, "skipped", "接收人无钉钉用户映射", businessType, businessId);
+            saveNotifyLog(rule, title, content, receiverUserIds, "failed",
+                    "接收人缺少有效钉钉用户映射", businessType, businessId);
             return false;
         }
 
@@ -117,6 +126,14 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         }
 
         List<PmsDingTalkUserDO> dingTalkUsers = dingTalkUserMapper.selectListByUserIds(receiverUserIds);
+        // fail closed: 接收人缺少有效钉钉用户映射时记录失败日志
+        if (dingTalkUsers == null || dingTalkUsers.size() != receiverUserIds.size()) {
+            log.warn("[DingTalkNotify] 接收人缺少有效钉钉用户映射: userIds={}, mapped={}",
+                    receiverUserIds, dingTalkUsers != null ? dingTalkUsers.size() : 0);
+            saveNotifyLog(null, title, content, receiverUserIds, "failed",
+                    "接收人缺少有效钉钉用户映射", businessType, businessId);
+            return false;
+        }
         String userIdList = dingTalkUsers.stream()
                 .map(PmsDingTalkUserDO::getDingtalkUserId)
                 .filter(Objects::nonNull)
@@ -124,6 +141,8 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
         if (StrUtil.isBlank(userIdList)) {
             log.warn("[DingTalkNotify] 接收人无钉钉用户映射: userIds={}", receiverUserIds);
+            saveNotifyLog(null, title, content, receiverUserIds, "failed",
+                    "接收人缺少有效钉钉用户映射", businessType, businessId);
             return false;
         }
 
@@ -365,6 +384,18 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             logDO.setContent(content);
             logDO.setBusinessType(businessType);
             logDO.setBusinessId(businessId);
+            // 幂等性与接收人字段
+            if ("task".equals(businessType) && businessId != null) {
+                logDO.setTaskId(businessId);
+            }
+            if (receiverUserIds != null && !receiverUserIds.isEmpty()) {
+                logDO.setReceiverUserId(receiverUserIds.get(0));
+            }
+            String evt = rule != null ? rule.getTriggerEvent() : "manual";
+            if (businessId != null) {
+                logDO.setIdempotencyKey(evt + ":" + businessId + ":" + java.time.LocalDate.now());
+            }
+            logDO.setRetryCount(0);
             notifyLogMapper.insert(logDO);
         } catch (Exception e) {
             log.error("[DingTalkNotify] 保存通知日志失败", e);
