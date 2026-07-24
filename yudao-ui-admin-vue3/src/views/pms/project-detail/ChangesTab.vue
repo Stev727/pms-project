@@ -271,22 +271,26 @@ async function submitChange() {
     // P1-05: 获取当前用户 ID 作为申请人
     const userInfo = useCache().wsCache.get('userInfo')
     const currentUserId = userInfo?.id
-    await createChangeRecord({
+    const submitData: any = {
       changeDescription: newChange.title,
       changeType: newChange.type,
       changeReason: newChange.reason,
       projectId: props.projectId,
-      affectedTasks: newChange.affectedTasks,
-      taskId: newChange.affectedTasks || null,  // P0-07: 关联任务 ID
+      affectedTasks: newChange.affectedTasks || null,
+      taskId: newChange.affectedTasks || null,
       beforeContent: newChange.beforeContent,
       afterContent: newChange.afterContent,
       urgent: newChange.urgent,
-      costImpact: newChange.costImpact,
-      scheduleImpact: newChange.scheduleImpact,
+      costImpact: newChange.costImpact ?? 0,
+      scheduleImpact: newChange.scheduleImpact ?? 0,
       changeCode: `CR-${Date.now().toString().slice(-6)}`,
-      approvalStatus: 'pending',
-      initiatorId: String(currentUserId)  // P1-05: 申请人
-    } as unknown as ChangeRecordVO)
+      approvalStatus: 'pending'
+    }
+    // 仅在有 userInfo 时才传 initiatorId，避免传入字符串 "undefined"
+    if (currentUserId) {
+      submitData.initiatorId = String(currentUserId)
+    }
+    await createChangeRecord(submitData as unknown as ChangeRecordVO)
     ElMessage.success('变更已提交')
     showForm.value = false
     Object.assign(newChange, { title: '', type: 'requirement', urgent: false, beforeContent: '', afterContent: '', reason: '', affectedTasks: '', costImpact: 0, scheduleImpact: 0 })

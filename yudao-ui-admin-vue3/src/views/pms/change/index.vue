@@ -253,7 +253,7 @@ async function submitChange() {
     // P1-05: 获取当前用户 ID 作为申请人
     const userInfo = useCache().wsCache.get('userInfo')
     const currentUserId = userInfo?.id
-    await createChangeRecord({
+    const submitData: any = {
       changeDescription: newChange.title,
       changeType: newChange.type,
       changeReason: newChange.reason,
@@ -264,9 +264,13 @@ async function submitChange() {
       urgent: newChange.urgent,
       scheduleImpact: newChange.scheduleImpact,
       changeCode: `CR-${Date.now().toString().slice(-6)}`,
-      approvalStatus: 'pending',
-      initiatorId: String(currentUserId)  // P1-05: 申请人
-    } as ChangeRecordVO)
+      approvalStatus: 'pending'
+    }
+    // 仅在有 userInfo 时才传 initiatorId，避免传入字符串 "undefined"
+    if (currentUserId) {
+      submitData.initiatorId = String(currentUserId)
+    }
+    await createChangeRecord(submitData as ChangeRecordVO)
     ElMessage.success('变更已提交')
     showForm.value = false
     Object.assign(newChange, { title: '', type: 'schedule', urgent: false, beforeContent: '', afterContent: '', reason: '', projectId: '' })

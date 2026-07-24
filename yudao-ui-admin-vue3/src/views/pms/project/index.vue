@@ -67,7 +67,7 @@
             <el-card class="project-card" shadow="hover" @click="goDetail(project)">
               <div class="card-header">
                 <span class="card-title" :title="project.projectName">{{ project.projectName }}</span>
-                <el-dropdown trigger="click" @click.stop>
+                <el-dropdown trigger="click" @click.stop placement="bottom-end" :append-to-body="false" :popper-options="{ strategy: 'fixed' }">
                   <el-icon class="card-more"><Icon icon="ep:more-filled" /></el-icon>
                   <template #dropdown>
                     <el-dropdown-menu>

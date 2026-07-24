@@ -447,7 +447,19 @@ const formRules = {
   projectManagerId: [{ required: true, message: '请选择项目经理', trigger: 'change' }],
   deptId: [{ required: false }],
   planStartDate: [{ required: false }],
-  planEndDate: [{ required: false }]
+  planEndDate: [
+    { required: false },
+    {
+      validator: (rule, value, callback) => {
+        if (value && projectForm.planStartDate && new Date(value) <= new Date(projectForm.planStartDate)) {
+          callback(new Error('计划结束日期必须大于计划开始日期'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ]
 }
 
 // 用户和部门（P1-02: 项目经理使用远程搜索，其余保留全量列表兼容批量操作）
