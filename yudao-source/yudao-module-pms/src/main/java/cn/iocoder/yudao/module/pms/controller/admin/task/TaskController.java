@@ -37,6 +37,15 @@ public class TaskController {
         return success(true);
     }
 
+    @PostMapping("/simulate-dingtalk-confirm")
+    @Operation(summary = "模拟钉钉确认")
+    @Parameter(name = "taskId", description = "任务编号", required = true)
+    @PreAuthorize("@ss.hasPermission('pms:task:update')")
+    public CommonResult<Boolean> simulateDingtalkConfirm(@RequestParam("taskId") Long taskId) {
+        taskService.simulateDingtalkConfirm(taskId);
+        return success(true);
+    }
+
     @DeleteMapping("/delete")
     @Operation(summary = "删除任务")
     @Parameter(name = "id", description = "编号", required = true)

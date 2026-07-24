@@ -57,3 +57,7 @@ export const getTask = (id: string) => {
 export const getTaskList = () => {
   return request.get({ url: '/pms/task/list' })
 }
+
+export const simulateDingtalkConfirm = (taskId: string | number) => {
+  return request.post({ url: '/pms/task/simulate-dingtalk-confirm', params: { taskId } })
+}

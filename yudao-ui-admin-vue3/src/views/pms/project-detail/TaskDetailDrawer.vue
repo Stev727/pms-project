@@ -16,7 +16,18 @@
             </el-tag>
             <span class="progress-text">进度 {{ task?.progress || 0 }}%</span>
             <el-progress :percentage="task?.progress || 0" :stroke-width="4" :show-text="false" style="width: 100px" />
-            <el-button link type="primary" size="small" @click="handleEdit" v-if="checkPermi(['pms:task:update'])">编辑</el-button>
+          </div>
+          <div class="header-ops" style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap">
+            <el-button v-if="!isEditMode && task?.completeStatus !== 'completed' && checkPermi(['pms:task:update'])"
+              type="primary" plain size="small" @click="enterEditMode">
+              <Icon icon="ep:edit" class="mr-4px" />编辑任务
+            </el-button>
+            <el-button v-if="!isEditMode && canSimulateDingtalk"
+              type="success" plain size="small" @click="simulateDingtalkConfirm">
+              <Icon icon="ep:chat-dot-round" class="mr-4px" />模拟钉钉确认
+            </el-button>
+            <el-button v-if="isEditMode" type="primary" size="small" :loading="savingEdit" @click="saveEdit">保存</el-button>
+            <el-button v-if="isEditMode" size="small" @click="cancelEdit">取消</el-button>
           </div>
         </div>
       </div>
@@ -26,7 +37,57 @@
         <el-tabs v-model="activeTab">
           <!-- 基本信息 -->
           <el-tab-pane label="基本信息" name="info">
-            <el-descriptions :column="2" border size="small">
+            <!-- 编辑模式 -->
+            <div v-if="isEditMode">
+              <el-form label-width="100px">
+                <el-form-item label="任务名称">
+                  <el-input v-model="editForm.taskName" placeholder="请输入任务名称" />
+                </el-form-item>
+                <el-form-item label="责任人">
+                  <el-select v-model="editForm.mainOwnerId" filterable placeholder="选择责任人" class="w-full">
+                    <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="String(m.userId)" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="协助人">
+                  <el-select v-model="editForm.helperIds" multiple filterable placeholder="选择协助人" class="w-full">
+                    <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="String(m.userId)" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="计划开始">
+                  <el-date-picker v-model="editForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+                </el-form-item>
+                <el-form-item label="计划结束">
+                  <el-date-picker v-model="editForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+                </el-form-item>
+                <el-form-item label="任务类型">
+                  <el-select v-model="editForm.taskType" class="w-full">
+                    <el-option v-for="opt in taskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="优先级">
+                  <el-select v-model="editForm.priority" class="w-full">
+                    <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="工期(天)">
+                  <el-input-number v-model="editForm.cycle" :min="1" :max="999" class="w-full" />
+                </el-form-item>
+                <el-form-item label="里程碑">
+                  <el-switch v-model="editForm.isMilestone" />
+                </el-form-item>
+                <el-form-item label="任务描述">
+                  <el-input v-model="editForm.description" type="textarea" :rows="3" />
+                </el-form-item>
+                <el-form-item label="输出物要求">
+                  <el-input v-model="editForm.outputRequirement" type="textarea" :rows="2" />
+                </el-form-item>
+                <el-form-item label="完成标准">
+                  <el-input v-model="editForm.completionStandard" type="textarea" :rows="2" />
+                </el-form-item>
+              </el-form>
+            </div>
+            <!-- 查看模式 -->
+            <el-descriptions v-else :column="2" border size="small">
               <el-descriptions-item label="任务名称" :span="2">{{ task?.taskName }}</el-descriptions-item>
               <el-descriptions-item label="任务编号">{{ task?.taskCode || '-' }}</el-descriptions-item>
               <el-descriptions-item label="任务类型">{{ getTaskTypeLabel(task?.taskType) }}</el-descriptions-item>
@@ -256,12 +317,12 @@
 </template>
 
 <script setup lang="ts">
-import { TaskVO, updateTask, getTask } from '@/api/pms/task'
+import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi } from '@/api/pms/task'
 import { getProjectMemberList } from '@/api/pms/member'
 import { getDocumentList } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
 import {
-  taskStatusMap, priorityMap, taskTypeOptions,
+  taskStatusMap, priorityMap, taskTypeOptions, priorityOptions,
   formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
@@ -288,6 +349,10 @@ const showEditOwnerDialog = ref(false)
 const newOwnerId = ref('')
 const changingOwner = ref(false)
 const projectMembers = ref<any[]>([])
+// 编辑模式状态
+const isEditMode = ref(false)
+const savingEdit = ref(false)
+const editForm = reactive<any>({})
 
 // 列表数据
 const progressList = ref<any[]>([])
@@ -319,6 +384,11 @@ const delayDays = computed(() => {
   if (!task.value) return 0
   return calcDelayDays(task.value.planEndDate, task.value.completeStatus)
 })
+
+// 模拟钉钉确认：仅在未开始状态可用
+const canSimulateDingtalk = computed(() =>
+  task.value?.completeStatus === 'not_started'
+)
 
 // ==================== 方法 ====================
 const open = async (taskData: TaskVO) => {
@@ -411,6 +481,74 @@ const formatFileSize = (bytes?: number) => {
 }
 
 // ==================== 操作 ====================
+// ==================== 编辑模式 ====================
+const enterEditMode = () => {
+  if (!task.value) return
+  // 复制任务数据到编辑表单
+  Object.keys(editForm).forEach(k => delete editForm[k])
+  Object.assign(editForm, task.value)
+  // helperIds: string → array 适配多选
+  if (typeof editForm.helperIds === 'string' && editForm.helperIds) {
+    editForm.helperIds = editForm.helperIds.split(',').map((s: string) => s.trim()).filter(Boolean)
+  } else if (!Array.isArray(editForm.helperIds)) {
+    editForm.helperIds = []
+  }
+  // mainOwnerId → string 适配 select
+  if (editForm.mainOwnerId != null) {
+    editForm.mainOwnerId = String(editForm.mainOwnerId)
+  }
+  isEditMode.value = true
+}
+
+const cancelEdit = () => {
+  isEditMode.value = false
+}
+
+const saveEdit = async () => {
+  if (!task.value) return
+  savingEdit.value = true
+  try {
+    const submitData: any = { ...editForm }
+    // helperIds: array → string 适配后端
+    if (Array.isArray(submitData.helperIds)) {
+      submitData.helperIds = submitData.helperIds.length > 0
+        ? submitData.helperIds.join(',')
+        : null
+    }
+    await updateTask(submitData)
+    message.success('任务已更新')
+    isEditMode.value = false
+    // 重新获取任务数据
+    const fresh = await getTask(String(task.value.taskId))
+    if (fresh) task.value = fresh
+    emit('refresh')
+  } catch (e) {
+    console.error('更新任务失败', e)
+    message.error('更新失败')
+  } finally {
+    savingEdit.value = false
+  }
+}
+
+// ==================== 模拟钉钉确认 ====================
+const simulateDingtalkConfirm = async () => {
+  if (!task.value) return
+  message.confirm(
+    `模拟钉钉确认：将任务 "${task.value.taskName}" 状态改为"进行中"？`
+  ).then(async () => {
+    try {
+      await simulateDingtalkConfirmApi(task.value.taskId)
+      message.success('模拟钉钉确认成功')
+      const fresh = await getTask(String(task.value.taskId))
+      if (fresh) task.value = fresh
+      emit('refresh')
+    } catch (e) {
+      console.error('模拟钉钉确认失败', e)
+      message.error('模拟钉钉确认失败')
+    }
+  }).catch(() => {})
+}
+
 const handleEdit = () => {
   if (task.value) {
     emit('edit', task.value)

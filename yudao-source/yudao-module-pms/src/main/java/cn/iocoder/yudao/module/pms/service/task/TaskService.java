@@ -10,6 +10,8 @@ public interface TaskService {
 
     Long createTask(PmsTaskDO entity);
 
+    void simulateDingtalkConfirm(Long taskId);
+
     void updateTask(PmsTaskDO entity);
 
     void deleteTask(Long id);

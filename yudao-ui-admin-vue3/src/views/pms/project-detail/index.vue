@@ -230,6 +230,9 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <div v-if="projectMemberUsers.length === 0" class="text-warning mb-8px" style="color: #FF7D00; margin-bottom: 8px">
+          <Icon icon="ep:warning" /> 请先添加项目成员
+        </div>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="责任人" prop="mainOwnerId">
@@ -622,16 +625,21 @@ const openTaskDrawer = (task: TaskVO) => {
   taskDrawerRef.value?.open(task)
 }
 
-const openCreateTaskDialog = () => {
+const openCreateTaskDialog = async () => {
   taskFormRef.value?.resetFields?.()
   Object.assign(taskForm, {
     taskName: '', stageId: projectStages.value[0]?.stageId, taskType: 'design',
-    priority: 'normal', cycle: 5, planStartDate: '', planEndDate: '',
-    mainOwnerId: undefined, helperIds: [], isMilestone: false, completionStandard: '', estimatedHours: undefined,
+    priority: 'normal', cycle: 5, planStartDate: project.value?.planStartDate || '',
+    planEndDate: '', mainOwnerId: undefined, helperIds: [], isMilestone: false,
+    completionStandard: '', estimatedHours: undefined,
     description: '', outputRequirement: ''
   })
   // 加载当前项目成员列表作为责任人/协助人下拉数据源
-  loadProjectMembers(projectId.value)
+  await loadProjectMembers(projectId.value)
+  // 默认责任人为项目经理 (PM)
+  if (!taskForm.mainOwnerId && project.value?.projectManagerId) {
+    taskForm.mainOwnerId = String(project.value.projectManagerId) as any
+  }
   createTaskDialogVisible.value = true
 }
 
