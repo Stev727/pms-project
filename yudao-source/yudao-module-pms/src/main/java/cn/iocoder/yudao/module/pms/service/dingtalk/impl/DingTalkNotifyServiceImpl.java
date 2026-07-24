@@ -62,6 +62,11 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
     @Override
     public boolean sendNotifyByRule(Long ruleId, Map<String, Object> templateVars, List<Long> receiverUserIds) {
         // 1. 获取通知规则
+        return sendNotifyByRule(ruleId, templateVars, receiverUserIds, null, null);
+    }
+
+    boolean sendNotifyByRule(Long ruleId, Map<String, Object> templateVars, List<Long> receiverUserIds,
+                             String businessType, Long businessId) {
         PmsNotifyRuleDO rule = notifyRuleMapper.selectById(ruleId);
         if (rule == null || !"enabled".equals(rule.getStatus())) {
             log.warn("[DingTalkNotify] 通知规则不存在或未启用: ruleId={}", ruleId);
@@ -88,7 +93,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
         if (StrUtil.isBlank(userIdList)) {
             log.warn("[DingTalkNotify] 接收人无钉钉用户映射: userIds={}", receiverUserIds);
-            saveNotifyLog(rule, title, content, receiverUserIds, "skipped", "接收人无钉钉用户映射", null, null);
+            saveNotifyLog(rule, title, content, receiverUserIds, "skipped", "接收人无钉钉用户映射", businessType, businessId);
             return false;
         }
 
@@ -98,7 +103,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         // 6. 记录通知日志
         String sendStatus = taskId != null ? "success" : "failed";
         String sendResult = taskId != null ? "task_id=" + taskId : "发送失败";
-        saveNotifyLog(rule, title, content, receiverUserIds, sendStatus, sendResult, null, null);
+        saveNotifyLog(rule, title, content, receiverUserIds, sendStatus, sendResult, businessType, businessId);
 
         return taskId != null;
     }
@@ -210,29 +215,11 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             int delayDays = (int) java.time.temporal.ChronoUnit.DAYS.between(task.getPlanEndDate(), today);
             if (delayDays <= 0) continue;
 
-            // 检查升级条件
-            if (StrUtil.isNotBlank(rule.getEscalationCondition())) {
-                try {
-                    JSONObject escalation = JSONUtil.parseObj(rule.getEscalationCondition());
-                    Integer requiredDelayDays = escalation.getInt("delay_days");
-                    if (requiredDelayDays != null && delayDays < requiredDelayDays) {
-                        continue;
-                    }
-                } catch (Exception e) {
-                    // 解析失败则跳过升级条件检查
-                }
-            }
-
-            String triggerKey = "task_overdue_" + rule.getRuleId();
-            if (hasNotifyAlreadySent(task.getTaskId(), triggerKey, today)) {
+            if (hasNotifyAlreadySent(task.getTaskId(), "task_overdue", today)) {
                 continue;
             }
-
-            List<Long> receiverIds = getTaskReceivers(task);
-            if ("L2".equals(getEscalationLevel(rule)) || "L3".equals(getEscalationLevel(rule))) {
-                List<Long> managers = getProjectManagers(task.getProjectId());
-                receiverIds.addAll(managers);
-            }
+            List<Long> receiverIds = getOverdueReceiverIds(task);
+            if (receiverIds.isEmpty()) continue;
 
             PmsProjectDO project = projectMapper.selectById(task.getProjectId());
             String projectName = project != null ? project.getProjectName() : "";
@@ -243,7 +230,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             vars.put("project_name", projectName);
             vars.put("plan_end_date", task.getPlanEndDate().format(DATE_FMT));
 
-            boolean success = sendNotifyByRule(rule.getRuleId(), vars, receiverIds);
+            boolean success = sendNotifyByRule(rule.getRuleId(), vars, receiverIds, "task", task.getTaskId());
             log.info("[DingTalkNotify] 逾期提醒: task={}, delayDays={}, rule={}, success={}",
                     task.getTaskName(), delayDays, rule.getRuleName(), success);
         }
@@ -317,6 +304,13 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             }
         }
         return receivers.stream().distinct().collect(Collectors.toList());
+    }
+
+    /**
+     * 延期通知只发送项目经理，不包含负责人和协助人。
+     */
+    List<Long> getOverdueReceiverIds(PmsTaskDO task) {
+        return getProjectManagers(task.getProjectId());
     }
 
     /**
