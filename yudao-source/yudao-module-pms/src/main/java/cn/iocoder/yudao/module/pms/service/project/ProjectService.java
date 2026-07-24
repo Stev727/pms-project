@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.pms.service.project;
 
+import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import java.util.List;
 
@@ -9,6 +10,8 @@ import java.util.List;
 public interface ProjectService {
 
     Long createProject(PmsProjectDO entity);
+
+    Long createProjectBundle(ProjectCreateBundleReqVO request);
 
     void updateProject(PmsProjectDO entity);
 

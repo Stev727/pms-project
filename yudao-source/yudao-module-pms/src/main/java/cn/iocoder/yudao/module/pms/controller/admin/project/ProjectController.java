@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.pms.controller.admin.project;
 
+import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.service.project.ProjectService;
@@ -27,6 +28,13 @@ public class ProjectController {
     @PreAuthorize("@ss.hasPermission('pms:project:create')")
     public CommonResult<Long> create(@RequestBody PmsProjectDO entity) {
         return success(projectService.createProject(entity));
+    }
+
+    @PostMapping("/create-bundle")
+    @Operation(summary = "事务创建项目、成员、任务和默认通知规则")
+    @PreAuthorize("@ss.hasPermission(pms:project:create)")
+    public CommonResult<Long> createBundle(@RequestBody ProjectCreateBundleReqVO request) {
+        return success(projectService.createProjectBundle(request));
     }
 
     @PutMapping("/update")

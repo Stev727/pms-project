@@ -4,11 +4,16 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
+import cn.iocoder.yudao.module.pms.dal.dataobject.notifyrule.PmsNotifyRuleDO;
+import cn.iocoder.yudao.module.pms.dal.dataobject.projectmember.PmsProjectMemberDO;
+import cn.iocoder.yudao.module.pms.dal.mysql.notifyrule.NotifyRuleMapper;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.projectstage.PmsProjectStageDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.taskdependency.PmsTaskDependencyDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
+import cn.iocoder.yudao.module.pms.dal.mysql.projectmember.ProjectMemberMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.projectstage.ProjectStageMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.taskdependency.TaskDependencyMapper;
@@ -23,12 +28,20 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private ProjectMapper projectMapper;
+
+    @Resource
+    private ProjectMemberMapper projectMemberMapper;
+
+    @Resource
+    private NotifyRuleMapper notifyRuleMapper;
 
     @Resource
     private ProjectStageMapper projectStageMapper;
@@ -58,6 +71,41 @@ public class ProjectServiceImpl implements ProjectService {
         return projectId;
     }
 
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createProjectBundle(ProjectCreateBundleReqVO request) {
+        if (request == null || request.getProject() == null) {
+            throw new IllegalArgumentException("项目信息不能为空");
+        }
+        List<PmsProjectMemberDO> members = request.getMembers() == null ? List.of() : request.getMembers();
+        List<PmsTaskDO> tasks = request.getTasks() == null ? List.of() : request.getTasks();
+        Set<Long> memberUserIds = members.stream().map(PmsProjectMemberDO::getUserId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        boolean invalidOwner = tasks.stream().map(PmsTaskDO::getMainOwnerId)
+                .filter(java.util.Objects::nonNull).anyMatch(ownerId -> !memberUserIds.contains(ownerId));
+        if (invalidOwner) {
+            throw new IllegalArgumentException("任务负责人必须是项目成员");
+        }
+
+        Long projectId = createProject(request.getProject());
+        for (PmsProjectMemberDO member : members) {
+            member.setProjectId(projectId);
+            projectMemberMapper.insert(member);
+        }
+        for (PmsTaskDO task : tasks) {
+            task.setProjectId(projectId);
+            taskMapper.insert(task);
+        }
+        List<PmsNotifyRuleDO> rules = request.getNotifyRules() == null ? List.of() : request.getNotifyRules();
+        for (PmsNotifyRuleDO rule : rules) {
+            rule.setProjectId(projectId);
+            rule.setTaskId(null);
+            rule.setScopeType("project");
+            notifyRuleMapper.insert(rule);
+        }
+        return projectId;
+    }
     /**
      * 自动生成项目编号，格式：PRJ-YYYYMMDD-NNNNNNNN，按当前最大序号递增
      * 已删除记录也参与占号，避免唯一索引冲突
