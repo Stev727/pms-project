@@ -49,24 +49,6 @@
           <el-button @click="handleEdit" v-if="checkPermi(['pms:project:update'])">
             <Icon icon="ep:edit" class="mr-5px" />编辑
           </el-button>
-          <el-badge :value="pendingReviewCount" :hidden="!pendingReviewCount" :max="99">
-            <el-button type="warning" @click="switchToReviewCenter">
-              <Icon icon="ep:circle-check" class="mr-5px" />审核中心
-            </el-button>
-          </el-badge>
-          <el-dropdown trigger="click" placement="bottom-end" @click.stop :append-to-body="false" :popper-options="{ strategy: 'fixed', modifiers: [{ name: 'preventOverflow', options: { boundary: 'viewport' } }] }">
-            <el-button>更多<Icon icon="ep:arrow-down" class="ml-5px" /></el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="handleExport" v-if="false">导出项目</el-dropdown-item>
-                <el-dropdown-item @click="handleShareLink">分享链接</el-dropdown-item>
-                <el-dropdown-item @click="handleArchive" v-if="project.status !== 'archived' && checkPermi(['pms:project:update'])">归档项目</el-dropdown-item>
-                <el-dropdown-item divided @click="handleDelete" v-if="checkPermi(['pms:project:delete'])">
-                  <span style="color: #F53F3F">删除项目</span>
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
           <el-button @click="goBack"><Icon icon="ep:back" class="mr-5px" />返回</el-button>
         </div>
       </div>

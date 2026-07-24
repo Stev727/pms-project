@@ -73,9 +73,10 @@
                     <el-dropdown-menu>
                       <el-dropdown-item @click="goDetail(project)">查看详情</el-dropdown-item>
                       <el-dropdown-item @click="handleEdit(project)" v-if="checkPermi(['pms:project:update'])">编辑</el-dropdown-item>
-                      <el-dropdown-item @click="handleArchive(project)" v-if="checkPermi(['pms:project:update'])">归档</el-dropdown-item>
-                      <el-dropdown-item divided @click="handleDelete(project)" v-if="checkPermi(['pms:project:delete'])">
-                        <span style="color: #F53F3F">删除</span>
+                      <el-dropdown-item @click="handleShareLink(project)">分享链接</el-dropdown-item>
+                      <el-dropdown-item divided @click="handleArchive(project)" v-if="checkPermi(['pms:project:update'])">归档项目</el-dropdown-item>
+                      <el-dropdown-item @click="handleDelete(project)" v-if="checkPermi(['pms:project:delete'])">
+                        <span style="color: #F53F3F">删除项目</span>
                       </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
@@ -478,6 +479,15 @@ const handleDelete = (project: ProjectVO) => {
     message.success('删除成功')
     loadList()
   }).catch(() => {})
+}
+
+const handleShareLink = (project: ProjectVO) => {
+  const url = `${window.location.origin}/pms/project-detail/${project.projectId || project.id}`
+  navigator.clipboard.writeText(url).then(() => {
+    message.success('项目链接已复制到剪贴板')
+  }).catch(() => {
+    message.info(`项目链接: ${url}`)
+  })
 }
 
 const handleArchive = (project: ProjectVO) => {
