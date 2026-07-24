@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
 
 class TaskServiceImplTest {
@@ -32,5 +33,33 @@ class TaskServiceImplTest {
                 .noneMatch(field -> field.getType().getSimpleName().equals("NotifyRuleMapper")));
         assertTrue(java.util.Arrays.stream(TaskServiceImpl.class.getDeclaredFields())
                 .noneMatch(field -> field.getType().getSimpleName().equals("NotifyLogMapper")));
+    }
+    @Test
+    void completionRequiresProjectManagerApproval() {
+        TaskServiceImpl service = new TaskServiceImpl();
+        TaskMapper mapper = mock(TaskMapper.class);
+        ReflectionTestUtils.setField(service, "taskMapper", mapper);
+        PmsTaskDO task = new PmsTaskDO();
+        task.setTaskId(20L);
+        task.setCompleteStatus("in_progress");
+        when(mapper.selectById(20L)).thenReturn(task);
+        service.submitCompletion(20L);
+        assertEquals("completion_pending_review", task.getCompleteStatus());
+        service.reviewCompletion(20L, true);
+        assertEquals("completed", task.getCompleteStatus());
+        assertEquals(100, task.getProgress());
+    }
+
+    @Test
+    void rejectedCompletionReturnsTaskToInProgress() {
+        TaskServiceImpl service = new TaskServiceImpl();
+        TaskMapper mapper = mock(TaskMapper.class);
+        ReflectionTestUtils.setField(service, "taskMapper", mapper);
+        PmsTaskDO task = new PmsTaskDO();
+        task.setTaskId(20L);
+        task.setCompleteStatus("completion_pending_review");
+        when(mapper.selectById(20L)).thenReturn(task);
+        service.reviewCompletion(20L, false);
+        assertEquals("in_progress", task.getCompleteStatus());
     }
 }

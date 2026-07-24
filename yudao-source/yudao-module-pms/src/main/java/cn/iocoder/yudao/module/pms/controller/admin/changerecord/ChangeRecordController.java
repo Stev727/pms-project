@@ -29,6 +29,24 @@ public class ChangeRecordController {
         return success(changeRecordService.createChangeRecord(entity));
     }
 
+    @PutMapping("/review")
+    @Operation(summary = "项目经理审核任务变更")
+    @PreAuthorize("@ss.hasPermission(pms:change:update)")
+    public CommonResult<Boolean> review(@RequestParam("id") Long id,
+                                        @RequestParam("approved") boolean approved,
+                                        @RequestParam("approverId") Long approverId) {
+        changeRecordService.reviewChange(id, approved, approverId);
+        return success(true);
+    }
+
+    @PutMapping("/execute")
+    @Operation(summary = "项目经理执行审核通过的任务变更")
+    @PreAuthorize("@ss.hasPermission(pms:change:update)")
+    public CommonResult<Boolean> execute(@RequestParam("id") Long id) {
+        changeRecordService.executeApprovedChange(id);
+        return success(true);
+    }
+
     @PutMapping("/update")
     @Operation(summary = "更新变更记录")
     @PreAuthorize("@ss.hasPermission('pms:change:update')")

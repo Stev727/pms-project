@@ -54,6 +54,40 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    public void submitCompletion(Long taskId) {
+        PmsTaskDO task = requireTask(taskId);
+        if (!"in_progress".equals(task.getCompleteStatus())) {
+            throw new IllegalStateException("只有进行中的任务可以提交完成");
+        }
+        task.setCompleteStatus("completion_pending_review");
+        taskMapper.updateById(task);
+    }
+
+    @Override
+    public void reviewCompletion(Long taskId, boolean approved) {
+        PmsTaskDO task = requireTask(taskId);
+        if (!"completion_pending_review".equals(task.getCompleteStatus())) {
+            throw new IllegalStateException("只有待完成审核的任务可以审核");
+        }
+        if (approved) {
+            task.setCompleteStatus("completed");
+            task.setProgress(100);
+            task.setActualCompleteDate(java.time.LocalDate.now());
+        } else {
+            task.setCompleteStatus("in_progress");
+        }
+        taskMapper.updateById(task);
+    }
+
+    private PmsTaskDO requireTask(Long taskId) {
+        PmsTaskDO task = taskMapper.selectById(taskId);
+        if (task == null) {
+            throw new IllegalArgumentException("任务不存在");
+        }
+        return task;
+    }
+
+    @Override
     public void updateTask(PmsTaskDO entity) {
         taskMapper.updateById(entity);
     }

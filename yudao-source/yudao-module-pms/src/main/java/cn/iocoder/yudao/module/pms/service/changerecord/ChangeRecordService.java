@@ -10,6 +10,10 @@ public interface ChangeRecordService {
 
     Long createChangeRecord(PmsChangeRecordDO entity);
 
+    void reviewChange(Long id, boolean approved, Long approverId);
+
+    void executeApprovedChange(Long id);
+
     void updateChangeRecord(PmsChangeRecordDO entity);
 
     void deleteChangeRecord(Long id);

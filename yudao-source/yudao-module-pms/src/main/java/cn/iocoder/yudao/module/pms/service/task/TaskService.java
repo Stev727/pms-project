@@ -12,6 +12,10 @@ public interface TaskService {
 
     void simulateDingtalkConfirm(Long taskId);
 
+    void submitCompletion(Long taskId);
+
+    void reviewCompletion(Long taskId, boolean approved);
+
     void updateTask(PmsTaskDO entity);
 
     void deleteTask(Long id);
