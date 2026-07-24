@@ -29,6 +29,17 @@ export const createProject = (data: ProjectVO) => {
   return request.post({ url: '/pms/project/create', data })
 }
 
+export interface ProjectCreateBundleVO {
+  project: Partial<ProjectVO>
+  members: any[]
+  tasks: any[]
+  notifyRules: any[]
+}
+
+export const createProjectBundle = (data: ProjectCreateBundleVO) => {
+  return request.post({ url: '/pms/project/create-bundle', data })
+}
+
 export const updateProject = (data: ProjectVO) => {
   return request.put({ url: '/pms/project/update', data })
 }
