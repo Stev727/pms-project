@@ -513,7 +513,6 @@ onMounted(async () => {
   border-radius: 6px;
 }
 .project-card:hover {
-  transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
 }
 .card-header {
