@@ -173,7 +173,7 @@
           <el-form label-width="80px">
             <el-form-item label="成员" required>
               <el-select v-model="memberForm.userId" filterable remote placeholder="搜索用户名" class="w-full" :remote-method="searchUsers" :loading="remoteLoading">
-                <el-option v-for="u in availableUsers" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+                <el-option v-for="u in dialogUserList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
               </el-select>
             </el-form-item>
             <el-form-item label="项目角色" required>
@@ -264,7 +264,11 @@
               <span :style="{ fontWeight: row.isStage ? 'bold' : 'normal' }">{{ row.taskName }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="roleName" label="负责角色" width="120" />
+          <el-table-column label="负责角色" width="120">
+            <template #default="{ row }">
+              <span v-if="!row.isStage">{{ getTaskRoleName(row) }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="责任人" width="100">
             <template #default="{ row }">
               <span v-if="!row.isStage">{{ row.ownerName || (row.mainOwnerId ? getManagerName(row.mainOwnerId) : '未指派') }}</span>
@@ -273,6 +277,11 @@
           <el-table-column label="计划开始" width="110">
             <template #default="{ row }">
               <span v-if="!row.isStage" style="font-size: 12px">{{ row.planStartDate || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="计划结束" width="110">
+            <template #default="{ row }">
+              <span v-if="!row.isStage" style="font-size: 12px">{{ row.planEndDate || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="cycle" label="工期(天)" width="90" align="center" />
@@ -322,14 +331,19 @@
               </el-col>
             </el-row>
             <el-row :gutter="16">
-              <el-col :span="12">
+              <el-col :span="8">
                 <el-form-item label="计划开始">
                   <el-date-picker v-model="taskForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
                 </el-form-item>
               </el-col>
-              <el-col :span="12">
+              <el-col :span="8">
                 <el-form-item label="计划结束">
                   <el-date-picker v-model="taskForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="工期(天)">
+                  <el-input-number v-model="taskForm.cycle" :min="1" :max="365" class="w-full" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -445,7 +459,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Document, CircleCheckFilled, ArrowRight, ArrowLeft, Plus, Folder, Star, Check } from '@element-plus/icons-vue'
@@ -547,6 +561,12 @@ const availableUsers = computed(() => {
   return userList.value.filter(u => !memberIds.has(String(u.id)))
 })
 
+// 弹窗中可选用户（远程搜索结果中排除已选成员）
+const dialogUserList = computed(() => {
+  const memberIds = new Set(selectedMembers.value.map(m => String(m.userId)))
+  return remoteUserList.value.filter(u => !memberIds.has(String(u.id)))
+})
+
 // 角色标签
 const roleLabelMap: Record<string, string> = {
   pm: '项目经理', dept_head: '部门负责人', main_owner: '主责任人', helper: '协助人',
@@ -555,6 +575,24 @@ const roleLabelMap: Record<string, string> = {
   mechanical_engineer: '结构工程师', project_manager: '项目经理', member: '成员'
 }
 function getRoleLabel(code: string): string { return roleLabelMap[code] || code || '-' }
+
+// 根据用户ID查找项目角色名
+function getRoleNameByUserId(userId?: string | number): string {
+  if (!userId) return ''
+  const idStr = String(userId)
+  const member = selectedMembers.value.find(m => String(m.userId) === idStr)
+  if (member) return getRoleLabel(member.roleCode)
+  return ''
+}
+
+// 获取任务的角色名（优先根据责任人反查）
+function getTaskRoleName(row: any): string {
+  if (row.mainOwnerId) {
+    const autoRole = getRoleNameByUserId(row.mainOwnerId)
+    if (autoRole) return autoRole
+  }
+  return row.roleName || '-'
+}
 
 // 项目经理变更时自动同步到成员列表
 function onManagerChange(val: string) {
@@ -577,6 +615,7 @@ function handleAddMember() {
   memberForm.userId = undefined
   memberForm.roleCode = 'helper'
   memberForm.isExternal = false
+  searchUsers('')
   showMemberDialog.value = true
 }
 
@@ -626,6 +665,37 @@ const taskForm = reactive({
   outputRequirement: '',
   roleName: ''
 })
+
+  // 工期自动计算：日期变化算工期，工期变化算结束日期
+  let _autoCalc = false
+  watch(() => taskForm.planStartDate, (v) => {
+    if (_autoCalc) return
+    if (v && taskForm.planEndDate) {
+      _autoCalc = true
+      taskForm.cycle = calcDuration(v, taskForm.planEndDate)
+      _autoCalc = false
+    } else if (v && taskForm.cycle > 0 && !taskForm.planEndDate) {
+      _autoCalc = true
+      taskForm.planEndDate = addDays(v, taskForm.cycle - 1)
+      _autoCalc = false
+    }
+  })
+  watch(() => taskForm.planEndDate, (v) => {
+    if (_autoCalc) return
+    if (v && taskForm.planStartDate) {
+      _autoCalc = true
+      taskForm.cycle = calcDuration(taskForm.planStartDate, v)
+      _autoCalc = false
+    }
+  })
+  watch(() => taskForm.cycle, (v) => {
+    if (_autoCalc) return
+    if (v && v > 0 && taskForm.planStartDate) {
+      _autoCalc = true
+      taskForm.planEndDate = addDays(taskForm.planStartDate, v - 1)
+      _autoCalc = false
+    }
+  })
 
 // 计算属性
 const stageGroups = computed(() => {
@@ -808,13 +878,23 @@ function confirmAddTask() {
   }
   if (editingTask.value) {
     Object.assign(editingTask.value, { ...taskForm })
+    // 根据责任人自动带出角色
+    if (taskForm.mainOwnerId) {
+      const autoRole = getRoleNameByUserId(taskForm.mainOwnerId)
+      if (autoRole) editingTask.value.roleName = autoRole
+    }
     editingTask.value = null
   } else {
-    adjustedTasks.value.push({
+    const newTask: any = {
       taskId: Date.now(),
-      ...taskForm,
-      roleName: taskForm.roleName || '未指定'
-    })
+      ...taskForm
+    }
+    // 根据责任人自动带出角色
+    if (taskForm.mainOwnerId) {
+      const autoRole = getRoleNameByUserId(taskForm.mainOwnerId)
+      if (autoRole) newTask.roleName = autoRole
+    }
+    adjustedTasks.value.push(newTask)
   }
   showAddTask.value = false
   Object.assign(taskForm, {
@@ -861,10 +941,12 @@ function applyBatchAction() {
       break
     case 'set_owner':
       if (!batchOwner.value) { ElMessage.warning('请选择责任人'); return }
-      const ownerName = userList.value.find(u => u.id === batchOwner.value)?.nickname || `用户${batchOwner.value}`
+      const ownerName = userList.value.find(u => String(u.id) === String(batchOwner.value))?.nickname || `用户${batchOwner.value}`
+      const ownerRole = getRoleNameByUserId(batchOwner.value)
       for (const t of stageTasks) {
         t.mainOwnerId = batchOwner.value
         t.ownerName = ownerName
+        if (ownerRole) t.roleName = ownerRole
       }
       ElMessage.success(`已设置 ${stageTasks.length} 个任务的责任人`)
       break
