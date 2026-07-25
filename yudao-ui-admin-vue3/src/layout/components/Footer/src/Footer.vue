@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { useAppStore } from '@/store/modules/app'
 import { useDesign } from '@/hooks/web/useDesign'
+import { APP_VERSION } from '@/version'
 
 defineOptions({ name: 'Footer' })
 
@@ -15,8 +16,8 @@ const title = computed(() => appStore.getTitle)
 // 添加当前年份计算属性
 const currentYear = computed(() => new Date().getFullYear())
 
-// 前端版本号（来自 package.json，构建时注入）
-const appVersion = __APP_VERSION__
+// 前端版本号（来自 package.json）
+const appVersion = APP_VERSION
 </script>
 
 <template>
