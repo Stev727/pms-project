@@ -150,7 +150,7 @@ const todayTasks = computed(() => {
 })
 
 const pendingReviewCount = computed(() =>
-  allTasks.value.filter(t => t.completeStatus === 'pending_review').length
+  allTasks.value.filter(t => t.completeStatus === 'completion_pending_review').length
 )
 
 const myInProgressCount = computed(() =>
@@ -162,7 +162,7 @@ const myInProgressCount = computed(() =>
 
 const goToReviewCenter = () => {
   // 找到第一个有待审核任务的项目
-  const task = allTasks.value.find(t => t.completeStatus === 'pending_review')
+  const task = allTasks.value.find(t => t.completeStatus === 'completion_pending_review')
   if (task) {
     router.push(`/pms/project-detail/${task.projectId}?tab=review-center`)
   } else {
@@ -201,7 +201,7 @@ const tabConfig = [
   { label: '未开始', name: 'not_started' },
   { label: '进行中', name: 'in_progress' },
   { label: '已暂停', name: 'paused' },
-  { label: '待审核', name: 'pending_review' },
+  { label: '待审核', name: 'completion_pending_review' },
   { label: '已延期', name: 'delayed' },
   { label: '已完成', name: 'completed' }
 ]

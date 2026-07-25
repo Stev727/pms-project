@@ -431,7 +431,7 @@ const projectCompletionRate = computed(() => {
 })
 const completedTaskCount = computed(() => projectTasks.value.filter(t => t.completeStatus === 'completed').length)
 const totalTaskCount = computed(() => projectTasks.value.length)
-const pendingReviewCount = computed(() => projectTasks.value.filter(t => t.completeStatus === 'pending_review').length)
+const pendingReviewCount = computed(() => projectTasks.value.filter(t => t.completeStatus === 'completion_pending_review').length)
 
 const switchToReviewCenter = () => {
   activeTab.value = 'review-center'
@@ -496,7 +496,7 @@ const projectRiskLevel = computed(() => {
 
 // ==================== 看板 ====================
 const kanbanColumns = computed(() => {
-  const statuses = ['not_started', 'in_progress', 'pending_review', 'completed', 'delayed', 'paused']
+  const statuses = ['not_started', 'in_progress', 'completion_pending_review', 'completed', 'delayed', 'paused']
   return statuses.map(status => {
     const config = taskStatusMap[status]
     const tasks = projectTasks.value.filter(t => {
@@ -505,7 +505,7 @@ const kanbanColumns = computed(() => {
         // 已延期的：排除已完成和已取消的
         return isDelayed
       }
-      if (status === 'completed' || status === 'in_progress' || status === 'not_started' || status === 'paused' || status === 'pending_review') {
+      if (status === 'completed' || status === 'in_progress' || status === 'not_started' || status === 'paused' || status === 'completion_pending_review') {
         // 如果任务已延期，不应出现在正常状态列中
         if (isDelayed) return false
         return t.completeStatus === status

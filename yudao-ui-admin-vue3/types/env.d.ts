@@ -38,4 +38,6 @@ declare global {
   interface ImportMeta {
     readonly env: ImportMetaEnv
   }
+  // Vite define 注入的前端版本号
+  const __APP_VERSION__: string
 }

@@ -1,10 +1,14 @@
 import {dirname, relative, resolve} from 'path'
+import {readFileSync} from 'fs'
 import type {ConfigEnv, UserConfig} from 'vite'
 import {loadEnv, normalizePath} from 'vite'
 import {createVitePlugins} from './build/vite'
 import {exclude, include} from "./build/vite/optimize"
 // 当前执行node命令时文件夹的地址(工作目录)
 const root = process.cwd()
+
+// 从 package.json 读取版本号，注入到前端全局变量 __APP_VERSION__
+const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf-8'))
 
 // 路径查找
 function pathResolve(dir: string) {
@@ -30,6 +34,9 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
     return {
         base: env.VITE_BASE_PATH,
         root: root,
+        define: {
+            __APP_VERSION__: JSON.stringify(packageJson.version)
+        },
         // 服务端渲染
         server: {
             port: env.VITE_PORT, // 端口号

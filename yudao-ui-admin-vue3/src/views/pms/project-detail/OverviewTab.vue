@@ -123,7 +123,7 @@ const delayedCount = computed(() => props.tasks.filter(t => {
 }).length)
 const notStartedCount = computed(() => props.tasks.filter(t => t.completeStatus === 'not_started').length)
 const pausedCount = computed(() => props.tasks.filter(t => t.completeStatus === 'paused').length)
-const pendingReviewCount = computed(() => props.tasks.filter(t => t.completeStatus === 'pending_review').length)
+const pendingReviewCount = computed(() => props.tasks.filter(t => t.completeStatus === 'completion_pending_review').length)
 const completionRate = computed(() => {
   if (!totalCount.value) return 0
   return Math.round(completedCount.value / totalCount.value * 100)

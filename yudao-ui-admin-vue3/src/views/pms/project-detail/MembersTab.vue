@@ -47,8 +47,17 @@
     <el-dialog v-model="showDialog" :title="editing ? '编辑成员' : '添加成员'" width="480px">
       <el-form label-width="80px">
         <el-form-item label="成员" required>
-          <el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full" :disabled="!!editing">
-            <el-option v-for="u in availableUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+          <el-select
+            v-model="form.userId"
+            remote
+            reserve-keyword
+            :remote-method="searchUsers"
+            :loading="remoteLoading"
+            placeholder="输入用户昵称或ID搜索"
+            class="w-full"
+            :disabled="!!editing"
+          >
+            <el-option v-for="u in selectUserOptions" :key="u.id" :label="`${u.nickname} (${u.id})`" :value="String(u.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目角色" required>
@@ -100,7 +109,7 @@ const props = defineProps<{
   projectId: string
 }>()
 
-const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const { userList, getUserName, ensureLoaded: ensureUsersLoaded, remoteUserList, remoteLoading, searchUsers } = useUserNames()
 const loading = ref(false)
 const memberList = ref<any[]>([])
 const showDialog = ref(false)
@@ -146,23 +155,49 @@ const availableUsers = computed(() => {
   })
 })
 
-function handleAdd() {
+// 下拉选项：远程搜索结果 + 当前编辑用户（确保回显名称）
+const selectUserOptions = computed(() => {
+  const options = remoteUserList.value.map((u: any) => u)
+  if (form.userId) {
+    const idStr = String(form.userId)
+    const exists = options.some((u: any) => String(u.id) === idStr)
+    if (!exists) {
+      // 优先从已加载的全局用户列表中查找
+      const user = userList.value.find((u: any) => String(u.id) === idStr)
+      if (user) {
+        options.unshift(user)
+      }
+    }
+  }
+  return options
+})
+
+async function handleAdd() {
   editing.value = null
   form.memberId = undefined
   form.userId = undefined
   form.roleCode = 'helper'
   form.isExternal = false
   form.status = 'active'
+  remoteUserList.value = []
+  await ensureUsersLoaded()
   showDialog.value = true
 }
 
-function editMember(row: any) {
+async function editMember(row: any) {
   editing.value = row
   form.memberId = row.memberId
   form.userId = row.userId
   form.roleCode = row.roleCode
   form.isExternal = row.isExternal
   form.status = row.status
+  remoteUserList.value = []
+  await ensureUsersLoaded()
+  // 编辑时确保当前用户出现在选项中，select 才能正确回显名称
+  const user = userList.value.find((u: any) => String(u.id) === String(row.userId))
+  if (user) {
+    remoteUserList.value = [user]
+  }
   showDialog.value = true
 }
 

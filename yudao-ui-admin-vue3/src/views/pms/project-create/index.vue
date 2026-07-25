@@ -346,22 +346,20 @@
               </el-col>
             </el-row>
             <el-row :gutter="16">
-              <el-col :span="8">
+              <el-col :span="12">
                 <el-form-item label="计划开始">
                   <el-date-picker v-model="taskForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
                 </el-form-item>
               </el-col>
-              <el-col :span="8">
+              <el-col :span="12">
                 <el-form-item label="计划结束">
-                  <el-date-picker v-model="taskForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
-                </el-form-item>
-              </el-col>
-              <el-col :span="8">
-                <el-form-item label="工期(天)">
-                  <el-input-number v-model="taskForm.cycle" :min="1" :max="365" class="w-full" />
+                  <el-date-picker v-model="taskForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" :disabled-date="disabledEndDate" />
                 </el-form-item>
               </el-col>
             </el-row>
+            <el-form-item v-if="false" label="工期(天)">
+              <el-input-number v-model="taskForm.cycle" :min="1" :max="365" class="w-full" />
+            </el-form-item>
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="优先级">
@@ -712,6 +710,12 @@ const taskForm = reactive({
     }
   })
 
+// 禁用早于计划开始日期的结束日期
+function disabledEndDate(date: Date) {
+  if (!taskForm.planStartDate) return false
+  return date.getTime() < new Date(taskForm.planStartDate + ' 00:00:00').getTime()
+}
+
 // 计算属性
 const stageGroups = computed(() => {
   const groups: Record<string, any[]> = {}
@@ -889,6 +893,10 @@ function removeTask(row: any) {
 function confirmAddTask() {
   if (!taskForm.taskName) {
     ElMessage.warning('请输入任务名称')
+    return
+  }
+  if (taskForm.planStartDate && taskForm.planEndDate && taskForm.planEndDate < taskForm.planStartDate) {
+    ElMessage.warning('计划结束日期不能小于计划开始日期')
     return
   }
   if (editingTask.value) {

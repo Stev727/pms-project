@@ -203,7 +203,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { updateTask, dispatchTask } from '@/api/pms/task'
+import { updateTask, dispatchTask, submitTaskCompletion } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
 import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
@@ -362,9 +362,9 @@ const transitionRules: Record<string, { from: string[]; to: string; label: strin
   accept: { from: ['pending_accept'], to: 'in_progress', label: '接收任务', roles: ['assignee'] },
   reject: { from: ['pending_accept'], to: 'rejected', label: '拒绝任务', roles: ['assignee'] },
   redispatch: { from: ['rejected'], to: 'pending_accept', label: '重新派发', roles: ['pm'] },
-  submit: { from: ['in_progress', 'delayed'], to: 'pending_review', label: '提交完成', roles: ['assignee'] },
-  approve: { from: ['pending_review'], to: 'completed', label: '审核通过', roles: ['pm', 'reviewer'] },
-  reject_review: { from: ['pending_review'], to: 'in_progress', label: '驳回', roles: ['pm', 'reviewer'] },
+  submit: { from: ['in_progress', 'delayed'], to: 'completion_pending_review', label: '提交完成', roles: ['assignee'] },
+  approve: { from: ['completion_pending_review'], to: 'completed', label: '审核通过', roles: ['pm', 'reviewer'] },
+  reject_review: { from: ['completion_pending_review'], to: 'in_progress', label: '驳回', roles: ['pm', 'reviewer'] },
   mark_delayed: { from: ['in_progress'], to: 'delayed', label: '标记延期', roles: ['pm', 'assignee'] },
   pause: { from: ['in_progress'], to: 'paused', label: '暂停', roles: ['assignee', 'pm'] },
   resume: { from: ['delayed', 'paused'], to: 'in_progress', label: '恢复', roles: ['assignee', 'pm'] }
@@ -446,12 +446,7 @@ async function confirmDelay() {
 async function confirmSubmit() {
   if (!submitTarget.value) return
   try {
-    await updateTask({
-      taskId: submitTarget.value.taskId,
-      completeStatus: 'pending_review',
-      actualCompleteDate: submitForm.actualCompleteDate,
-      completionNote: submitForm.completionNote
-    } as any)
+    await submitTaskCompletion(submitTarget.value.taskId)
     ElMessage.success('任务已提交审核')
     submitConfirmVisible.value = false
     emit('refresh')
