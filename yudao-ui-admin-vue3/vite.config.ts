@@ -34,6 +34,8 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
         server: {
             port: env.VITE_PORT, // 端口号
             host: "0.0.0.0",
+            allowedHosts: ["PMS.ZJKJ.com", "pms.zjkj.com", "10.1.3.32"],
+            hmr: { host: "PMS.ZJKJ.com", clientPort: 80, protocol: "ws" },
             open: env.VITE_OPEN === 'true',
             // 跨域代理：浏览器→vite(3000)→后端(48080)
             proxy: {
