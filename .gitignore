@@ -7,3 +7,10 @@ dist/
 *.log
 .idea/
 *.iml
+
+# Local runtime files
+server.pid
+backups/
+*.jar.bak*
+.npmrc
+
