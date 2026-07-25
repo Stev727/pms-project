@@ -1,6 +1,8 @@
 package cn.iocoder.yudao.module.pms.service.task.impl;
 
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
@@ -29,6 +31,9 @@ public class TaskServiceImpl implements TaskService {
 
     @Resource
     private TaskLogMapper taskLogMapper;
+
+    @Resource
+    private SecurityFrameworkService securityFrameworkService;
 
     @Override
     public Long createTask(PmsTaskDO entity) {
@@ -146,15 +151,40 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public List<PmsTaskDO> getTaskList() {
-        return taskMapper.selectList(null);
+        return getTaskList(null, null, null);
     }
 
     @Override
-    public List<PmsTaskDO> getTaskList(Long mainOwnerId, Long projectId) {
-        return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
-            .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
-            .eqIfPresent(PmsTaskDO::getProjectId, projectId)
-            .orderByAsc(PmsTaskDO::getSortOrder));
+    public List<PmsTaskDO> getTaskList(Long mainOwnerId, Long projectId, String projectType) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        boolean isAdmin = securityFrameworkService.hasAnyRoles("super_admin");
+
+        // 管理员或模板查询：不过滤用户
+        if (isAdmin || "standard_template".equals(projectType)) {
+            return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
+                .eqIfPresent(PmsTaskDO::getProjectId, projectId)
+                .orderByAsc(PmsTaskDO::getSortOrder));
+        }
+
+        // 检查指定项目是否为模板项目 —— 模板项目不过滤用户
+        if (projectId != null) {
+            PmsProjectDO project = projectMapper.selectById(projectId);
+            if (project != null && "standard_template".equals(project.getProjectType())) {
+                return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
+                    .eqIfPresent(PmsTaskDO::getProjectId, projectId)
+                    .orderByAsc(PmsTaskDO::getSortOrder));
+            }
+        }
+
+        // 非管理员：只返回当前用户作为主责任人或协助人的任务
+        LambdaQueryWrapperX<PmsTaskDO> wrapper = new LambdaQueryWrapperX<>();
+        wrapper.eqIfPresent(PmsTaskDO::getProjectId, projectId);
+        wrapper.orderByAsc(PmsTaskDO::getSortOrder);
+        wrapper.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
+            .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
+        return taskMapper.selectList(wrapper);
     }
 
 }

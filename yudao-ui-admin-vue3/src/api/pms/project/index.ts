@@ -53,6 +53,6 @@ export const getProject = (id: string) => {
   return request.get({ url: '/pms/project/get?id=' + id })
 }
 
-export const getProjectList = () => {
-  return request.get({ url: '/pms/project/list' })
+export const getProjectList = (params?: { projectType?: string }) => {
+  return request.get({ url: '/pms/project/list', params })
 }

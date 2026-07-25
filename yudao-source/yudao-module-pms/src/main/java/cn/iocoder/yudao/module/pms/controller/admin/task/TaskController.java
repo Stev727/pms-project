@@ -95,12 +95,13 @@ public class TaskController {
     }
 
     @GetMapping("/list")
-    @Operation(summary = "获取任务列表")
+    @Operation(summary = "获取任务列表（含权限过滤）")
     @PreAuthorize("@ss.hasPermission('pms:task:query')")
     public CommonResult<List<PmsTaskDO>> list(
             @RequestParam(value = "mainOwnerId", required = false) Long mainOwnerId,
-            @RequestParam(value = "projectId", required = false) Long projectId) {
-        List<PmsTaskDO> list = taskService.getTaskList(mainOwnerId, projectId);
+            @RequestParam(value = "projectId", required = false) Long projectId,
+            @RequestParam(value = "projectType", required = false) String projectType) {
+        List<PmsTaskDO> list = taskService.getTaskList(mainOwnerId, projectId, projectType);
         return success(list);
     }
 

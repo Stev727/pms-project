@@ -782,7 +782,7 @@ async function selectTemplate(id: number | string) {
 async function loadTemplateTasks(templateId: number | string) {
   const tplId = String(templateId)
   try {
-    const [stages, tasks] = await Promise.all([getStageList(), getTaskList()])
+    const [stages, tasks] = await Promise.all([getStageList(), getTaskList({ projectType: 'standard_template' })])
     const tplStages = (stages as StageVO[]).filter(s => String(s.projectId) === tplId)
     stageList.value = tplStages
     const tplTasks = (tasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
@@ -1129,7 +1129,7 @@ onMounted(async () => {
     selectedNotifyModeId.value = notifyModeList.value.find((m: any) => m.defaultFlag)?.modeId || notifyModeList.value[0]?.modeId
   } catch (e) { ElMessage.error("加载通知模式失败") }
   try {
-    const projects = await getProjectList()
+    const projects = await getProjectList({ projectType: 'standard_template' })
     templateList.value = ((projects as ProjectVO[]) || []).filter(
       p => p.projectType === 'standard_template'
     )
@@ -1149,7 +1149,7 @@ onMounted(async () => {
     console.error('加载部门列表失败', e)
   }
   try {
-    const [stages, tasks] = await Promise.all([getStageList(), getTaskList()])
+    const [stages, tasks] = await Promise.all([getStageList(), getTaskList({ projectType: 'standard_template' })])
     for (const tpl of templateList.value) {
       if (!tpl.projectId) continue
       const templateId = String(tpl.projectId)

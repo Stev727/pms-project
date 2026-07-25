@@ -63,10 +63,11 @@ public class ProjectController {
     }
 
     @GetMapping("/list")
-    @Operation(summary = "获取项目列表")
+    @Operation(summary = "获取项目列表（含权限过滤）")
     @PreAuthorize("@ss.hasPermission('pms:project:query')")
-    public CommonResult<List<PmsProjectDO>> list() {
-        return success(projectService.getProjectList());
+    public CommonResult<List<PmsProjectDO>> list(
+            @RequestParam(value = "projectType", required = false) String projectType) {
+        return success(projectService.getProjectList(projectType));
     }
 
 }

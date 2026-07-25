@@ -4,6 +4,9 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.module.pms.dal.dataobject.notifyrule.PmsNotifyRuleDO;
@@ -24,12 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDate;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,6 +50,9 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private TaskDependencyMapper taskDependencyMapper;
+
+    @Resource
+    private SecurityFrameworkService securityFrameworkService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -285,9 +286,59 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<PmsProjectDO> getProjectList() {
-        List<PmsProjectDO> projects = projectMapper.selectList(null);
-        if (projects != null && !projects.isEmpty()) {
+    public List<PmsProjectDO> getProjectList(String projectType) {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        boolean isAdmin = securityFrameworkService.hasAnyRoles("super_admin");
+
+        // 管理员看全部
+        if (isAdmin) {
+            LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
+            wrapper.eqIfPresent(PmsProjectDO::getProjectType, projectType);
+            List<PmsProjectDO> projects = projectMapper.selectList(wrapper);
+            if (projects != null) {
+                for (PmsProjectDO project : projects) {
+                    fillProjectProgress(project);
+                }
+            }
+            return projects;
+        }
+
+        // 非管理员查看模板：按部门过滤
+        if ("standard_template".equals(projectType)) {
+            Long deptId = SecurityFrameworkUtils.getLoginUserDeptId();
+            if (deptId == null) {
+                return Collections.emptyList();
+            }
+            LambdaQueryWrapperX<PmsProjectDO> tplWrapper = new LambdaQueryWrapperX<>();
+            tplWrapper.eq(PmsProjectDO::getProjectType, "standard_template");
+            tplWrapper.eq(PmsProjectDO::getDeptId, deptId);
+            List<PmsProjectDO> templates = projectMapper.selectList(tplWrapper);
+            return templates;
+        }
+
+        // 非管理员查看项目：按参与情况过滤
+        // 1. 查询用户参与的任务（主责任人或协助人），获取相关项目ID
+        LambdaQueryWrapperX<PmsTaskDO> taskWrapper = new LambdaQueryWrapperX<>();
+        taskWrapper.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
+                        .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
+        List<PmsTaskDO> userTasks = taskMapper.selectList(taskWrapper);
+        Set<Long> involvedProjectIds = userTasks.stream()
+                .map(PmsTaskDO::getProjectId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // 2. 查询项目经理是当前用户的项目，或用户有任务参与的项目（排除模板）
+        LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
+        wrapper.ne(PmsProjectDO::getProjectType, "standard_template");
+        if (involvedProjectIds.isEmpty()) {
+            wrapper.eq(PmsProjectDO::getProjectManagerId, userId);
+        } else {
+            wrapper.and(w -> w.eq(PmsProjectDO::getProjectManagerId, userId)
+                    .or().in(PmsProjectDO::getProjectId, involvedProjectIds));
+        }
+
+        List<PmsProjectDO> projects = projectMapper.selectList(wrapper);
+        if (projects != null) {
             for (PmsProjectDO project : projects) {
                 fillProjectProgress(project);
             }

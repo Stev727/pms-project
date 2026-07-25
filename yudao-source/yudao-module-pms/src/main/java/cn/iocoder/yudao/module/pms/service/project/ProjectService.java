@@ -19,6 +19,10 @@ public interface ProjectService {
 
     PmsProjectDO getProject(Long id);
 
-    List<PmsProjectDO> getProjectList();
+    /**
+     * 获取项目列表（含权限过滤）
+     * @param projectType 项目类型，可选。传 "standard_template" 时按部门过滤模板；不传时按用户参与过滤项目
+     */
+    List<PmsProjectDO> getProjectList(String projectType);
 
 }

@@ -34,7 +34,8 @@
         <el-button type="primary" @click="handleCreate" v-hasPermi="['pms:task:create']">
           <Icon icon="ep:plus" class="mr-5px" />新建任务
         </el-button>
-        <div style="display: flex; align-items: center; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <el-switch v-model="myTasks" active-text="我的任务" size="small" />
           <el-radio-group v-model="viewMode" size="small">
             <el-radio-button label="table">表格</el-radio-button>
             <el-radio-button label="card">卡片</el-radio-button>
@@ -246,11 +247,14 @@ import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { useUserStore } from '@/store/modules/user'
 
 defineOptions({ name: 'PmsTask' })
 
 const message = useMessage()
 const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const userStore = useUserStore()
+const currentUserId = computed(() => userStore.getUser?.id)
 const loading = ref(false)
 const viewMode = ref<'table' | 'card'>('table')
 const taskList = ref<TaskVO[]>([])
@@ -268,6 +272,8 @@ const queryParams = reactive({
   mainOwnerId: ''
 })
 
+const myTasks = ref(true)
+
 const filteredList = computed(() => {
   let list = taskList.value
   if (queryParams.projectId) {
@@ -282,6 +288,18 @@ const filteredList = computed(() => {
   }
   if (queryParams.mainOwnerId) {
     list = list.filter(t => String(t.mainOwnerId) === String(queryParams.mainOwnerId))
+  }
+  // “我的任务” 筛选
+  if (myTasks.value && currentUserId.value) {
+    const uid = String(currentUserId.value)
+    list = list.filter(t => {
+      if (String(t.mainOwnerId) === uid) return true
+      if (t.helperIds) {
+        const helpers = String(t.helperIds).split(',').map(s => s.trim())
+        if (helpers.includes(uid)) return true
+      }
+      return false
+    })
   }
   // 排除模板项目的任务
   return list.filter(t => {

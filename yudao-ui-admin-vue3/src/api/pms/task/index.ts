@@ -58,8 +58,8 @@ export const getTask = (id: string) => {
   return request.get({ url: '/pms/task/get?id=' + id })
 }
 
-export const getTaskList = () => {
-  return request.get({ url: '/pms/task/list' })
+export const getTaskList = (params?: { mainOwnerId?: number; projectId?: string | number; projectType?: string }) => {
+  return request.get({ url: '/pms/task/list', params })
 }
 
 export const simulateDingtalkConfirm = (taskId: string | number) => {

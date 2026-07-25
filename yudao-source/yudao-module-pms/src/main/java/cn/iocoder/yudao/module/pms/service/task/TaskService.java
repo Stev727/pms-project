@@ -24,8 +24,18 @@ public interface TaskService {
 
     PmsTaskDO getTask(Long id);
 
+    /**
+     * 获取任务列表（含权限过滤）
+     * 非管理员只能看到自己作为主责任人或协助人的任务
+     */
     List<PmsTaskDO> getTaskList();
 
-    List<PmsTaskDO> getTaskList(Long mainOwnerId, Long projectId);
+    /**
+     * 获取任务列表（含权限过滤）
+     * @param mainOwnerId 主责任人ID（可选）
+     * @param projectId 项目ID（可选）
+     * @param projectType 项目类型（可选，传 standard_template 时不过滤）
+     */
+    List<PmsTaskDO> getTaskList(Long mainOwnerId, Long projectId, String projectType);
 
 }

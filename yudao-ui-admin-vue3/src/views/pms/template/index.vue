@@ -40,6 +40,11 @@
             <el-tag size="small" :type="getTypeTag(row.projectType)">{{ getTypeLabel(row.projectType) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="部门" width="120">
+          <template #default="{ row }">
+            {{ getDeptName(row.deptId) }}
+          </template>
+        </el-table-column>
         <el-table-column label="使用项目" width="90" align="center">
           <template #default="{ row }">
             <el-badge :value="getUsageCount(row.projectId)" :max="999" type="primary" />
@@ -123,6 +128,11 @@
           <el-select v-model="createForm.status" placeholder="请选择" class="w-full">
             <el-option label="启用" value="active" />
             <el-option label="归档" value="archived" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="所属部门" prop="deptId">
+          <el-select v-model="createForm.deptId" placeholder="请选择部门" class="w-full">
+            <el-option v-for="d in deptList" :key="d.id" :label="d.name" :value="d.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="说明">
@@ -222,6 +232,15 @@
                     <el-select v-model="editForm.status" placeholder="请选择" class="w-full">
                       <el-option label="启用" value="active" />
                       <el-option label="归档" value="archived" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="所属部门" prop="deptId">
+                    <el-select v-model="editForm.deptId" placeholder="请选择部门" class="w-full">
+                      <el-option v-for="d in deptList" :key="d.id" :label="d.name" :value="d.id" />
                     </el-select>
                   </el-form-item>
                 </el-col>
@@ -352,6 +371,7 @@ const previewData = ref<ProjectVO | null>(null)
 const taskList = ref<TaskVO[]>([])
 const stageList = ref<StageVO[]>([])
 const projectList = ref<any[]>([])
+const deptList = ref<any[]>([])
 
 // 编辑模板相关
 const editVisible = ref(false)
@@ -416,6 +436,7 @@ const submitCreate = async () => {
       projectCode: `TPL-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
       projectType: createForm.projectType,
       status: createForm.status,
+      deptId: createForm.deptId,
       description: createForm.description,
       createMethod: 'manual',
       planStartDate: new Date().toISOString().split('T')[0],
@@ -489,6 +510,12 @@ const getTypeTag = (type: string) => {
   return map[type] || ''
 }
 
+const getDeptName = (deptId?: number) => {
+  if (!deptId) return '-'
+  const dept = deptList.value.find(d => d.id === deptId)
+  return dept?.name || '-'
+}
+
 const filteredList = computed(() => {
   let result = list.value
   if (queryName.value) {
@@ -524,7 +551,7 @@ const stageTreeData = computed(() => {
 const getList = async () => {
   loading.value = true
   try {
-    const projList = await getProjectList()
+    const projList = await getProjectList({ projectType: 'standard_template' })
     list.value = (projList || []).filter((p: ProjectVO) => p.projectType === 'standard_template')
     projectList.value = projList || []
   } catch (e) {
@@ -554,7 +581,7 @@ const openPreview = async (row: ProjectVO) => {
   previewLoading.value = true
   previewData.value = row
   try {
-    const [allTasks, allStages] = await Promise.all([getTaskList(), getStageList()])
+    const [allTasks, allStages] = await Promise.all([getTaskList({ projectType: 'standard_template' }), getStageList()])
     const tplId = String(row.projectId)
     taskList.value = (allTasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
     stageList.value = (allStages as StageVO[]).filter(s => String(s.projectId) === tplId)
@@ -580,7 +607,7 @@ const openEdit = async (row: ProjectVO) => {
     description: row.description || ''
   })
   try {
-    const [allTasks, allStages] = await Promise.all([getTaskList(), getStageList()])
+    const [allTasks, allStages] = await Promise.all([getTaskList({ projectType: 'standard_template' }), getStageList()])
     const tplId = String(row.projectId)
     editTaskList.value = (allTasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
     editStageList.value = (allStages as StageVO[]).filter(s => String(s.projectId) === tplId)
@@ -608,6 +635,7 @@ const saveEdit = async () => {
       projectCode: editForm.projectCode,
       projectType: editForm.projectType,
       status: editForm.status,
+      deptId: editForm.deptId,
       description: editForm.description
     } as ProjectVO)
 
