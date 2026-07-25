@@ -7,6 +7,7 @@ import cn.iocoder.yudao.framework.common.enums.UserTypeEnum;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.datapermission.core.annotation.DataPermission;
 import cn.iocoder.yudao.framework.security.config.SecurityProperties;
+import cn.iocoder.yudao.framework.tenant.core.aop.TenantIgnore;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.system.controller.admin.auth.vo.*;
 import cn.iocoder.yudao.module.system.convert.auth.AuthConvert;
@@ -15,6 +16,7 @@ import cn.iocoder.yudao.module.system.dal.dataobject.permission.RoleDO;
 import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.enums.logger.LoginLogTypeEnum;
 import cn.iocoder.yudao.module.system.service.auth.AdminAuthService;
+import cn.iocoder.yudao.module.system.service.auth.DingTalkAuthService;
 import cn.iocoder.yudao.module.system.service.permission.MenuService;
 import cn.iocoder.yudao.module.system.service.permission.PermissionService;
 import cn.iocoder.yudao.module.system.service.permission.RoleService;
@@ -59,6 +61,8 @@ public class AuthController {
     private PermissionService permissionService;
     @Resource
     private SocialClientService socialClientService;
+    @Resource
+    private DingTalkAuthService dingTalkAuthService;
 
     @Resource
     private SecurityProperties securityProperties;
@@ -171,6 +175,24 @@ public class AuthController {
     @Operation(summary = "社交快捷登录，使用 code 授权码", description = "适合未登录的用户，但是社交账号已绑定用户")
     public CommonResult<AuthLoginRespVO> socialQuickLogin(@RequestBody @Valid AuthSocialLoginReqVO reqVO) {
         return success(authService.socialLogin(reqVO));
+    }
+
+    // ========== 钉钉免登相关 ==========
+
+    @PostMapping("/dingtalk-login")
+    @PermitAll
+    @TenantIgnore
+    @Operation(summary = "钉钉免登", description = "使用钉钉免登码 authCode 进行免密登录，适用于钉钉企业内部应用（H5微应用）")
+    public CommonResult<AuthLoginRespVO> dingTalkLogin(@RequestBody @Valid DingTalkLoginReqVO reqVO) {
+        return success(dingTalkAuthService.loginByAuthCode(reqVO));
+    }
+
+    @GetMapping("/dingtalk-config")
+    @PermitAll
+    @TenantIgnore
+    @Operation(summary = "获取钉钉免登配置", description = "返回 CorpId 供前端 JSSDK 初始化使用")
+    public CommonResult<String> dingTalkConfig() {
+        return success(dingTalkAuthService.getCorpId());
     }
 
 }

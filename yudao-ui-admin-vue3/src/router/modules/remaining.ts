@@ -204,6 +204,16 @@ const remainingRouter: AppRouteRecordRaw[] = [
     }
   },
   {
+    path: '/dingtalk-login',
+    component: () => import('@/views/Login/DingTalkLogin.vue'),
+    name: 'DingTalkLogin',
+    meta: {
+      hidden: true,
+      title: '钉钉登录',
+      noTagsView: true
+    }
+  },
+  {
     path: '/403',
     component: () => import('@/views/Error/403.vue'),
     name: 'NoAccess',

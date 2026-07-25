@@ -75,6 +75,21 @@ export const socialAuthRedirect = (type: number, redirectUri: string) => {
     url: '/system/auth/social-auth-redirect?type=' + type + '&redirectUri=' + redirectUri
   })
 }
+
+// 钉钉免登
+export const dingtalkLogin = (authCode: string) => {
+  return request.post({
+    url: '/system/auth/dingtalk-login',
+    data: { authCode }
+  })
+}
+
+// 获取钉钉免登配置（corpId）
+export const getDingTalkConfig = () => {
+  return request.get({
+    url: '/system/auth/dingtalk-config'
+  })
+}
 // 获取验证图片以及 token
 export const getCode = (data: any) => {
   return request.postOriginal({ url: 'system/captcha/get', data })
