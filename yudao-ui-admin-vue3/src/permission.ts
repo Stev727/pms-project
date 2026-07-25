@@ -21,7 +21,8 @@ const whiteList = [
   '/auth-redirect',
   '/bind',
   '/register',
-  '/oauthLogin/gitee'
+  '/oauthLogin/gitee',
+  '/dingtalk-login'
 ]
 
 // 路由加载前
