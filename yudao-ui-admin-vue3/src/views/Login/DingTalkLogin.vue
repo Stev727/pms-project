@@ -124,7 +124,7 @@ async function dingTalkLogin() {
   } catch (err: any) {
     status.value = 'error'
     // 判断是否为未绑定错误
-    const errMsg = err?.msg || err?.message || '未知错误'
+    const errMsg = (typeof err === 'string' ? err : (err?.msg || err?.message)) || '未知错误'
     if (errMsg.includes('未绑定')) {
       statusText.value = '钉钉账号未绑定系统用户，请先登录系统并绑定钉钉账号'
     } else {
