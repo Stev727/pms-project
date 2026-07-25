@@ -6,6 +6,8 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import cn.iocoder.yudao.framework.common.enums.UserTypeEnum;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
+import cn.iocoder.yudao.framework.tenant.core.context.TenantContextHolder;
+import cn.iocoder.yudao.framework.tenant.core.util.TenantUtils;
 import cn.iocoder.yudao.module.system.controller.admin.auth.vo.AuthLoginRespVO;
 import cn.iocoder.yudao.module.system.controller.admin.auth.vo.DingTalkLoginReqVO;
 import cn.iocoder.yudao.module.system.dal.dataobject.oauth2.OAuth2AccessTokenDO;
@@ -101,10 +103,15 @@ public class DingTalkAuthServiceImpl implements DingTalkAuthService {
             throw exception(AUTH_MOBILE_NOT_EXISTS);
         }
 
-        // 6. 创建 Token 令牌
-        OAuth2AccessTokenDO accessTokenDO = oauth2TokenService.createAccessToken(
-                user.getId(), USER_TYPE_ADMIN, OAuth2ClientConstants.CLIENT_ID_DEFAULT, null);
-        log.info("[loginByAuthCode] 钉钉免登成功, userId={}, userMobile={}", user.getId(), mobile);
+        // 6. 创建 Token 令牌（必须携带用户的租户编号，否则后续请求会因租户不匹配被拒绝）
+        Long tenantId = user.getTenantId();
+        if (tenantId == null) {
+            log.error("[loginByAuthCode] 用户 tenantId 为空, userId={}, mobile={}", user.getId(), mobile);
+            throw exception(AUTH_DINGTALK_LOGIN_FAILED, "用户未分配租户，请联系管理员");
+        }
+        OAuth2AccessTokenDO accessTokenDO = TenantUtils.execute(tenantId, () -> oauth2TokenService.createAccessToken(
+                user.getId(), USER_TYPE_ADMIN, OAuth2ClientConstants.CLIENT_ID_DEFAULT, null));
+        log.info("[loginByAuthCode] 钉钉免登成功, userId={}, userMobile={}, tenantId={}", user.getId(), mobile, tenantId);
         return BeanUtils.toBean(accessTokenDO, AuthLoginRespVO.class);
     }
 

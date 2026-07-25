@@ -353,6 +353,7 @@ import { getProjectList, updateProject, createProject, ProjectVO } from '@/api/p
 import { getTaskList, updateTask, createTask, deleteTask, TaskVO } from '@/api/pms/task'
 import { getStageList, createStage, updateStage, deleteStage, StageVO } from '@/api/pms/stage'
 import { dateFormatter } from '@/utils/formatTime'
+import { getSimpleDeptList } from '@/api/system/dept'
 
 defineOptions({ name: 'PmsTemplate' })
 
@@ -551,9 +552,13 @@ const stageTreeData = computed(() => {
 const getList = async () => {
   loading.value = true
   try {
-    const projList = await getProjectList({ projectType: 'standard_template' })
+    const [projList, depts] = await Promise.all([
+      getProjectList({ projectType: 'standard_template' }),
+      getSimpleDeptList().catch(() => [])
+    ])
     list.value = (projList || []).filter((p: ProjectVO) => p.projectType === 'standard_template')
     projectList.value = projList || []
+    deptList.value = depts || []
   } catch (e) {
     console.error('加载模板列表失败', e)
   } finally {
