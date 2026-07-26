@@ -9,6 +9,12 @@
         </el-button-group>
         <el-divider direction="vertical" />
         <span class="toolbar-label">视图：</span>
+        <el-radio-group v-model="viewMode" size="small" @change="changeViewMode">
+          <el-radio-button label="phase">阶段</el-radio-button>
+          <el-radio-button label="task">任务</el-radio-button>
+        </el-radio-group>
+        <el-divider direction="vertical" />
+        <span class="toolbar-label">时间：</span>
         <el-radio-group v-model="scale" size="small" @change="changeScale">
           <el-radio-button label="day">日</el-radio-button>
           <el-radio-button label="week">周</el-radio-button>
@@ -65,6 +71,7 @@ const emit = defineEmits<{
 
 const { getUserName } = useUserNames()
 const ganttRef = ref<HTMLElement>()
+const viewMode = ref('task') // 'phase' | 'task'：阶段视图只展示阶段，任务视图按阶段+任务层级展示
 const scale = ref('week')
 const showCritical = ref(true)
 const showToday = ref(true)
@@ -79,10 +86,10 @@ const configGantt = () => {
   gantt.config.grid_width = 380
   gantt.config.scale_height = 50
   gantt.config.date_format = '%Y-%m-%d'
-  gantt.config.drag_move = true
-  gantt.config.drag_resize = true
+  gantt.config.drag_move = viewMode.value === 'task'
+  gantt.config.drag_resize = viewMode.value === 'task'
   gantt.config.drag_progress = false
-  gantt.config.drag_links = true
+  gantt.config.drag_links = viewMode.value === 'task'
   gantt.config.work_time = false
   gantt.config.show_errors = false
   gantt.config.auto_scheduling = false
@@ -197,6 +204,7 @@ const setScaleConfig = (s: string) => {
 const buildGanttData = () => {
   const tasks: any[] = []
   const links: any[] = []
+  const isTaskMode = viewMode.value === 'task'
 
   // 创建阶段作为父节点
   const stageMap = new Map<string, any>()
@@ -207,7 +215,7 @@ const buildGanttData = () => {
       text: stage.stageName,
       type: 'project',
       open: true,
-      render: 'split',
+      render: isTaskMode ? 'split' : undefined,
       start_date: stage.planStartDate ? formatDate(stage.planStartDate, 'YYYY-MM-DD')
         : (stage.createTime ? formatDate(stage.createTime, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0]),
       duration: 1,
@@ -219,29 +227,31 @@ const buildGanttData = () => {
     tasks.push(stageTask)
   }
 
-  // 创建任务
-  for (const task of props.tasks) {
-    const parentStage = stageMap.get(String(task.stageId || ''))
-    const isDelayed = calcDelayDays(task.planEndDate, task.completeStatus) > 0
+  // 任务视图下才创建任务子节点
+  if (isTaskMode) {
+    for (const task of props.tasks) {
+      const parentStage = stageMap.get(String(task.stageId || ''))
+      const isDelayed = calcDelayDays(task.planEndDate, task.completeStatus) > 0
 
-    tasks.push({
-      id: String(task.taskId),
-      text: task.taskName,
-      start_date: task.planStartDate ? formatDate(task.planStartDate, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0],
-      duration: task.cycle || 1,
-      progress: (task.progress || 0) / 100,
-      parent: parentStage?.id || 0,
-      owner: task.mainOwnerId ? getUserName(task.mainOwnerId) : '-',
-      status: task.completeStatus,
-      critical: task.isCriticalPath,
-      delayed: isDelayed,
-      milestone: task.isMilestone,
-      type: task.isMilestone ? 'milestone' : 'task'
-    })
+      tasks.push({
+        id: String(task.taskId),
+        text: task.taskName,
+        start_date: task.planStartDate ? formatDate(task.planStartDate, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0],
+        duration: task.cycle || 1,
+        progress: (task.progress || 0) / 100,
+        parent: parentStage?.id || 0,
+        owner: task.mainOwnerId ? getUserName(task.mainOwnerId) : '-',
+        status: task.completeStatus,
+        critical: task.isCriticalPath,
+        delayed: isDelayed,
+        milestone: task.isMilestone,
+        type: task.isMilestone ? 'milestone' : 'task'
+      })
+    }
   }
 
-  // 创建依赖关系
-  if (showLinks.value && props.dependencies) {
+  // 阶段视图不显示依赖线
+  if (isTaskMode && showLinks.value && props.dependencies) {
     for (const dep of props.dependencies) {
       links.push({
         id: String(dep.id || links.length + 1),
@@ -252,11 +262,8 @@ const buildGanttData = () => {
     }
   }
 
-  // 如果没有外部依赖数据，从任务的 parentTaskId 构建
-  // 注意：这里使用 parentTaskId 字段作为前置依赖的数据来源。
-  // parentTaskId 表示该任务的前置任务，语义上相当于 finish-to-start 依赖关系。
-  // 如果后续引入独立的 dependency 表，应优先使用 props.dependencies 中的外部数据。
-  if (showLinks.value && links.length === 0) {
+  // 如果没有外部依赖数据，从任务的 parentTaskId 构建（仅任务视图）
+  if (isTaskMode && showLinks.value && links.length === 0) {
     for (const task of props.tasks) {
       if (task.parentTaskId) {
         links.push({
@@ -299,7 +306,8 @@ const renderGantt = () => {
     try {
       await updateTask({
         taskId: String(id),
-        planStartDate: task.start_date ? new Date(task.start_date).toISOString().split('T')[0] : undefined,
+        planStartDate: task.start_date ? formatDate(task.start_date, 'YYYY-MM-DD') : undefined,
+        planEndDate: task.end_date ? formatDate(task.end_date, 'YYYY-MM-DD') : undefined,
         cycle: task.duration || 1
       } as TaskVO)
     } catch (err) {
@@ -322,6 +330,10 @@ const renderGantt = () => {
     }
     return true
   })
+}
+
+const changeViewMode = () => {
+  renderGantt()
 }
 
 const changeScale = () => {

@@ -49,13 +49,15 @@
         <el-form-item label="成员" required>
           <el-select
             v-model="form.userId"
+            filterable
             remote
             reserve-keyword
             :remote-method="searchUsers"
             :loading="remoteLoading"
-            placeholder="输入用户昵称或ID搜索"
+            placeholder="输入用户昵称或ID搜索，或直接从列表中选择"
             class="w-full"
             :disabled="!!editing"
+            @focus="onUserSelectFocus"
           >
             <el-option v-for="u in selectUserOptions" :key="u.id" :label="`${u.nickname} (${u.id})`" :value="String(u.id)" />
           </el-select>
@@ -109,11 +111,14 @@ const props = defineProps<{
   projectId: string
 }>()
 
-const { userList, getUserName, ensureLoaded: ensureUsersLoaded, remoteUserList, remoteLoading, searchUsers } = useUserNames()
+const { userList, getUserName, ensureLoaded: ensureUsersLoaded, remoteUserList, remoteLoading, searchUsers: rawSearchUsers } = useUserNames()
 const loading = ref(false)
 const memberList = ref<any[]>([])
 const showDialog = ref(false)
 const editing = ref<any>(null)
+
+// 当前用户搜索框关键词：为空时展示全部可选用户，非空时展示远程搜索结果
+const userSearchQuery = ref('')
 
 const form = reactive({
   memberId: undefined as any,
@@ -155,22 +160,38 @@ const availableUsers = computed(() => {
   })
 })
 
-// 下拉选项：远程搜索结果 + 当前编辑用户（确保回显名称）
+// 下拉选项：远程搜索结果优先；未搜索时展示全部可选用户（排除已加入成员）
 const selectUserOptions = computed(() => {
-  const options = remoteUserList.value.map((u: any) => u)
-  if (form.userId) {
-    const idStr = String(form.userId)
-    const exists = options.some((u: any) => String(u.id) === idStr)
-    if (!exists) {
-      // 优先从已加载的全局用户列表中查找
-      const user = userList.value.find((u: any) => String(u.id) === idStr)
-      if (user) {
-        options.unshift(user)
-      }
-    }
+  const query = userSearchQuery.value.trim()
+  const editingUserId = editing.value && form.userId ? String(form.userId) : ''
+  const existingUserIds = new Set(memberList.value.map(m => String(m.userId)))
+  const isAvailable = (u: any) => {
+    if (editingUserId && String(u.id) === editingUserId) return true
+    return !existingUserIds.has(String(u.id))
   }
-  return options
+
+  if (query && remoteUserList.value.length > 0) {
+    return remoteUserList.value.filter(isAvailable)
+  }
+  // 无搜索词时，用本地已加载用户做初始候选列表
+  if (!query) {
+    return availableUsers.value
+  }
+  // 有搜索词但远程无结果，展示空列表
+  return []
 })
+
+// 封装远程搜索，记录当前关键词
+function searchUsers(query: string) {
+  userSearchQuery.value = query
+  rawSearchUsers(query)
+}
+
+// 聚焦时清空搜索词，展示全部可选用户
+function onUserSelectFocus() {
+  userSearchQuery.value = ''
+  remoteUserList.value = []
+}
 
 async function handleAdd() {
   editing.value = null
@@ -179,6 +200,7 @@ async function handleAdd() {
   form.roleCode = 'helper'
   form.isExternal = false
   form.status = 'active'
+  userSearchQuery.value = ''
   remoteUserList.value = []
   await ensureUsersLoaded()
   showDialog.value = true
@@ -187,10 +209,11 @@ async function handleAdd() {
 async function editMember(row: any) {
   editing.value = row
   form.memberId = row.memberId
-  form.userId = row.userId
+  form.userId = String(row.userId)
   form.roleCode = row.roleCode
   form.isExternal = row.isExternal
   form.status = row.status
+  userSearchQuery.value = ''
   remoteUserList.value = []
   await ensureUsersLoaded()
   // 编辑时确保当前用户出现在选项中，select 才能正确回显名称
