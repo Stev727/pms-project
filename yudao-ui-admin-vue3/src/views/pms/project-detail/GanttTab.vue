@@ -208,7 +208,8 @@ const buildGanttData = () => {
       type: 'project',
       open: true,
       render: 'split',
-      start_date: stage.planStartDate || stage.createTime?.split(' ')[0] || new Date().toISOString().split('T')[0],
+      start_date: stage.planStartDate ? formatDate(stage.planStartDate, 'YYYY-MM-DD')
+        : (stage.createTime ? formatDate(stage.createTime, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0]),
       duration: 1,
       progress: 0,
       parent: 0,
@@ -226,7 +227,7 @@ const buildGanttData = () => {
     tasks.push({
       id: String(task.taskId),
       text: task.taskName,
-      start_date: task.planStartDate || new Date().toISOString().split('T')[0],
+      start_date: task.planStartDate ? formatDate(task.planStartDate, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0],
       duration: task.cycle || 1,
       progress: (task.progress || 0) / 100,
       parent: parentStage?.id || 0,
@@ -244,8 +245,8 @@ const buildGanttData = () => {
     for (const dep of props.dependencies) {
       links.push({
         id: String(dep.id || links.length + 1),
-        source: String(dep.predecessorTaskId),
-        target: String(dep.successorTaskId),
+        source: String(dep.from || dep.predecessorTaskId || ''),
+        target: String(dep.to || dep.successorTaskId || ''),
         type: '0' // finish-to-start
       })
     }
