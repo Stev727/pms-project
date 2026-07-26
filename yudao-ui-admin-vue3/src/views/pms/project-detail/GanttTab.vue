@@ -52,6 +52,7 @@ import { updateTask } from '@/api/pms/task'
 import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { gantt } from 'dhtmlx-gantt'
+import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -284,52 +285,66 @@ let dragEventId: any = null
 let clickEventId: any = null
 
 const renderGantt = () => {
-  if (!ganttRef.value) return
-
-  if (!ganttInitialized) {
-    configGantt()
-    gantt.init(ganttRef.value)
-    ganttInitialized = true
-  } else {
-    gantt.clearAll()
-    configGantt()
+  console.log('[Gantt] renderGantt called, ganttRef:', !!ganttRef.value, 'tasks:', props.tasks?.length, 'stages:', props.stages?.length)
+  if (!ganttRef.value) {
+    console.warn('[Gantt] ganttRef is null, aborting render')
+    return
   }
 
-  const ganttData = buildGanttData()
-  gantt.parse(ganttData)
-
-  // 拖拽事件 - 先分离旧的再绑定新的
-  if (dragEventId) gantt.detachEvent(dragEventId)
-  dragEventId = gantt.attachEvent('onAfterTaskDrag', async (id: any, mode: any, e: any) => {
-    const task = gantt.getTask(id)
-    if (task.type === 'project') return
-    try {
-      await updateTask({
-        taskId: String(id),
-        planStartDate: task.start_date ? formatDate(task.start_date, 'YYYY-MM-DD') : undefined,
-        planEndDate: task.end_date ? formatDate(task.end_date, 'YYYY-MM-DD') : undefined,
-        cycle: task.duration || 1
-      } as TaskVO)
-    } catch (err) {
-      console.error('甘特图拖拽保存失败', err)
-      ElMessage.error('拖拽保存失败，正在回滚...')
-      // 重新加载甘特图数据回滚 UI
-      renderGantt()
+  try {
+    if (!ganttInitialized) {
+      console.log('[Gantt] Initializing gantt for first time...')
+      configGantt()
+      gantt.init(ganttRef.value)
+      ganttInitialized = true
+      console.log('[Gantt] gantt.init() completed')
+    } else {
+      gantt.clearAll()
+      configGantt()
     }
-  })
 
-  // 点击事件 - 先分离旧的再绑定新的
-  if (clickEventId) gantt.detachEvent(clickEventId)
-  clickEventId = gantt.attachEvent('onTaskClick', (id: any, e: any) => {
-    const task = gantt.getTask(id)
-    if (task.type === 'project') return true
-    // 从 props.tasks 中找到对应的 TaskVO 并 emit 给父组件打开详情
-    const taskVO = props.tasks.find(t => String(t.taskId) === String(id))
-    if (taskVO) {
-      emit('taskClick', taskVO)
-    }
-    return true
-  })
+    const ganttData = buildGanttData()
+    console.log('[Gantt] buildGanttData result:', JSON.stringify({
+      dataCount: ganttData.data?.length,
+      linksCount: ganttData.links?.length,
+      firstItem: ganttData.data?.[0]
+    }))
+    gantt.parse(ganttData)
+    console.log('[Gantt] gantt.parse() completed, task count:', gantt.getTaskCount())
+
+    // 拖拽事件 - 先分离旧的再绑定新的
+    if (dragEventId) gantt.detachEvent(dragEventId)
+    dragEventId = gantt.attachEvent('onAfterTaskDrag', async (id: any, mode: any, e: any) => {
+      const task = gantt.getTask(id)
+      if (task.type === 'project') return
+      try {
+        await updateTask({
+          taskId: String(id),
+          planStartDate: task.start_date ? formatDate(task.start_date, 'YYYY-MM-DD') : undefined,
+          planEndDate: task.end_date ? formatDate(task.end_date, 'YYYY-MM-DD') : undefined,
+          cycle: task.duration || 1
+        } as TaskVO)
+      } catch (err) {
+        console.error('甘特图拖拽保存失败', err)
+        ElMessage.error('拖拽保存失败，正在回滚...')
+        renderGantt()
+      }
+    })
+
+    // 点击事件 - 先分离旧的再绑定新的
+    if (clickEventId) gantt.detachEvent(clickEventId)
+    clickEventId = gantt.attachEvent('onTaskClick', (id: any, e: any) => {
+      const task = gantt.getTask(id)
+      if (task.type === 'project') return true
+      const taskVO = props.tasks.find(t => String(t.taskId) === String(id))
+      if (taskVO) {
+        emit('taskClick', taskVO)
+      }
+      return true
+    })
+  } catch (err) {
+    console.error('[Gantt] renderGantt ERROR:', err)
+  }
 }
 
 const changeViewMode = () => {
@@ -368,6 +383,7 @@ const zoomOut = () => {
 watch(
   [() => props.tasks, () => props.stages, () => props.dependencies],
   () => {
+    console.log('[Gantt] watch triggered: tasks:', props.tasks?.length, 'stages:', props.stages?.length)
     nextTick(() => renderGantt())
   },
   { deep: true }
@@ -375,10 +391,12 @@ watch(
 
 // P0-04: onMounted 渲染增加重试机制，确保 ganttRef 就绪后再初始化
 onMounted(() => {
+  console.log('[Gantt] onMounted: tasks:', props.tasks?.length, 'stages:', props.stages?.length)
   nextTick(() => {
     if (ganttRef.value) {
       renderGantt()
     } else {
+      console.warn('[Gantt] ganttRef not ready in onMounted, retrying...')
       // 容错: DOM 未就绪时再等一个 tick 重试
       nextTick(() => renderGantt())
     }
@@ -449,7 +467,7 @@ onUnmounted(() => {
 
 <style>
 /* dhtmlx-gantt 全局样式覆盖 */
-@import 'dhtmlx-gantt/codebase/dhtmlxgantt.css';
+/* CSS 已在 <script> 中通过 import 加载，避免 Vite dev 模式下 @import bare 路径无法解析 */
 
 /* 任务条样式 */
 .gantt_task_line.gantt-project {
