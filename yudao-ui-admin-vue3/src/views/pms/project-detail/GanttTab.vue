@@ -10,16 +10,16 @@
         <el-divider direction="vertical" />
         <span class="toolbar-label">视图：</span>
         <el-radio-group v-model="viewMode" size="small" @change="changeViewMode">
-          <el-radio-button label="phase">阶段</el-radio-button>
-          <el-radio-button label="task">任务</el-radio-button>
+          <el-radio-button :value="'phase'">阶段</el-radio-button>
+          <el-radio-button :value="'task'">任务</el-radio-button>
         </el-radio-group>
         <el-divider direction="vertical" />
         <span class="toolbar-label">时间：</span>
         <el-radio-group v-model="scale" size="small" @change="changeScale">
-          <el-radio-button label="day">日</el-radio-button>
-          <el-radio-button label="week">周</el-radio-button>
-          <el-radio-button label="month">月</el-radio-button>
-          <el-radio-button label="quarter">季</el-radio-button>
+          <el-radio-button :value="'day'">日</el-radio-button>
+          <el-radio-button :value="'week'">周</el-radio-button>
+          <el-radio-button :value="'month'">月</el-radio-button>
+          <el-radio-button :value="'quarter'">季</el-radio-button>
         </el-radio-group>
       </div>
       <div class="toolbar-right">
@@ -153,8 +153,8 @@ const configGantt = () => {
   if (gantt.ext && gantt.ext.zoom) {
     gantt.ext.zoom.init({
       levels: [
-        { name: 'day', scale_height: 50, min_column_width: 30, scales: [{ unit: 'day', step: 1, format: '%m-%d' }] },
-        { name: 'week', scale_height: 50, min_column_width: 50, scales: [{ unit: 'week', step: 1, format: '%W周' }] },
+        { name: 'day', scale_height: 50, min_column_width: 30, scales: [{ unit: 'day', step: 1, format: '%Y-%m-%d' }] },
+        { name: 'week', scale_height: 50, min_column_width: 50, scales: [{ unit: 'week', step: 1, format: '%Y年%m月' }] },
         { name: 'month', scale_height: 50, min_column_width: 80, scales: [{ unit: 'month', step: 1, format: '%Y年%m月' }] },
         { name: 'quarter', scale_height: 50, min_column_width: 120, scales: [{ unit: 'month', step: 3, format: (d: any) => d.getFullYear() + ' Q' + (Math.floor(d.getMonth() / 3) + 1) }] }
       ]
@@ -168,12 +168,12 @@ const setScaleConfig = (s: string) => {
       gantt.config.scale_unit = 'day'
       gantt.config.step = 1
       gantt.config.date_scale = '%Y-%m-%d'
-      gantt.config.subscales = [{ unit: 'hour', step: 4, date: '%H' }]
+      gantt.config.subscales = [{ unit: 'hour', step: 4, date: '%H:00' }]
       break
     case 'week':
       gantt.config.scale_unit = 'week'
       gantt.config.step = 1
-      gantt.config.date_scale = '%Y年 %W周'
+      gantt.config.date_scale = '%Y年 %m月'
       gantt.config.subscales = [
         { unit: 'day', step: 1, date: '%m-%d' }
       ]
@@ -216,7 +216,7 @@ const buildGanttData = () => {
       text: stage.stageName,
       type: 'project',
       open: true,
-      render: isTaskMode ? 'split' : undefined,
+      // 注意: render:'split' 是 dhtmlx-gantt Pro 版功能，Standard 版不支持，会导致子任务不渲染
       start_date: stage.planStartDate ? formatDate(stage.planStartDate, 'YYYY-MM-DD')
         : (stage.createTime ? formatDate(stage.createTime, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0]),
       duration: 1,
@@ -230,8 +230,11 @@ const buildGanttData = () => {
 
   // 任务视图下才创建任务子节点
   if (isTaskMode) {
+    let matchedCount = 0
+    let orphanCount = 0
     for (const task of props.tasks) {
       const parentStage = stageMap.get(String(task.stageId || ''))
+      if (parentStage) { matchedCount++ } else { orphanCount++ }
       const isDelayed = calcDelayDays(task.planEndDate, task.completeStatus) > 0
 
       tasks.push({
@@ -249,6 +252,7 @@ const buildGanttData = () => {
         type: task.isMilestone ? 'milestone' : 'task'
       })
     }
+    console.log('[Gantt] buildGanttData tasks:', { total: props.tasks.length, matched: matchedCount, orphan: orphanCount, stageMapKeys: [...stageMap.keys()] })
   }
 
   // 阶段视图不显示依赖线
