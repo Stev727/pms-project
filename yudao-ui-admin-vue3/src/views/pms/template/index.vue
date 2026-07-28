@@ -922,7 +922,7 @@ const confirmCopy = async () => {
       projectName: copyForm.projectName.trim(),
       projectCode: `TPL-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
       projectType: 'standard_template',
-      templateId: Number(copyForm.projectId),
+      templateId: copyForm.projectId,  // 保持字符串，避免 JS Number 精度丢失
       status: 'active',
       deptId: copyForm.deptId,
       description: copyForm.description,
