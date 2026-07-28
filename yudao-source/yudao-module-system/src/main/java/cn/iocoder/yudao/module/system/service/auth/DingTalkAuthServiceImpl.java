@@ -14,6 +14,7 @@ import cn.iocoder.yudao.module.system.dal.dataobject.oauth2.OAuth2AccessTokenDO;
 import cn.iocoder.yudao.module.system.dal.dataobject.social.SocialClientDO;
 import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.dal.mysql.social.SocialClientMapper;
+import cn.iocoder.yudao.module.system.dal.mysql.user.AdminUserMapper;
 import cn.iocoder.yudao.module.system.enums.oauth2.OAuth2ClientConstants;
 import cn.iocoder.yudao.module.system.enums.social.SocialTypeEnum;
 import cn.iocoder.yudao.module.system.service.oauth2.OAuth2TokenService;
@@ -59,6 +60,8 @@ public class DingTalkAuthServiceImpl implements DingTalkAuthService {
     @Resource
     private SocialClientMapper socialClientMapper;
     @Resource
+    private AdminUserMapper userMapper;
+    @Resource
     private AdminUserService userService;
     @Resource
     private OAuth2TokenService oauth2TokenService;
@@ -85,33 +88,71 @@ public class DingTalkAuthServiceImpl implements DingTalkAuthService {
         String dingTalkUserId = getDingTalkUserId(accessToken, reqVO.getAuthCode());
         log.info("[loginByAuthCode] 钉钉 userid={}", dingTalkUserId);
 
-        // 4. 通过 userid 获取钉钉用户详情（含手机号）
+        // 4. 通过 userid 获取钉钉用户详情（含工号、手机号）
         JSONObject dingTalkUser = getDingTalkUserDetail(accessToken, dingTalkUserId);
         String mobile = dingTalkUser.getStr("mobile");
+        String jobNumber = dingTalkUser.getStr("job_number");
         String userName = dingTalkUser.getStr("name");
-        log.info("[loginByAuthCode] 钉钉用户: name={}, mobile={}", userName, mobile);
+        log.info("[loginByAuthCode] 钉钉用户: name={}, mobile={}, jobNumber={}", userName, mobile, jobNumber);
 
-        if (StrUtil.isBlank(mobile)) {
-            log.warn("[loginByAuthCode] 钉钉用户未绑定手机号, userid={}", dingTalkUserId);
-            throw exception(AUTH_DINGTALK_LOGIN_FAILED, "钉钉账号未绑定手机号");
+        // 5. 优先使用工号匹配系统用户，fallback 手机号
+        //    解决虚拟账号手机号重复导致无法登录的问题
+        AdminUserDO user = null;
+        String matchKey = "";
+
+        // 5a. 优先用工号匹配
+        if (StrUtil.isNotBlank(jobNumber)) {
+            user = userService.getUserByEmployeeNo(jobNumber);
+            if (user != null) {
+                matchKey = "employeeNo=" + jobNumber;
+            }
         }
 
-        // 5. 使用手机号匹配系统用户
-        AdminUserDO user = userService.getUserByMobile(mobile);
+        // 5b. 工号未匹配到，fallback 手机号
+        if (user == null && StrUtil.isNotBlank(mobile)) {
+            user = userService.getUserByMobile(mobile);
+            if (user != null) {
+                matchKey = "mobile=" + mobile;
+            }
+        }
+
         if (user == null) {
-            log.warn("[loginByAuthCode] 手机号 {} 未在系统中注册", mobile);
+            log.warn("[loginByAuthCode] 未匹配到系统用户: jobNumber={}, mobile={}", jobNumber, mobile);
             throw exception(AUTH_MOBILE_NOT_EXISTS);
+        }
+        log.info("[loginByAuthCode] 用户匹配成功: userId={}, matchKey={}", user.getId(), matchKey);
+
+        // 5c. 如果系统用户的工号或钉钉ID为空，自动补充（无需重新同步）
+        boolean needUpdate = false;
+        if (StrUtil.isNotBlank(jobNumber) && StrUtil.isBlank(user.getEmployeeNo())) {
+            user.setEmployeeNo(jobNumber);
+            needUpdate = true;
+        }
+        if (StrUtil.isNotBlank(dingTalkUserId) && StrUtil.isBlank(user.getDingtalkUserId())) {
+            user.setDingtalkUserId(dingTalkUserId);
+            needUpdate = true;
+        }
+        if (needUpdate) {
+            try {
+                // 使用原生 SQL 更新，避免 MyBatis-Plus 的 null 忽略策略
+                userMapper.updateById(user);
+                log.info("[loginByAuthCode] 自动补充用户信息: userId={}, employeeNo={}, dingtalkUserId={}",
+                        user.getId(), user.getEmployeeNo(), user.getDingtalkUserId());
+            } catch (Exception e) {
+                log.warn("[loginByAuthCode] 自动补充用户信息失败: userId={}, error={}", user.getId(), e.getMessage());
+            }
         }
 
         // 6. 创建 Token 令牌（必须携带用户的租户编号，否则后续请求会因租户不匹配被拒绝）
+        final Long userId = user.getId();
         Long tenantId = user.getTenantId();
         if (tenantId == null) {
-            log.error("[loginByAuthCode] 用户 tenantId 为空, userId={}, mobile={}", user.getId(), mobile);
+            log.error("[loginByAuthCode] 用户 tenantId 为空, userId={}", userId);
             throw exception(AUTH_DINGTALK_LOGIN_FAILED, "用户未分配租户，请联系管理员");
         }
         OAuth2AccessTokenDO accessTokenDO = TenantUtils.execute(tenantId, () -> oauth2TokenService.createAccessToken(
-                user.getId(), USER_TYPE_ADMIN, OAuth2ClientConstants.CLIENT_ID_DEFAULT, null));
-        log.info("[loginByAuthCode] 钉钉免登成功, userId={}, userMobile={}, tenantId={}", user.getId(), mobile, tenantId);
+                userId, USER_TYPE_ADMIN, OAuth2ClientConstants.CLIENT_ID_DEFAULT, null));
+        log.info("[loginByAuthCode] 钉钉免登成功, userId={}, matchKey={}, tenantId={}", userId, matchKey, tenantId);
         return BeanUtils.toBean(accessTokenDO, AuthLoginRespVO.class);
     }
 

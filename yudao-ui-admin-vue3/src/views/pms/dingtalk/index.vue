@@ -38,6 +38,7 @@
           <el-button type="primary" @click="handleSyncAll" :loading="syncLoading">全量同步</el-button>
           <el-button @click="handleSyncDepts" :loading="deptLoading">仅同步部门</el-button>
           <el-button @click="handleSyncUsers" :loading="userLoading">仅同步用户</el-button>
+          <el-button type="warning" @click="handleSyncEmployeeNo" :loading="employeeNoLoading">同步工号</el-button>
           <el-button @click="loadSyncStatus">刷新状态</el-button>
         </div>
 
@@ -94,6 +95,7 @@ const testResult = ref('')
 const syncLoading = ref(false)
 const deptLoading = ref(false)
 const userLoading = ref(false)
+const employeeNoLoading = ref(false)
 const notifyLoading = ref(false)
 const syncResult = ref<any>(null)
 
@@ -204,6 +206,20 @@ const handleSyncUsers = async () => {
     ElMessage.error('用户同步失败')
   } finally {
     userLoading.value = false
+  }
+}
+
+const handleSyncEmployeeNo = async () => {
+  employeeNoLoading.value = true
+  try {
+    const res = await DingTalkApi.syncEmployeeNo()
+    syncResult.value = res
+    ElMessage.success(`工号同步完成：更新 ${res.updated || 0} 条，总计 ${res.totalWithEmployeeNo || 0} 人有工号`)
+    await loadSyncStatus()
+  } catch (e) {
+    ElMessage.error('工号同步失败')
+  } finally {
+    employeeNoLoading.value = false
   }
 }
 

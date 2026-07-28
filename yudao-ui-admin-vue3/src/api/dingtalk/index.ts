@@ -44,3 +44,8 @@ export const syncUsers = () => {
 export const getSyncStatus = () => {
   return request.get({ url: '/pms/dingtalk/sync/status' })
 }
+
+// 同步工号到系统用户表
+export const syncEmployeeNo = () => {
+  return request.post({ url: '/pms/dingtalk/sync/employee-no' })
+}

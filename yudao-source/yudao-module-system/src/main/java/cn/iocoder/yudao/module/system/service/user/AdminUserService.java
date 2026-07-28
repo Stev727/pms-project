@@ -119,6 +119,13 @@ public interface AdminUserService {
     AdminUserDO getUserByMobile(String mobile);
 
     /**
+     * 通过工号获取用户
+     * @param employeeNo 工号
+     * @return 用户
+     */
+    AdminUserDO getUserByEmployeeNo(String employeeNo);
+
+    /**
      * 获得用户分页列表
      *
      * @param reqVO 分页条件

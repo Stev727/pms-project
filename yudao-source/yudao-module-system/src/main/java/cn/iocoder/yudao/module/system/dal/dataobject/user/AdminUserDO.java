@@ -93,4 +93,24 @@ public class AdminUserDO extends TenantBaseDO {
      */
     private LocalDateTime loginDate;
 
+    /**
+     * 工号
+     */
+    private String employeeNo;
+
+    /**
+     * 钉钉用户ID
+     */
+    private String dingtalkUserId;
+
+    /**
+     * 职位
+     */
+    private String position;
+
+    /**
+     * 入职日期
+     */
+    private java.time.LocalDate entryDate;
+
 }

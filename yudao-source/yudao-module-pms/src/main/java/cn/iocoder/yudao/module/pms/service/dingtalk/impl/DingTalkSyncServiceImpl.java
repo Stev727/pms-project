@@ -270,8 +270,8 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
                     if (existing.getUserId() != null && existing.getUserId() > 0) {
                         try {
                             jdbcTemplate.update(
-                                    "UPDATE system_users SET nickname = ?, email = ?, mobile = ?, avatar = ?, dept_id = ? WHERE id = ?",
-                                    name, email, mobile, avatar, systemDeptId, existing.getUserId());
+                                    "UPDATE system_users SET nickname = ?, email = ?, mobile = ?, avatar = ?, dept_id = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ?",
+                                    name, email, mobile, avatar, systemDeptId, jobNumber, dingUserId, existing.getUserId());
                             deptLinkedCount++;
                         } catch (Exception e) {
                             log.warn("[DingTalkSync] 更新用户信息失败: userId={}, error={}",
@@ -300,8 +300,8 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
                             jdbcTemplate.update(connection -> {
                                 PreparedStatement ps = connection.prepareStatement(
                                         "INSERT INTO system_users (username, nickname, email, mobile, avatar, dept_id, status, " +
-                                                "creator, create_time, updater, update_time, deleted, tenant_id) " +
-                                                "VALUES (?, ?, ?, ?, ?, ?, 0, 'dingtalk_sync', NOW(), 'dingtalk_sync', NOW(), 0, 1)",
+                                                "employee_no, dingtalk_user_id, creator, create_time, updater, update_time, deleted, tenant_id) " +
+                                                "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'dingtalk_sync', NOW(), 'dingtalk_sync', NOW(), 0, 1)",
                                         Statement.RETURN_GENERATED_KEYS);
                                 ps.setString(1, username);
                                 ps.setString(2, name);
@@ -309,6 +309,8 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
                                 ps.setString(4, mobile);
                                 ps.setString(5, avatar);
                                 ps.setLong(6, systemDeptId);
+                                ps.setString(7, jobNumber);
+                                ps.setString(8, dingUserId);
                                 return ps;
                             }, keyHolder);
 
@@ -324,11 +326,11 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
                             continue;
                         }
                     } else {
-                        // 已有用户，更新部门关联
+                        // 已有用户，更新部门关联 + 工号 + 钉钉ID
                         try {
                             jdbcTemplate.update(
-                                    "UPDATE system_users SET dept_id = ? WHERE id = ?",
-                                    systemDeptId, systemUserId);
+                                    "UPDATE system_users SET dept_id = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ?",
+                                    systemDeptId, jobNumber, dingUserId, systemUserId);
                         } catch (Exception e) {
                             log.warn("[DingTalkSync] 更新用户部门失败: userId={}", systemUserId);
                         }
@@ -367,6 +369,28 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
     /**
      * 统计有手机号的用户数
      */
+    @Override
+    public Map<String, Object> syncEmployeeNo() {
+        log.info("[DingTalkSync] 开始同步工号到 system_users...");
+        int updated = jdbcTemplate.update(
+                "UPDATE system_users su INNER JOIN pms_dingtalk_user dpu " +
+                "ON su.id = dpu.user_id AND dpu.deleted = 0 " +
+                "SET su.employee_no = dpu.job_number, su.dingtalk_user_id = dpu.dingtalk_user_id " +
+                "WHERE su.deleted = 0 " +
+                "AND dpu.job_number IS NOT NULL AND dpu.job_number != '' " +
+                "AND (su.employee_no IS NULL OR su.employee_no = '')");
+
+        Integer total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM system_users WHERE deleted = 0 AND employee_no IS NOT NULL AND employee_no != ''",
+                Integer.class);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("updated", updated);
+        result.put("totalWithEmployeeNo", total != null ? total : 0);
+        log.info("[DingTalkSync] 工号同步完成: updated={}, totalWithEmployeeNo={}", updated, total);
+        return result;
+    }
+
     private int countUsersWithMobile() {
         try {
             Integer count = jdbcTemplate.queryForObject(

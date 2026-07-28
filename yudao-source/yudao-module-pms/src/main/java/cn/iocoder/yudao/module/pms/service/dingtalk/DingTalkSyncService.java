@@ -33,4 +33,11 @@ public interface DingTalkSyncService {
      * 获取同步状态摘要
      */
     Map<String, Object> getSyncStatus();
+
+    /**
+     * 同步工号到 system_users
+     * 从 pms_dingtalk_user 表将 job_number 和 dingtalk_user_id 同步到 system_users
+     * @return 同步结果
+     */
+    Map<String, Object> syncEmployeeNo();
 }

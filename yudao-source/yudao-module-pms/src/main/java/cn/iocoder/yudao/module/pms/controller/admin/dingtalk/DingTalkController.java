@@ -111,4 +111,11 @@ public class DingTalkController {
     public CommonResult<Map<String, Object>> getSyncStatus() {
         return success(dingTalkSyncService.getSyncStatus());
     }
+
+    @PostMapping("/sync/employee-no")
+    @Operation(summary = "同步工号到系统用户表")
+    @PreAuthorize("@ss.hasPermission('pms:dingtalk:sync')")
+    public CommonResult<Map<String, Object>> syncEmployeeNo() {
+        return success(dingTalkSyncService.syncEmployeeNo());
+    }
 }
