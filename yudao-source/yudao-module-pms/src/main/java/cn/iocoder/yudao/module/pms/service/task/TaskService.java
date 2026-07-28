@@ -14,7 +14,7 @@ public interface TaskService {
 
     void dispatchTask(Long taskId);
 
-    void submitCompletion(Long taskId);
+    void submitCompletion(Long taskId, String actualCompleteDate, String completionNote);
 
     void reviewCompletion(Long taskId, boolean approved, Long operatorId);
 

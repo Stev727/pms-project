@@ -131,7 +131,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="所属部门" prop="deptId">
-          <el-select v-model="createForm.deptId" placeholder="请选择部门" class="w-full">
+          <el-select v-model="createForm.deptId" placeholder="请选择部门" class="w-full" filterable>
             <el-option v-for="d in deptList" :key="d.id" :label="d.name" :value="d.id" />
           </el-select>
         </el-form-item>
@@ -239,7 +239,7 @@
               <el-row :gutter="20">
                 <el-col :span="12">
                   <el-form-item label="所属部门" prop="deptId">
-                    <el-select v-model="editForm.deptId" placeholder="请选择部门" class="w-full">
+                    <el-select v-model="editForm.deptId" placeholder="请选择部门" class="w-full" filterable>
                       <el-option v-for="d in deptList" :key="d.id" :label="d.name" :value="d.id" />
                     </el-select>
                   </el-form-item>
@@ -345,11 +345,27 @@
         <el-button type="primary" @click="saveTaskEdit">确定</el-button>
       </template>
     </Dialog>
+
+    <!-- 复制模板弹窗 -->
+    <Dialog v-model="copyVisible" title="复制模板" width="480px">
+      <el-form label-width="100px">
+        <el-form-item label="源模板">
+          <span>{{ copySourceName }}</span>
+        </el-form-item>
+        <el-form-item label="新模板名称" required>
+          <el-input v-model="copyForm.projectName" placeholder="请输入新模板名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="copyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="copySaving" @click="confirmCopy">确认复制</el-button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { getProjectList, updateProject, createProject, ProjectVO } from '@/api/pms/project'
+import { getProjectList, updateProject, createProject, getTemplateUsageCount, ProjectVO } from '@/api/pms/project'
 import { getTaskList, updateTask, createTask, deleteTask, TaskVO } from '@/api/pms/task'
 import { getStageList, createStage, updateStage, deleteStage, StageVO } from '@/api/pms/stage'
 import { dateFormatter } from '@/utils/formatTime'
@@ -372,6 +388,7 @@ const previewData = ref<ProjectVO | null>(null)
 const taskList = ref<TaskVO[]>([])
 const stageList = ref<StageVO[]>([])
 const projectList = ref<any[]>([])
+const usageCountMap = ref<Record<string, number>>({})
 const deptList = ref<any[]>([])
 
 // 编辑模板相关
@@ -386,6 +403,7 @@ const editForm = reactive<ProjectVO>({
   projectName: '',
   projectType: 'standard_template',
   status: 'active',
+  deptId: undefined,
   description: ''
 })
 const editRules = {
@@ -405,6 +423,7 @@ const createForm = reactive({
   projectName: '',
   projectType: 'standard_template',
   status: 'active',
+  deptId: undefined,
   description: ''
 })
 const createRules = {
@@ -418,6 +437,7 @@ const openCreateDialog = () => {
     projectName: '',
     projectType: 'standard_template',
     status: 'active',
+    deptId: undefined,
     description: ''
   })
   createVisible.value = true
@@ -530,7 +550,7 @@ const filteredList = computed(() => {
 
 const getUsageCount = (templateId?: string | number) => {
   if (!templateId) return 0
-  return projectList.value.filter(p => String(p.templateId) === String(templateId) && p.projectType !== 'standard_template').length
+  return usageCountMap.value[String(templateId)] || 0
 }
 
 // 构建预览树数据：阶段 -> 子任务
@@ -552,33 +572,20 @@ const stageTreeData = computed(() => {
 const getList = async () => {
   loading.value = true
   try {
-    const [projList, depts] = await Promise.all([
+    const [projList, depts, usageCounts] = await Promise.all([
       getProjectList({ projectType: 'standard_template' }),
-      getSimpleDeptList().catch(() => [])
+      getSimpleDeptList().catch(() => []),
+      getTemplateUsageCount().catch(() => ({}))
     ])
     list.value = (projList || []).filter((p: ProjectVO) => p.projectType === 'standard_template')
-    projectList.value = projList || []
     deptList.value = depts || []
+    // 使用后端聚合接口获取模板使用统计（绕过权限过滤，数据更准确）
+    usageCountMap.value = (usageCounts as Record<string, number>) || {}
   } catch (e) {
     console.error('加载模板列表失败', e)
   } finally {
     loading.value = false
   }
-}
-
-const handleCopy = async (row: ProjectVO) => {
-  try {
-    await message.confirm(`确认复制模板「${row.projectName}」？将基于该模板创建一个新项目。`)
-    await createProject({
-      projectName: row.projectName + ' (副本)',
-      projectType: 'new_product',
-      templateId: Number(row.projectId),
-      createMethod: 'template',
-      status: 'initiating'
-    } as any)
-    message.success('复制成功，已创建基于该模板的项目')
-    getList()
-  } catch {}
 }
 
 const openPreview = async (row: ProjectVO) => {
@@ -609,6 +616,7 @@ const openEdit = async (row: ProjectVO) => {
     projectName: row.projectName,
     projectType: row.projectType || 'standard_template',
     status: row.status || 'active',
+    deptId: row.deptId,
     description: row.description || ''
   })
   try {
@@ -880,6 +888,69 @@ const removeEditTask = async (row: any) => {
     editDeletedTaskIds.value.push(row.taskId)
     message.success('已删除')
   } catch {}
+}
+
+// 复制模板相关
+const copyVisible = ref(false)
+const copySaving = ref(false)
+const copySourceName = ref('')
+const copyForm = reactive({
+  projectId: '' as string | number,
+  projectName: '',
+  deptId: undefined as number | undefined,
+  description: ''
+})
+
+const handleCopy = (row: ProjectVO) => {
+  copySourceName.value = row.projectName
+  copyForm.projectId = row.projectId || ''
+  copyForm.projectName = row.projectName + ' (副本)'
+  copyForm.deptId = row.deptId
+  copyForm.description = row.description || ''
+  copyVisible.value = true
+}
+
+const confirmCopy = async () => {
+  if (!copyForm.projectName?.trim()) {
+    message.warning('请输入新模板名称')
+    return
+  }
+  copySaving.value = true
+  try {
+    // 1. 创建新模板（projectType=standard_template, templateId=源模板ID 触发后端复制任务）
+    const res = await createProject({
+      projectName: copyForm.projectName.trim(),
+      projectCode: `TPL-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`,
+      projectType: 'standard_template',
+      templateId: Number(copyForm.projectId),
+      status: 'active',
+      deptId: copyForm.deptId,
+      description: copyForm.description,
+      createMethod: 'manual',
+      planStartDate: new Date().toISOString().split('T')[0],
+      planEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    } as any)
+    // 2. 将新模板的 templateId 置为 null，使其成为独立模板
+    const newProjectId = (res as any)?.data ?? res
+    if (newProjectId) {
+      try {
+        await updateProject({
+          projectId: newProjectId,
+          templateId: null as any
+        } as any)
+      } catch {
+        // 置空 templateId 失败不影响主流程，新模板仍可用
+      }
+    }
+    message.success('模板复制成功')
+    copyVisible.value = false
+    getList()
+  } catch (e) {
+    console.error('复制模板失败', e)
+    message.error('复制模板失败，请重试')
+  } finally {
+    copySaving.value = false
+  }
 }
 
 onMounted(() => {

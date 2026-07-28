@@ -188,4 +188,9 @@ public class PmsTaskDO extends TenantBaseDO {
      */
     private String reviewOpinion;
 
+    /**
+     * 完成说明
+     */
+    private String completionNote;
+
 }

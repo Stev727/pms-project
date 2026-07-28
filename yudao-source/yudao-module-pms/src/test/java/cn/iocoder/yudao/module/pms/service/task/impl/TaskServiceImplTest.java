@@ -84,7 +84,7 @@ class TaskServiceImplTest {
         TaskServiceImpl service = new TaskServiceImpl();
         TaskMapper mapper = mock(TaskMapper.class);
         ReflectionTestUtils.setField(service, "taskMapper", mapper);
-        assertThrows(ServiceException.class, () -> service.submitCompletion(404L));
+        assertThrows(ServiceException.class, () -> service.submitCompletion(404L, null, null));
     }
 
     private static TaskServiceImpl serviceWithProjectManager(Long managerId) {

@@ -446,7 +446,7 @@ async function confirmDelay() {
 async function confirmSubmit() {
   if (!submitTarget.value) return
   try {
-    await submitTaskCompletion(submitTarget.value.taskId)
+    await submitTaskCompletion(submitTarget.value.taskId, submitForm.actualCompleteDate, submitForm.completionNote)
     ElMessage.success('任务已提交审核')
     submitConfirmVisible.value = false
     emit('refresh')

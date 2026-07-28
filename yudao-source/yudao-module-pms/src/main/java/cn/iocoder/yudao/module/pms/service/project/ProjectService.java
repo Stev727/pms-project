@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.pms.service.project;
 import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 项目 Service 接口
@@ -24,5 +25,11 @@ public interface ProjectService {
      * @param projectType 项目类型，可选。传 "standard_template" 时按部门过滤模板；不传时按用户参与过滤项目
      */
     List<PmsProjectDO> getProjectList(String projectType);
+
+    /**
+     * 获取各模板的使用项目数量（绕过权限过滤）
+     * @return Map<templateId, 使用次数>
+     */
+    Map<Long, Long> countByTemplate();
 
 }

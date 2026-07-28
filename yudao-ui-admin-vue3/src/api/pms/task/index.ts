@@ -17,6 +17,7 @@ export interface TaskVO {
   firstDelayedPlanEndDate?: string  // 一次延迟计划结束日期
   secondDelayedPlanEndDate?: string // 二次延迟计划结束日期
   actualCompleteDate?: string
+  completionNote?: string  // 完成说明
   outputRequirement?: string
   completionStandard?: string
   mainOwnerId?: number
@@ -66,8 +67,8 @@ export const simulateDingtalkConfirm = (taskId: string | number) => {
   return request.post({ url: '/pms/task/simulate-dingtalk-confirm', params: { taskId } })
 }
 
-export const submitTaskCompletion = (taskId: string | number) => {
-  return request.post({ url: '/pms/task/completion/submit', params: { taskId } })
+export const submitTaskCompletion = (taskId: string | number, actualCompleteDate?: string, completionNote?: string) => {
+  return request.post({ url: '/pms/task/submit-completion', params: { taskId, actualCompleteDate, completionNote } })
 }
 
 export const reviewTaskCompletion = (taskId: string | number, approved: boolean) => {

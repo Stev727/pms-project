@@ -297,6 +297,9 @@
       class="mb-16px"
     />
     <el-form label-width="90px">
+      <el-form-item label="实际完成日期">
+        <el-date-picker v-model="submitForm.actualCompleteDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
+      </el-form-item>
       <el-form-item label="完成说明">
         <el-input v-model="submitForm.completionNote" type="textarea" :rows="3" placeholder="请描述完成情况" />
       </el-form-item>
@@ -621,7 +624,7 @@ const handleResume = () => {
 
 // 提交完成 — 走待审核流程，需校验输出物
 const showSubmitDialog = ref(false)
-const submitForm = reactive({ completionNote: '' })
+const submitForm = reactive({ actualCompleteDate: '', completionNote: '' })
 const hasDeliverable = ref(false)
 
 const handleSubmitComplete = async () => {
@@ -632,6 +635,7 @@ const handleSubmitComplete = async () => {
     const taskDocs = ((docs as any[]) || []).filter(d => String(d.taskId) === String(task.value!.taskId))
     hasDeliverable.value = taskDocs.length > 0
   } catch { hasDeliverable.value = false }
+  submitForm.actualCompleteDate = new Date().toISOString().split('T')[0]
   submitForm.completionNote = ''
   showSubmitDialog.value = true
 }
@@ -644,7 +648,7 @@ const confirmSubmitComplete = async () => {
     return
   }
   try {
-    await submitTaskCompletion(task.value.taskId)
+    await submitTaskCompletion(task.value.taskId, submitForm.actualCompleteDate, submitForm.completionNote)
     message.success('已提交完成，等待项目经理审核')
     showSubmitDialog.value = false
     // P0-05: 重新获取最新任务数据，避免使用旧对象

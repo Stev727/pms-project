@@ -346,6 +346,23 @@ public class ProjectServiceImpl implements ProjectService {
         return projects;
     }
 
+    @Override
+    public Map<Long, Long> countByTemplate() {
+        // 查询所有使用了模板的真实项目（非模板项目，template_id 不为空），绕过权限过滤
+        LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
+        wrapper.isNotNull(PmsProjectDO::getTemplateId);
+        wrapper.ne(PmsProjectDO::getProjectType, "standard_template");
+        List<PmsProjectDO> projects = projectMapper.selectList(wrapper);
+        
+        // 按 template_id 分组计数
+        Map<Long, Long> result = new HashMap<>();
+        for (PmsProjectDO project : projects) {
+            Long templateId = project.getTemplateId();
+            result.merge(templateId, 1L, Long::sum);
+        }
+        return result;
+    }
+
     /**
      * 实时计算项目的 progress 和当前阶段状态
      * - progress = 已完成任务数 * 100 / 总任务数

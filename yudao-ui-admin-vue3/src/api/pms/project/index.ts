@@ -25,6 +25,10 @@ export interface ProjectVO {
   createTime?: string
 }
 
+export const getTemplateUsageCount = () => {
+  return request.get({ url: '/pms/project/count-by-template' })
+}
+
 export const createProject = (data: ProjectVO) => {
   return request.post({ url: '/pms/project/create', data })
 }

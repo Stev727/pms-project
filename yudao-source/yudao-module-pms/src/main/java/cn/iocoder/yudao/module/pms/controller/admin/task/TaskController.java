@@ -40,9 +40,14 @@ public class TaskController {
     @PostMapping("/submit-completion")
     @Operation(summary = "提交任务完成（进入待审核）")
     @Parameter(name = "taskId", description = "任务编号", required = true)
+    @Parameter(name = "actualCompleteDate", description = "实际完成日期(yyyy-MM-dd)")
+    @Parameter(name = "completionNote", description = "完成说明")
     @PreAuthorize("@ss.hasPermission('pms:task:update')")
-    public CommonResult<Boolean> submitCompletion(@RequestParam("taskId") Long taskId) {
-        taskService.submitCompletion(taskId);
+    public CommonResult<Boolean> submitCompletion(
+            @RequestParam("taskId") Long taskId,
+            @RequestParam(value = "actualCompleteDate", required = false) String actualCompleteDate,
+            @RequestParam(value = "completionNote", required = false) String completionNote) {
+        taskService.submitCompletion(taskId, actualCompleteDate, completionNote);
         return success(true);
     }
 

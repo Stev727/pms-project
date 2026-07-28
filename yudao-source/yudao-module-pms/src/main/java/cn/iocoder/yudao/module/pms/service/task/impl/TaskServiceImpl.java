@@ -93,12 +93,19 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
-    public void submitCompletion(Long taskId) {
+    public void submitCompletion(Long taskId, String actualCompleteDate, String completionNote) {
         PmsTaskDO task = requireTask(taskId);
         if (!"in_progress".equals(task.getCompleteStatus())) {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_STATUS_INVALID);
         }
         task.setCompleteStatus("completion_pending_review");
+        // 设置实际完成日期：优先使用用户填写的日期，否则默认今天
+        if (actualCompleteDate != null && !actualCompleteDate.isEmpty()) {
+            task.setActualCompleteDate(java.time.LocalDate.parse(actualCompleteDate));
+        } else {
+            task.setActualCompleteDate(java.time.LocalDate.now());
+        }
+        task.setCompletionNote(completionNote);
         taskMapper.updateById(task);
     }
 

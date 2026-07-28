@@ -12,6 +12,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.Map;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
 @Tag(name = "管理后台 - 项目")
@@ -68,6 +69,13 @@ public class ProjectController {
     public CommonResult<List<PmsProjectDO>> list(
             @RequestParam(value = "projectType", required = false) String projectType) {
         return success(projectService.getProjectList(projectType));
+    }
+
+    @GetMapping("/count-by-template")
+    @Operation(summary = "获取各模板的使用项目数量（绕过权限过滤）")
+    @PreAuthorize("@ss.hasPermission('pms:project:query')")
+    public CommonResult<Map<Long, Long>> countByTemplate() {
+        return success(projectService.countByTemplate());
     }
 
 }

@@ -1139,7 +1139,7 @@ onMounted(async () => {
   try {
     const projects = await getProjectList({ projectType: 'standard_template' })
     templateList.value = ((projects as ProjectVO[]) || []).filter(
-      p => p.projectType === 'standard_template'
+      p => p.projectType === 'standard_template' && p.status === 'active'
     )
   } catch (e) {
     console.error('加载模板列表失败', e)
