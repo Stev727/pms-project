@@ -104,6 +104,7 @@ import { computed } from 'vue'
 import { TaskVO } from '@/api/pms/task'
 import { StageVO } from '@/api/pms/stage'
 import { formatDate, calcDelayDays } from '../pms-utils'
+import { getWeekRange, isDateInRange } from '../pms-date-utils'
 
 defineOptions({ name: 'OverviewTab' })
 
@@ -137,7 +138,7 @@ const parseDate = (date: any) => {
 }
 
 const formatPlanDate = (date: any) => {
-  return formatDate(date, 'MM-DD')
+  return formatDate(date)
 }
 
 const getDaysColor = (planEndDate: any) => {
@@ -157,14 +158,10 @@ const getDelayDays = (planEndDate: any) => {
 
 // ==================== 任务分类列表 (PRD-003) ====================
 const weekDueTasks = computed(() => {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0) // 重置为当天0点，避免时间干扰
-  const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const { start, end } = getWeekRange()
   return props.tasks.filter(t => {
     if (!t.planEndDate || t.completeStatus === 'completed') return false
-    const end = parseDate(t.planEndDate)
-    end.setHours(0, 0, 0, 0)
-    return end >= now && end <= weekLater
+    return isDateInRange(t.planEndDate, start, end)
   })
 })
 
@@ -227,7 +224,7 @@ const recentActivities = computed(() => {
   for (const task of recent) {
     activities.push({
       content: `任务「${task.taskName}」已完成`,
-      time: formatDate(task.actualCompleteDate, 'MM-DD HH:mm'),
+      time: formatDate(task.actualCompleteDate, 'YYYY-MM-DD HH:mm'),
       type: 'success'
     })
   }
@@ -238,7 +235,7 @@ const recentActivities = computed(() => {
   for (const task of delayed) {
     activities.push({
       content: `任务「${task.taskName}」已延期 ${calcDelayDays(task.planEndDate, task.completeStatus)} 天`,
-      time: formatDate(new Date(), 'MM-DD HH:mm'),
+      time: formatDate(new Date(), 'YYYY-MM-DD HH:mm'),
       type: 'danger'
     })
   }

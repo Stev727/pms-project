@@ -60,7 +60,7 @@
             <template #default="{ row }">{{ row.uploadByName || row.uploadBy || '-' }}</template>
           </el-table-column>
           <el-table-column label="上传时间" width="110">
-            <template #default="{ row }">{{ formatDate(row.uploadTime, 'MM-DD HH:mm') }}</template>
+            <template #default="{ row }">{{ formatDate(row.uploadTime, 'YYYY-MM-DD HH:mm') }}</template>
           </el-table-column>
           <el-table-column label="下载" width="70" align="center">
             <template #default="{ row }">{{ row.downloadCount || 0 }}</template>

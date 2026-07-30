@@ -45,7 +45,7 @@
         </template>
       </el-table-column>
       <el-table-column label="发现日期" width="100">
-        <template #default="{ row }">{{ formatDate(row.foundDate, 'MM-DD') }}</template>
+        <template #default="{ row }">{{ formatDate(row.foundDate) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="180" align="center">
         <template #default="{ row }">

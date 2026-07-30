@@ -116,7 +116,7 @@
                     <div class="card-title" :title="task.taskName">{{ task.taskName }}</div>
                     <div class="card-info">
                       <span>{{ getManagerName(task) }}</span>
-                      <span v-if="task.planEndDate" style="color: #86909C">{{ formatDate(task.planEndDate, 'MM-DD') }}</span>
+                      <span v-if="task.planEndDate" style="color: #86909C">{{ formatDate(task.planEndDate) }}</span>
                     </div>
                     <el-progress v-if="task.progress > 0" :percentage="task.progress" :stroke-width="4" :show-text="false" :color="col.color" />
                   </div>

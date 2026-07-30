@@ -80,7 +80,7 @@
         <el-table-column label="到期日" width="120">
           <template #default="{ row }">
             <span :style="{ color: isDelayed(row) ? '#F53F3F' : '#4E5969' }">
-              {{ formatDate(row.planEndDate, 'MM-DD') }}
+              {{ formatDate(row.planEndDate) }}
             </span>
             <el-tag v-if="isDelayed(row)" type="danger" size="small" effect="plain" style="margin-left: 4px">
               延{{ getDelayDays(row) }}天
@@ -114,7 +114,7 @@
               <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #86909C">
                 <span>{{ getOwnerName(task) }}</span>
                 <span :style="{ color: isDelayed(task) ? '#F53F3F' : '#86909C' }">
-                  {{ formatDate(task.planEndDate, 'MM-DD') }}
+                  {{ formatDate(task.planEndDate) }}
                 </span>
               </div>
             </el-card>

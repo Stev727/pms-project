@@ -134,7 +134,7 @@
             </div>
             <el-table :data="progressList" stripe size="small" style="width: 100%">
               <el-table-column label="时间" width="150">
-                <template #default="{ row }">{{ formatDate(row.createTime, 'MM-DD HH:mm') }}</template>
+                <template #default="{ row }">{{ formatDate(row.createTime, 'YYYY-MM-DD HH:mm') }}</template>
               </el-table-column>
               <el-table-column label="进度" width="80">
                 <template #default="{ row }">
@@ -167,7 +167,7 @@
                 <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
               </el-table-column>
               <el-table-column label="上传时间" width="120">
-                <template #default="{ row }">{{ formatDate(row.createTime, 'MM-DD') }}</template>
+                <template #default="{ row }">{{ formatDate(row.createTime) }}</template>
               </el-table-column>
               <el-table-column label="操作" width="80">
                 <template #default="{ row }">

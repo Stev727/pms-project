@@ -82,14 +82,14 @@
       </el-table-column>
       <el-table-column label="计划开始" width="110">
         <template #default="{ row }">
-          <span v-if="!row.isStageRow" style="font-size: 13px">{{ formatDate(row.planStartDate, 'MM-DD') }}</span>
+          <span v-if="!row.isStageRow" style="font-size: 13px">{{ formatDate(row.planStartDate) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="到期日" width="120">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
             <span :style="{ color: isDelayed(row) ? '#F53F3F' : '#4E5969' }">
-              {{ formatDate(row.planEndDate, 'MM-DD') }}
+              {{ formatDate(row.planEndDate) }}
             </span>
             <el-tag v-if="isDelayed(row)" type="danger" size="small" effect="plain" style="margin-left: 4px">
               延期{{ getDelayDays(row) }}天

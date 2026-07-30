@@ -51,6 +51,7 @@ import { TaskVO } from '@/api/pms/task'
 import { updateTask } from '@/api/pms/task'
 import { StageVO } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
+import { inclusiveDuration, summarizeStageDates } from '../pms-date-utils'
 import { gantt } from 'dhtmlx-gantt'
 import 'dhtmlx-gantt/codebase/dhtmlxgantt.css'
 import { onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
@@ -213,18 +214,9 @@ const buildGanttData = () => {
     const stageId = `stage_${stage.stageId}`
     // 从子任务计算阶段开始/结束/工期
     const stageTasks = props.tasks.filter(t => String(t.stageId) === String(stage.stageId))
-    let stageStart = stage.planStartDate || ''
-    let stageEnd = stage.planEndDate || ''
-    for (const t of stageTasks) {
-      if (t.planStartDate && (!stageStart || t.planStartDate < stageStart)) stageStart = t.planStartDate
-      if (t.planEndDate && (!stageEnd || t.planEndDate > stageEnd)) stageEnd = t.planEndDate
-    }
-    // 计算工期（天数）
-    let stageDuration = 1
-    if (stageStart && stageEnd) {
-      const diff = Math.ceil((new Date(stageEnd + ' 23:59:59').getTime() - new Date(stageStart + ' 00:00:00').getTime()) / (1000 * 60 * 60 * 24))
-      stageDuration = diff > 0 ? diff : 1
-    }
+    const summary = summarizeStageDates(stageTasks)
+    const stageStart = summary.start
+    const stageDuration = summary.duration
     // 计算阶段进度（子任务平均进度）
     let stageProgress = 0
     if (stageTasks.length > 0) {
@@ -235,8 +227,7 @@ const buildGanttData = () => {
       text: stage.stageName,
       type: 'project',
       open: true,
-      start_date: stageStart ? formatDate(stageStart, 'YYYY-MM-DD')
-        : (stage.createTime ? formatDate(stage.createTime, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0]),
+      start_date: stageStart || undefined,
       duration: stageDuration,
       progress: stageProgress,
       parent: 0,
@@ -258,8 +249,8 @@ const buildGanttData = () => {
       tasks.push({
         id: String(task.taskId),
         text: task.taskName,
-        start_date: task.planStartDate ? formatDate(task.planStartDate, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0],
-        duration: task.cycle || 1,
+        start_date: task.planStartDate ? formatDate(task.planStartDate, 'YYYY-MM-DD') : undefined,
+        duration: inclusiveDuration(task.planStartDate, task.planEndDate) || task.cycle || 1,
         progress: (task.progress || 0) / 100,
         parent: parentStage?.id || 0,
         owner: task.mainOwnerId ? getUserName(task.mainOwnerId) : '-',
