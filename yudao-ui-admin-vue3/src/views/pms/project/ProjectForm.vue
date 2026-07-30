@@ -57,7 +57,7 @@
         <el-col :span="12">
           <el-form-item label="项目经理" prop="projectManagerId">
             <el-select v-model="formData.projectManagerId" placeholder="请选择" filterable remote clearable :remote-method="searchUsers" :loading="remoteLoading" style="width: 100%">
-              <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+              <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
             </el-select>
           </el-form-item>
         </el-col>
@@ -172,13 +172,13 @@ const open = async (type: 'create' | 'update', data?: ProjectVO) => {
 
   if (data) {
     Object.assign(formData, data)
-    // P1-02: 确保 projectManagerId 为字符串，与 el-option :value="String(u.id)" 类型匹配
+    // 修复: projectManagerId 用 Number 类型匹配 el-option Number(u.id)
     if (formData.projectManagerId !== undefined && formData.projectManagerId !== null) {
-      const mgrIdStr = String(formData.projectManagerId)
-      formData.projectManagerId = mgrIdStr as any
-      // P1-02: 将当前项目经理加入 remoteUserList，使 el-select 能显示姓名
-      if (!remoteUserList.value.find(u => String(u.id) === mgrIdStr)) {
-        const mgrUser = userList.value.find(u => String(u.id) === mgrIdStr)
+      formData.projectManagerId = Number(formData.projectManagerId) as any
+      // 将当前项目经理加入 remoteUserList，使 el-select 能显示姓名
+      const mgrIdNum = Number(formData.projectManagerId)
+      if (!remoteUserList.value.find(u => Number(u.id) === mgrIdNum)) {
+        const mgrUser = userList.value.find(u => Number(u.id) === mgrIdNum)
         if (mgrUser) {
           remoteUserList.value = [mgrUser]
         }
