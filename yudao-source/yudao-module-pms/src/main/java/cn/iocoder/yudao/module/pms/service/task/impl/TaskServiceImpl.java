@@ -112,9 +112,10 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
-    public void reviewCompletion(Long taskId, boolean approved, Long operatorId) {
+    @Transactional(rollbackFor = Exception.class)
+    public void reviewCompletion(Long taskId, boolean approved, String reviewOpinion, Long operatorId) {
         PmsTaskDO task = requireTask(taskId);
-        requireProjectManager(task, operatorId);
+        PmsProjectDO project = requireProjectManager(task, operatorId);
         if (!"completion_pending_review".equals(task.getCompleteStatus())) {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_STATUS_INVALID);
         }
@@ -125,14 +126,34 @@ public class TaskServiceImpl implements TaskService {
         } else {
             task.setCompleteStatus("in_progress");
         }
+        task.setReviewOpinion(reviewOpinion);
         taskMapper.updateById(task);
+
+        java.util.LinkedHashSet<Long> receiverIds = new java.util.LinkedHashSet<>();
+        if (task.getMainOwnerId() != null) {
+            receiverIds.add(task.getMainOwnerId());
+        }
+        if (project.getProjectManagerId() != null) {
+            receiverIds.add(project.getProjectManagerId());
+        }
+        if (!receiverIds.isEmpty()) {
+            String result = approved ? "通过" : "驳回";
+            dingTalkNotifyService.sendNotifyDirect(
+                    "【PMS】任务完成审核" + result,
+                    "项目「" + (project.getProjectName() == null ? "" : project.getProjectName())
+                            + "」任务「" + task.getTaskName() + "」完成审核已" + result
+                            + (reviewOpinion == null || reviewOpinion.isBlank() ? "" : "，意见：" + reviewOpinion),
+                    new java.util.ArrayList<>(receiverIds),
+                    approved ? "completion_approved" : "completion_rejected", "task", taskId);
+        }
     }
 
-    private void requireProjectManager(PmsTaskDO task, Long operatorId) {
+    private PmsProjectDO requireProjectManager(PmsTaskDO task, Long operatorId) {
         PmsProjectDO project = projectMapper.selectById(task.getProjectId());
         if (project == null || !java.util.Objects.equals(project.getProjectManagerId(), operatorId)) {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
         }
+        return project;
     }
 
     private PmsTaskDO requireTask(Long taskId) {

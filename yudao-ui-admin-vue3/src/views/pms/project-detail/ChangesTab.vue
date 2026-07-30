@@ -130,7 +130,6 @@
           </el-form>
         </template>
         <div v-if="selected.status === 'approved'" class="section-title">执行操作</div>
-        <el-button v-if="selected.status === 'approved'" type="success" :loading="saving" @click="executeApproved">执行变更</el-button>
       </template>
     </el-drawer>
 
@@ -164,7 +163,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getChangeRecordList, createChangeRecord, reviewChangeRecord, executeChangeRecord, ChangeRecordVO } from '@/api/pms/change'
+import { getChangeRecordList, createChangeRecord, reviewChangeRecord, ChangeRecordVO } from '@/api/pms/change'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
@@ -322,18 +321,6 @@ async function submitApproval() {
     drawerVisible.value = false
     await fetchList()
   } catch (e) { console.error(e); ElMessage.error('审批失败') }
-  finally { saving.value = false }
-}
-
-async function executeApproved() {
-  if (!selected.value) return
-  saving.value = true
-  try {
-    await executeChangeRecord(selected.value.changeId)
-    ElMessage.success('变更已执行')
-    drawerVisible.value = false
-    await fetchList()
-  } catch (e) { console.error(e); ElMessage.error('执行失败') }
   finally { saving.value = false }
 }
 

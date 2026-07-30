@@ -61,7 +61,8 @@ public class TaskController {
             @RequestParam("taskId") Long taskId,
             @RequestParam("approved") Boolean approved,
             @RequestParam(value = "reviewOpinion", required = false) String reviewOpinion) {
-        taskService.reviewCompletion(taskId, approved, cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId());
+        taskService.reviewCompletion(taskId, approved, reviewOpinion,
+                cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId());
         return success(true);
     }
 

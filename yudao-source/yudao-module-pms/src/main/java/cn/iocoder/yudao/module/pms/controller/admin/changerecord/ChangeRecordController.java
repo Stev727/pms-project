@@ -29,7 +29,7 @@ public class ChangeRecordController {
         return success(changeRecordService.createChangeRecord(entity));
     }
 
-    @PutMapping("/review")
+    @PostMapping("/review")
     @Operation(summary = "项目经理审核任务变更")
     @PreAuthorize("@ss.hasPermission('pms:change:update')")
     public CommonResult<Boolean> review(@RequestParam("id") Long id,

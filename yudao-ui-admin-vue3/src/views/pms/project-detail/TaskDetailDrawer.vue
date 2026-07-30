@@ -321,16 +321,16 @@
 </template>
 
 <script setup lang="ts">
-import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, submitTaskCompletion } from '@/api/pms/task'
+import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, submitTaskCompletion, reviewTaskCompletion } from '@/api/pms/task'
 import { getProjectMemberList } from '@/api/pms/member'
-import { getDocumentList } from '@/api/pms/document'
+import { getDocumentList, createDocument } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
 import {
   taskStatusMap, priorityMap, taskTypeOptions, priorityOptions,
   formatDate, calcDelayDays, calcDuration
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
-import { getAccessToken } from '@/utils/auth'
+import { getAccessToken, getTenantId } from '@/utils/auth'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'TaskDetailDrawer' })
@@ -714,7 +714,7 @@ const handleFileSelect = async (event: Event) => {
     const token = getAccessToken()
     const res = await fetch('/admin-api/infra/file/upload', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token, 'tenant-id': '1' },
+      headers: { 'Authorization': 'Bearer ' + token, 'tenant-id': String(getTenantId() || '') },
       body: formData
     })
     if (!res.ok) {
@@ -743,16 +743,21 @@ const handleFileSelect = async (event: Event) => {
         return
       }
     }
-    // 上传成功，添加到输出物列表
-    outputList.value.push({
-      fileName: fileName,
-      fileType: fileName.split('.').pop() || 'unknown',
+    // 文件存储成功后立即建立 PMS 文档记录，关闭抽屉不会丢失输出物。
+    const sameNameDocs = outputList.value.filter(item => item.fileName === fileName)
+    const nextVersion = String(Math.max(0, ...sameNameDocs.map(item => Number(item.versionNo) || 0)) + 1)
+    await createDocument({
+      projectId: String(task.value?.projectId || ''),
+      taskId: Number(task.value?.taskId),
+      fileName,
+      fileType: fileName.split('.').pop()?.toLowerCase() || 'unknown',
+      category: 'deliverable',
       storagePath: fileUrl,
       fileSize: file.size,
-      version: 'v1',
-      createTime: new Date().toISOString(),
+      versionNo: nextVersion,
       uploadTime: new Date().toISOString()
-    })
+    } as any)
+    await loadOutputList()
     message.success('文件上传成功')
   } catch (e) {
     message.error('文件上传失败: ' + (e instanceof Error ? e.message : '网络错误'))
@@ -768,22 +773,15 @@ const handleSubmitReview = async () => {
   }
   if (!task.value) return
   try {
-    const statusMap: Record<string, string> = {
-      approved: 'completed',
-      rejected: 'in_progress'
+    if (reviewForm.result === 'rejected' && !reviewForm.opinion.trim()) {
+      message.warning('驳回必须填写审核意见')
+      return
     }
-    const updateData: any = {
-      taskId: task.value.taskId,
-      completeStatus: statusMap[reviewForm.result] || task.value.completeStatus,
-      opinion: reviewForm.opinion,
-      reviewOpinion: reviewForm.opinion || ''
-    }
-    // 审核通过时设置实际完成日期为当前时间（PM审核通过时间）
-    if (reviewForm.result === 'approved') {
-      updateData.actualCompleteDate = new Date().toISOString().split('T')[0]
-      updateData.progress = 100
-    }
-    await updateTask(updateData)
+    await reviewTaskCompletion(
+      task.value.taskId,
+      reviewForm.result === 'approved',
+      reviewForm.opinion || undefined
+    )
     message.success(`审核已${reviewForm.result === 'approved' ? '通过' : '驳回'}`)
     reviewForm.result = ''
     reviewForm.opinion = ''

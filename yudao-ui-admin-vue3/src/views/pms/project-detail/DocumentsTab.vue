@@ -151,7 +151,7 @@ import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { formatDate, phaseColorMap } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
-import { getAccessToken } from '@/utils/auth'
+import { getAccessToken, getTenantId } from '@/utils/auth'
 
 defineOptions({ name: 'DocumentsTab' })
 
@@ -161,7 +161,7 @@ const props = defineProps<{
 
 const uploadHeaders = computed(() => ({
   Authorization: 'Bearer ' + getAccessToken(),
-  'tenant-id': '1'
+  'tenant-id': String(getTenantId() || '')
 }))
 const loading = ref(false)
 const searchName = ref('')
