@@ -322,14 +322,18 @@ public class ProjectServiceImpl implements ProjectService {
         taskWrapper.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
                         .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
         List<PmsTaskDO> userTasks = taskMapper.selectList(taskWrapper);
-        Set<Long> involvedProjectIds = userTasks.stream()
-                .map(PmsTaskDO::getProjectId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        // 项目成员即使尚未分配任务，也应能在“我参与的”范围看到项目。
+        // 只按任务责任人查询会导致新建项目在任务分配前从成员列表中消失。
+        List<PmsProjectMemberDO> memberships = projectMemberMapper.selectList(
+                new LambdaQueryWrapperX<PmsProjectMemberDO>()
+                        .eq(PmsProjectMemberDO::getUserId, userId));
+        Set<Long> involvedProjectIds = collectInvolvedProjectIds(userTasks, memberships);
 
         // 2. 查询项目经理是当前用户的项目，或用户有任务参与的项目（排除模板）
         LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
-        wrapper.ne(PmsProjectDO::getProjectType, "standard_template");
+        // 兼容历史数据 project_type 为空；SQL 的 NULL != value 不成立，直接 ne 会误删全部旧项目。
+        wrapper.and(w -> w.isNull(PmsProjectDO::getProjectType)
+                .or().ne(PmsProjectDO::getProjectType, "standard_template"));
         if (involvedProjectIds.isEmpty()) {
             wrapper.eq(PmsProjectDO::getProjectManagerId, userId);
         } else {
@@ -350,12 +354,27 @@ public class ProjectServiceImpl implements ProjectService {
         return projects;
     }
 
+    static Set<Long> collectInvolvedProjectIds(List<PmsTaskDO> tasks,
+                                                List<PmsProjectMemberDO> memberships) {
+        Set<Long> projectIds = tasks.stream()
+                .map(PmsTaskDO::getProjectId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        memberships.stream()
+                .filter(member -> member.getStatus() == null || "active".equals(member.getStatus()))
+                .map(PmsProjectMemberDO::getProjectId)
+                .filter(Objects::nonNull)
+                .forEach(projectIds::add);
+        return projectIds;
+    }
+
     @Override
     public Map<Long, Long> countByTemplate() {
         // 查询所有使用了模板的真实项目（非模板项目，template_id 不为空），绕过权限过滤
         LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
         wrapper.isNotNull(PmsProjectDO::getTemplateId);
-        wrapper.ne(PmsProjectDO::getProjectType, "standard_template");
+        wrapper.and(w -> w.isNull(PmsProjectDO::getProjectType)
+                .or().ne(PmsProjectDO::getProjectType, "standard_template"));
         List<PmsProjectDO> projects = projectMapper.selectList(wrapper);
         
         // 按 template_id 分组计数

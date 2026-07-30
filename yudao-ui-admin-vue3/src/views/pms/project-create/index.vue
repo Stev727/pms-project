@@ -478,6 +478,7 @@ import {
   phaseColorMap, projectTypeOptions, taskTypeOptions, priorityOptions,
   priorityMap, calcDuration
 } from '../pms-utils'
+import { buildTasksFromTemplate, buildTaskCreatePayload } from '../pms-template-utils'
 
 defineOptions({ name: 'PmsProjectCreate' })
 
@@ -801,28 +802,11 @@ async function loadTemplateTasks(templateId: number | string) {
     const tplStages = (stages as StageVO[]).filter(s => String(s.projectId) === tplId)
     stageList.value = tplStages
     const tplTasks = (tasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
-    const taskIdBase = Date.now() + Math.floor(Math.random() * 100000)
-    let taskCounter = 0
-    adjustedTasks.value = tplTasks.map(t => {
-      const matchedStage = tplStages.find(s => String(s.stageId) === String(t.stageId))
-      taskCounter++
-      return {
-        taskId: taskIdBase + taskCounter,
-        taskName: t.taskName, // 仅带出任务名称
-        stageName: matchedStage?.stageName || '未分组',
-        stageId: matchedStage?.stageId ?? t.stageId,
-        cycle: t.cycle || 5,
-        priority: t.priority || 'normal',
-        isMilestone: !!t.isMilestone,
-        planStartDate: '', // 不带出模板的日期
-        planEndDate: '',
-        mainOwnerId: undefined, // 不带出模板的责任人
-        helperIds: [],
-        description: '', // 不带出模板的描述
-        outputRequirement: '',
-        roleName: 'PM'
-      }
-    })
+    adjustedTasks.value = buildTasksFromTemplate(
+      tplTasks,
+      tplStages,
+      Date.now() + Math.floor(Math.random() * 100000)
+    )
     if (tplTasks.length === 0 && String(selectedTemplate.value) === tplId) {
       ElMessage.warning("当前模板没有已保存的任务明细，请先到模板管理补充并保存任务")
     }
@@ -993,10 +977,8 @@ function confirmAddTask() {
 // 批量操作
 const batchStage = ref('')
 const batchAction = ref('')
-const batchOffsetDays = ref(0)
 const batchOwner = ref<number>()
 const batchPriority = ref('normal')
-const batchCycle = ref(5)
 
 function applyBatchAction() {
   if (!batchStage.value || !batchAction.value) {
@@ -1009,21 +991,7 @@ function applyBatchAction() {
     return
   }
 
-  const addDays = (dateStr: string, days: number): string => {
-    if (!dateStr) return ''
-    const d = new Date(dateStr)
-    d.setDate(d.getDate() + days)
-    return d.toISOString().split('T')[0]
-  }
-
   switch (batchAction.value) {
-    case 'offset_date':
-      for (const t of stageTasks) {
-        if (t.planStartDate) t.planStartDate = addDays(t.planStartDate, batchOffsetDays.value)
-        if (t.planEndDate) t.planEndDate = addDays(t.planEndDate, batchOffsetDays.value)
-      }
-      ElMessage.success(`已偏移 ${stageTasks.length} 个任务`)
-      break
     case 'set_owner':
       if (!batchOwner.value) { ElMessage.warning('请选择责任人'); return }
       const ownerName = userList.value.find(u => String(u.id) === String(batchOwner.value))?.nickname || `用户${batchOwner.value}`
@@ -1038,10 +1006,6 @@ function applyBatchAction() {
     case 'set_priority':
       for (const t of stageTasks) t.priority = batchPriority.value
       ElMessage.success(`已设置 ${stageTasks.length} 个任务的优先级`)
-      break
-    case 'set_cycle':
-      for (const t of stageTasks) t.cycle = batchCycle.value
-      ElMessage.success(`已设置 ${stageTasks.length} 个任务的工期`)
       break
   }
   batchAction.value = ''
@@ -1122,33 +1086,11 @@ const addDays = (dateStr: string, days: number): string => {
   return d.toISOString().split('T')[0]
 }
 
-const calcTaskPlanEndDate = (task: any): string => {
-  const end = task.planEndDate || addDays(projectForm.planStartDate, task.cycle || 5)
-  if (projectForm.planEndDate && end > projectForm.planEndDate) {
-    return projectForm.planEndDate
-  }
-  return end
-}
-
 async function submitCreate() {
   if (!selectedNotifyModeId.value) { ElMessage.warning("请选择通知模式"); return }
   submitting.value = true
   try {
-    const tasks = adjustedTasks.value.map(t => ({
-      taskName: t.taskName,
-      stageId: t.stageId,
-      taskType: t.taskType || 'design',
-      cycle: t.cycle || 5,
-      priority: t.priority || 'normal',
-      isMilestone: !!t.isMilestone,
-      mainOwnerId: t.mainOwnerId,
-      helperIds: Array.isArray(t.helperIds) && t.helperIds.length > 0 ? t.helperIds.join(',') : null,
-      description: t.description || '',
-      outputRequirement: t.outputRequirement || '',
-      planStartDate: t.planStartDate || projectForm.planStartDate,
-      planEndDate: calcTaskPlanEndDate(t),
-      roleName: t.roleName
-    }))
+    const tasks = adjustedTasks.value.map(buildTaskCreatePayload)
     const members = selectedMembers.value.map(m => ({
       userId: String(m.userId),
       roleCode: m.roleCode,

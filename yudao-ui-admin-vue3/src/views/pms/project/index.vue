@@ -11,11 +11,6 @@
             <el-option v-for="(v, k) in projectStatusMap" :key="k" :label="v.label" :value="k" />
           </el-select>
         </el-form-item>
-        <el-form-item label="阶段">
-          <el-select v-model="queryParams.currentStage" placeholder="全部" clearable style="width: 120px">
-            <el-option v-for="(v, k) in phaseColorMap" :key="k" :label="v.label" :value="k" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="queryParams.projectType" placeholder="全部" clearable style="width: 120px">
             <el-option v-for="opt in projectTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
