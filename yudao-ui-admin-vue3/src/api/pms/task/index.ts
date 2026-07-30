@@ -71,6 +71,6 @@ export const submitTaskCompletion = (taskId: string | number, actualCompleteDate
   return request.post({ url: '/pms/task/submit-completion', params: { taskId, actualCompleteDate, completionNote } })
 }
 
-export const reviewTaskCompletion = (taskId: string | number, approved: boolean) => {
-  return request.put({ url: '/pms/task/completion/review', params: { taskId, approved } })
+export const reviewTaskCompletion = (taskId: string | number, approved: boolean, reviewOpinion?: string) => {
+  return request.post({ url: '/pms/task/review-completion', params: { taskId, approved, reviewOpinion } })
 }

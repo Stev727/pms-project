@@ -43,5 +43,5 @@ export const reviewChangeRecord = (id: string | number, approved: boolean) => {
 }
 
 export const executeChangeRecord = (id: string | number) => {
-  return request.put({ url: '/pms/change-record/execute', params: { id } })
+  return request.post({ url: '/pms/change-record/execute', params: { id } })
 }

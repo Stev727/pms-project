@@ -13,16 +13,9 @@
           <el-option label="报告" value="report" />
           <el-option label="标准文件" value="standard" />
         </el-select>
-        <el-upload
-          action="/admin-api/infra/file/upload"
-          :headers="uploadHeaders"
-          :show-file-list="false"
-          :on-success="handleUploadSuccess"
-          :on-error="handleUploadError"
-          v-if="checkPermi(['pms:document:create'])"
-        >
-          <el-button type="primary" size="small"><Icon icon="ep:upload" class="mr-4px" />上传文档</el-button>
-        </el-upload>
+        <el-button type="primary" size="small" @click="uploadVisible = true" v-if="checkPermi(['pms:document:create'])">
+          <Icon icon="ep:upload" class="mr-4px" />上传文档
+        </el-button>
         <el-button size="small" @click="handleBatchDownload" :disabled="selectedRows.length === 0">
           <Icon icon="ep:download" class="mr-4px" />批量下载
         </el-button>
@@ -238,8 +231,9 @@ async function handleUploadSuccess(response: any, uploadFile: any) {
     await createDocument({
       fileName,
       fileType: ext,
-      category: filterCategory.value || 'project_doc',
+      category: uploadCategory.value || 'project_doc',
       projectId: props.projectId,
+      taskId: uploadTaskId.value || undefined,
       storagePath: fileUrl,
       versionNo,
       fileSize
@@ -251,6 +245,10 @@ async function handleUploadSuccess(response: any, uploadFile: any) {
 
 function handleUploadError() {
   ElMessage.error('文件上传失败，请检查网络或文件大小')
+}
+
+function handleUploadRemove() {
+  ElMessage.info('文件已从列表中移除，如需删除文档请在文档列表中操作')
 }
 
 async function loadDocuments() {

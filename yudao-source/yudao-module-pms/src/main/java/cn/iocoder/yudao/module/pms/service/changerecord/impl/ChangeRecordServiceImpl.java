@@ -35,8 +35,14 @@ public class ChangeRecordServiceImpl implements ChangeRecordService {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.CHANGE_STATUS_INVALID);
         }
         record.setApproverId(approverId);
-        record.setApprovalStatus(approved ? "approved" : "rejected");
-        record.setChangeStatus(approved ? "approved_pending_execution" : "rejected");
+        if (approved) {
+            record.setApprovalStatus("approved");
+            record.setChangeStatus("executed");
+            record.setExecuteTime(LocalDateTime.now());
+        } else {
+            record.setApprovalStatus("rejected");
+            record.setChangeStatus("rejected");
+        }
         changeRecordMapper.updateById(record);
     }
 

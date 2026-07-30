@@ -6,6 +6,9 @@
         <el-button type="primary" size="small" @click="$emit('create-task')" v-if="checkPermi(['pms:task:create'])">
           <Icon icon="ep:plus" class="mr-4px" />新建任务
         </el-button>
+        <el-button size="small" @click="showStageDialog = true" v-if="checkPermi(['pms:task:create'])">
+          <Icon icon="ep:folder-add" class="mr-4px" />新建阶段
+        </el-button>
         <el-input v-model="searchKeyword" placeholder="搜索任务名称" clearable size="small" style="width: 200px">
           <template #prefix><Icon icon="ep:search" /></template>
         </el-input>
@@ -73,7 +76,7 @@
       <el-table-column label="进度" width="120">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
-            <el-progress :percentage="row.progress || 0" :stroke-width="8" :color="getProgressColor(row)" />
+            <el-input-number v-model="row.progress" :min="0" :max="100" :step="5" size="small" controls-position="right" style="width: 100px" @change="(val) => handleProgressChange(row, val)" />
           </template>
         </template>
       </el-table-column>
@@ -205,7 +208,7 @@ import { ref, computed, reactive } from 'vue'
 import { TaskVO } from '@/api/pms/task'
 import { updateTask, dispatchTask, submitTaskCompletion } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
-import { StageVO } from '@/api/pms/stage'
+import { StageVO, createStage } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -220,6 +223,44 @@ const props = defineProps<{
   tasks: TaskVO[]
   stages: StageVO[]
 }>()
+
+// 新建阶段
+const showStageDialog = ref(false)
+const stageSaving = ref(false)
+const stageForm = reactive({
+  stageName: '',
+  sortOrder: 0,
+  isMilestone: false,
+  planStartDate: '',
+  planEndDate: ''
+})
+
+async function confirmCreateStage() {
+  if (!stageForm.stageName?.trim()) {
+    ElMessage.warning('请输入阶段名称')
+    return
+  }
+  stageSaving.value = true
+  try {
+    await createStage({
+      projectId: props.projectId,
+      stageName: stageForm.stageName,
+      sortOrder: stageForm.sortOrder || 0,
+      isMilestone: stageForm.isMilestone,
+      planStartDate: stageForm.planStartDate || undefined,
+      planEndDate: stageForm.planEndDate || undefined
+    } as any)
+    ElMessage.success('阶段创建成功')
+    showStageDialog.value = false
+    Object.assign(stageForm, { stageName: '', sortOrder: 0, isMilestone: false, planStartDate: '', planEndDate: '' })
+    emit('refresh')
+  } catch (e) {
+    console.error('创建阶段失败:', e)
+    ElMessage.error('创建阶段失败')
+  } finally {
+    stageSaving.value = false
+  }
+}
 
 const emit = defineEmits<{
   taskClick: [task: TaskVO]

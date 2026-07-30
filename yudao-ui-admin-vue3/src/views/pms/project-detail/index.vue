@@ -258,13 +258,7 @@
         <el-form-item label="任务描述">
           <el-input v-model="taskForm.description" type="textarea" :rows="3" placeholder="请输入任务描述" />
         </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="预估工时">
-              <el-input-number v-model="taskForm.estimatedHours" :min="0" :precision="1" :step="0.5" class="w-full" placeholder="小时" />
-            </el-form-item>
-          </el-col>
-        </el-row>
+
         <el-form-item label="完成标准">
           <el-input v-model="taskForm.completionStandard" type="textarea" :rows="2" placeholder="请输入任务完成标准" />
         </el-form-item>

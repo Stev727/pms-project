@@ -168,14 +168,14 @@ const setScaleConfig = (s: string) => {
       gantt.config.scale_unit = 'day'
       gantt.config.step = 1
       gantt.config.date_scale = '%Y-%m-%d'
-      gantt.config.subscales = [{ unit: 'hour', step: 4, date: '%H:00' }]
+      gantt.config.subscales = [{ unit: 'week', step: 1, date: '%W周' }]
       break
     case 'week':
       gantt.config.scale_unit = 'week'
       gantt.config.step = 1
-      gantt.config.date_scale = '%Y年 %m月'
+      gantt.config.date_scale = '%Y-%m-%d'
       gantt.config.subscales = [
-        { unit: 'day', step: 1, date: '%m-%d' }
+        { unit: 'day', step: 1, date: '%m-%d %A' }
       ]
       break
     case 'month':
@@ -211,16 +211,34 @@ const buildGanttData = () => {
   const stageMap = new Map<string, any>()
   for (const stage of props.stages) {
     const stageId = `stage_${stage.stageId}`
+    // 从子任务计算阶段开始/结束/工期
+    const stageTasks = props.tasks.filter(t => String(t.stageId) === String(stage.stageId))
+    let stageStart = stage.planStartDate || ''
+    let stageEnd = stage.planEndDate || ''
+    for (const t of stageTasks) {
+      if (t.planStartDate && (!stageStart || t.planStartDate < stageStart)) stageStart = t.planStartDate
+      if (t.planEndDate && (!stageEnd || t.planEndDate > stageEnd)) stageEnd = t.planEndDate
+    }
+    // 计算工期（天数）
+    let stageDuration = 1
+    if (stageStart && stageEnd) {
+      const diff = Math.ceil((new Date(stageEnd + ' 23:59:59').getTime() - new Date(stageStart + ' 00:00:00').getTime()) / (1000 * 60 * 60 * 24))
+      stageDuration = diff > 0 ? diff : 1
+    }
+    // 计算阶段进度（子任务平均进度）
+    let stageProgress = 0
+    if (stageTasks.length > 0) {
+      stageProgress = stageTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / (stageTasks.length * 100)
+    }
     const stageTask = {
       id: stageId,
       text: stage.stageName,
       type: 'project',
       open: true,
-      // 注意: render:'split' 是 dhtmlx-gantt Pro 版功能，Standard 版不支持，会导致子任务不渲染
-      start_date: stage.planStartDate ? formatDate(stage.planStartDate, 'YYYY-MM-DD')
+      start_date: stageStart ? formatDate(stageStart, 'YYYY-MM-DD')
         : (stage.createTime ? formatDate(stage.createTime, 'YYYY-MM-DD') : new Date().toISOString().split('T')[0]),
-      duration: 1,
-      progress: 0,
+      duration: stageDuration,
+      progress: stageProgress,
       parent: 0,
       owner: ''
     }
@@ -352,6 +370,10 @@ const renderGantt = () => {
 }
 
 const changeViewMode = () => {
+  // 强制清除并重新渲染
+  if (ganttInitialized) {
+    gantt.clearAll()
+  }
   renderGantt()
 }
 

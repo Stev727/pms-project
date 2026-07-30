@@ -15,41 +15,36 @@
       </div>
     </div>
 
-    <el-table :data="filteredList" border stripe v-loading="loading" @row-click="openDetail">
-      <el-table-column prop="changeNumber" label="编号" width="100" />
-      <el-table-column prop="title" label="变更标题" min-width="160" show-overflow-tooltip />
-      <el-table-column label="类型" width="90" align="center">
-        <template #default="{ row }">
-          <el-tag :color="changeTypes[row.type]?.color" effect="dark" size="small">{{ changeTypes[row.type]?.label }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="80" align="center">
-        <template #default="{ row }">
-          <el-tag :color="changeStatusMap[row.status]?.color" effect="dark" size="small">
-            {{ changeStatusMap[row.status]?.label }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="applicant" label="申请人" width="80" />
-      <el-table-column label="影响" width="120">
-        <template #default="{ row }">
-          <template v-if="row.impacts && row.impacts.length > 0">
-            <el-tag v-for="(impact, i) in row.impacts" :key="i" size="small" type="warning" effect="plain" style="margin-right: 4px">
-              {{ impact }}
-            </el-tag>
-          </template>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="申请时间" width="110">
-        <template #default="{ row }">{{ formatDate(row.applyTime, 'MM-DD HH:mm') }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="80" align="center">
-        <template #default="{ row }">
-          <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div v-loading="loading" class="change-timeline">
+      <el-timeline v-if="filteredList.length > 0">
+        <el-timeline-item
+          v-for="item in filteredList"
+          :key="item.id"
+          :timestamp="formatDate(item.applyTime, 'YYYY-MM-DD HH:mm')"
+          :type="getTimelineType(item.status)"
+          placement="top"
+          @click="openDetail(item)"
+        >
+          <el-card shadow="hover" class="change-card" @click="openDetail(item)">
+            <div class="change-card-header">
+              <span class="change-card-number">{{ item.changeNumber }}</span>
+              <el-tag :color="changeTypes[item.type]?.color" effect="dark" size="small">{{ changeTypes[item.type]?.label }}</el-tag>
+              <el-tag :color="changeStatusMap[item.status]?.color" effect="dark" size="small">{{ changeStatusMap[item.status]?.label }}</el-tag>
+              <el-tag v-if="item.urgent" type="danger" effect="dark" size="small">紧急</el-tag>
+            </div>
+            <div class="change-card-title">{{ item.title }}</div>
+            <div class="change-card-meta">
+              <span><Icon icon="ep:user" class="mr-2px" />{{ item.applicant }}</span>
+              <template v-if="item.impacts && item.impacts.length > 0">
+                <el-tag v-for="(impact, i) in item.impacts" :key="i" size="small" type="warning" effect="plain" style="margin-right: 4px">
+                  {{ impact }}
+                </el-tag>
+              </template>
+            </div>
+          </el-card>
+        </el-timeline-item>
+      </el-timeline>
+    </div>
 
     <el-empty v-if="!loading && filteredList.length === 0" description="暂无变更记录" />
 
@@ -362,4 +357,11 @@ defineExpose({ refresh: fetchList })
 }
 .reason-text { font-size: 14px; line-height: 1.6; margin: 0; }
 .impact-list { padding-left: 20px; li { font-size: 14px; line-height: 1.8; } }
+.change-timeline { padding: 8px 0; }
+.change-card { cursor: pointer; transition: all 0.2s; }
+.change-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
+.change-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.change-card-number { font-size: 13px; color: #86909C; font-weight: 600; }
+.change-card-title { font-size: 14px; font-weight: 500; color: #1D2129; margin-bottom: 6px; }
+.change-card-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #86909C; }
 </style>

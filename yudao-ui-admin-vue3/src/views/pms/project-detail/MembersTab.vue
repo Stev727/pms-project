@@ -36,7 +36,7 @@
       <el-table-column label="操作" width="140" align="center">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="editMember(row)" v-if="checkPermi(['pms:member:update'])">编辑</el-button>
-          <el-button link type="danger" size="small" @click="removeMember(row)" v-if="row.roleCode !== 'pm' && row.roleCode !== 'project_manager' && checkPermi(['pms:member:delete'])">移除</el-button>
+          <el-button link type="danger" size="small" @click="removeMember(row)" v-if="checkPermi(['pms:member:delete'])">移除</el-button>
         </template>
       </el-table-column>
     </el-table>

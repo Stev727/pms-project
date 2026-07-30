@@ -253,14 +253,19 @@ const groupedTasks = computed(() => {
     return [{ title: `延期任务 (${sorted.length})`, items: sorted }]
   }
   const now = new Date()
+  now.setHours(0, 0, 0, 0) // 重置为当天0点
   const weekEnd = new Date(now)
   weekEnd.setDate(now.getDate() + 7)
   const monthEnd = new Date(now)
   monthEnd.setMonth(now.getMonth() + 1)
 
+  const overdue = tasks.filter(t => {
+    const d = parseDateSafe(t.planEndDate)
+    return d && d < now
+  })
   const thisWeek = tasks.filter(t => {
     const d = parseDateSafe(t.planEndDate)
-    return d && d <= weekEnd && d >= now
+    return d && d >= now && d <= weekEnd
   })
   const thisMonth = tasks.filter(t => {
     const d = parseDateSafe(t.planEndDate)
@@ -272,6 +277,7 @@ const groupedTasks = computed(() => {
   })
 
   const groups: { title: string; items: TaskVO[] }[] = []
+  if (overdue.length) groups.push({ title: `已逾期 (${overdue.length})`, items: overdue })
   if (thisWeek.length) groups.push({ title: `本周到期 (${thisWeek.length})`, items: thisWeek })
   if (thisMonth.length) groups.push({ title: `本月到期 (${thisMonth.length})`, items: thisMonth })
   if (later.length) groups.push({ title: `更远 (${later.length})`, items: later })

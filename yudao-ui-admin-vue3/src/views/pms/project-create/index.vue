@@ -115,13 +115,13 @@
           </el-row>
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="计划开始" prop="planStartDate">
+              <el-form-item label="计划开始" prop="planStartDate" required>
                 <el-date-picker v-model="projectForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="计划结束" prop="planEndDate">
-                <el-date-picker v-model="projectForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+              <el-form-item label="计划结束" prop="planEndDate" required>
+                <el-date-picker v-model="projectForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" :disabled-date="disabledProjectEndDate" />
               </el-form-item>
             </el-col>
           </el-row>
@@ -234,15 +234,10 @@
               <el-option v-for="s in stageList" :key="s.stageName" :label="s.stageName" :value="s.stageName" />
             </el-select>
             <el-select v-model="batchAction" size="small" style="width: 130px" placeholder="选择操作">
-              <el-option label="偏移日期" value="offset_date" />
               <el-option label="批量设责任人" value="set_owner" />
               <el-option label="批量设优先级" value="set_priority" />
-              <el-option label="批量设工期" value="set_cycle" />
             </el-select>
-            <template v-if="batchAction === 'offset_date'">
-              <el-input-number v-model="batchOffsetDays" :min="-365" :max="365" size="small" style="width: 100px" />
-              <span style="font-size: 13px; color: #86909C">天（正数延后，负数提前）</span>
-            </template>
+
             <template v-if="batchAction === 'set_owner'">
               <el-select v-model="batchOwner" filterable placeholder="选择责任人" size="small" style="width: 150px">
                 <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
@@ -253,10 +248,7 @@
                 <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </template>
-            <template v-if="batchAction === 'set_cycle'">
-              <el-input-number v-model="batchCycle" :min="1" :max="365" size="small" style="width: 100px" />
-              <span style="font-size: 13px; color: #86909C">天</span>
-            </template>
+
             <el-button type="primary" size="small" @click="applyBatchAction" :disabled="!batchStage || !batchAction">
               应用
             </el-button>
@@ -265,7 +257,7 @@
 
         <div class="task-toolbar">
           <span class="task-summary">基于模板已生成 <b>{{ adjustedTasks.length }}</b> 个任务</span>
-          <el-button type="primary" size="small" @click="showAddTask = true">
+          <el-button type="primary" size="small" @click="openAddTask">
             <el-icon><Plus /></el-icon> 添加任务
           </el-button>
         </div>
@@ -348,7 +340,7 @@
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="计划开始">
-                  <el-date-picker v-model="taskForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+                  <el-date-picker v-model="taskForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" :disabled-date="disabledTaskStartDate" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
@@ -542,9 +534,9 @@ const formRules = {
   priority: [{ required: false }],
   projectManagerId: [{ required: true, message: '请选择项目经理', trigger: 'change' }],
   deptId: [{ required: false }],
-  planStartDate: [{ required: false }],
+  planStartDate: [{ required: true, message: '请选择计划开始日期', trigger: 'change' }],
   planEndDate: [
-    { required: false },
+    { required: true, message: '请选择计划结束日期', trigger: 'change' },
     {
       validator: (rule, value, callback) => {
         if (value && projectForm.planStartDate && new Date(value) <= new Date(projectForm.planStartDate)) {
@@ -712,8 +704,27 @@ const taskForm = reactive({
 
 // 禁用早于计划开始日期的结束日期
 function disabledEndDate(date: Date) {
-  if (!taskForm.planStartDate) return false
-  return date.getTime() < new Date(taskForm.planStartDate + ' 00:00:00').getTime()
+  // 不能早于任务开始日期
+  if (taskForm.planStartDate && date.getTime() < new Date(taskForm.planStartDate + ' 00:00:00').getTime()) {
+    return true
+  }
+  // 不能晚于项目结束日期
+  if (projectForm.planEndDate && date.getTime() > new Date(projectForm.planEndDate + ' 23:59:59').getTime()) {
+    return true
+  }
+  return false
+}
+
+function disabledTaskStartDate(date: Date) {
+  // 不能早于项目开始日期
+  if (projectForm.planStartDate && date.getTime() < new Date(projectForm.planStartDate + ' 00:00:00').getTime()) {
+    return true
+  }
+  // 不能晚于项目结束日期
+  if (projectForm.planEndDate && date.getTime() > new Date(projectForm.planEndDate + ' 23:59:59').getTime()) {
+    return true
+  }
+  return false
 }
 
 // 计算属性
@@ -790,16 +801,25 @@ async function loadTemplateTasks(templateId: number | string) {
     const tplStages = (stages as StageVO[]).filter(s => String(s.projectId) === tplId)
     stageList.value = tplStages
     const tplTasks = (tasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
+    let taskCounter = 0
     adjustedTasks.value = tplTasks.map(t => {
       const matchedStage = tplStages.find(s => String(s.stageId) === String(t.stageId))
+      taskCounter++
       return {
-        ...t,
+        taskId: Date.now() + taskCounter,
+        taskName: t.taskName, // 仅带出任务名称
         stageName: matchedStage?.stageName || '未分组',
         stageId: matchedStage?.stageId ?? t.stageId,
-        roleName: 'PM',
         cycle: t.cycle || 5,
         priority: t.priority || 'normal',
-        isMilestone: !!t.isMilestone
+        isMilestone: !!t.isMilestone,
+        planStartDate: '', // 不带出模板的日期
+        planEndDate: '',
+        mainOwnerId: undefined, // 不带出模板的责任人
+        helperIds: [],
+        description: '', // 不带出模板的描述
+        outputRequirement: '',
+        roleName: 'PM'
       }
     })
     if (tplTasks.length === 0 && String(selectedTemplate.value) === tplId) {
@@ -863,6 +883,17 @@ function goBack() {
   router.push('/pms/project')
 }
 
+function openAddTask() {
+  editingTask.value = null
+  Object.assign(taskForm, {
+    taskName: '', stageName: '', taskType: 'design', cycle: 5,
+    planStartDate: '', planEndDate: '',
+    priority: 'normal', isMilestone: false, mainOwnerId: undefined, helperIds: [],
+    description: '', outputRequirement: '', roleName: ''
+  })
+  showAddTask.value = true
+}
+
 function editTask(row: any, _index: number) {
   editingTask.value = row
   Object.assign(taskForm, {
@@ -900,7 +931,21 @@ function confirmAddTask() {
     return
   }
   if (editingTask.value) {
-    Object.assign(editingTask.value, { ...taskForm })
+    Object.assign(editingTask.value, {
+      taskName: taskForm.taskName,
+      stageName: taskForm.stageName,
+      taskType: taskForm.taskType,
+      cycle: taskForm.cycle,
+      planStartDate: taskForm.planStartDate,
+      planEndDate: taskForm.planEndDate,
+      priority: taskForm.priority,
+      isMilestone: taskForm.isMilestone,
+      mainOwnerId: taskForm.mainOwnerId,
+      helperIds: [...(taskForm.helperIds || [])],
+      description: taskForm.description,
+      outputRequirement: taskForm.outputRequirement,
+      roleName: taskForm.roleName
+    })
     // 根据责任人自动带出角色
     if (taskForm.mainOwnerId) {
       const autoRole = getRoleNameByUserId(taskForm.mainOwnerId)
@@ -910,7 +955,19 @@ function confirmAddTask() {
   } else {
     const newTask: any = {
       taskId: Date.now(),
-      ...taskForm
+      taskName: taskForm.taskName,
+      stageName: taskForm.stageName,
+      taskType: taskForm.taskType,
+      cycle: taskForm.cycle,
+      planStartDate: taskForm.planStartDate,
+      planEndDate: taskForm.planEndDate,
+      priority: taskForm.priority,
+      isMilestone: taskForm.isMilestone,
+      mainOwnerId: taskForm.mainOwnerId,
+      helperIds: [...(taskForm.helperIds || [])],
+      description: taskForm.description,
+      outputRequirement: taskForm.outputRequirement,
+      roleName: taskForm.roleName
     }
     // 根据责任人自动带出角色
     if (taskForm.mainOwnerId) {

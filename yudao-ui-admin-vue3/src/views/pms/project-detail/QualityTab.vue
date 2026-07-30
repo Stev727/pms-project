@@ -47,10 +47,12 @@
       <el-table-column label="发现日期" width="100">
         <template #default="{ row }">{{ formatDate(row.foundDate, 'MM-DD') }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="100" align="center">
+      <el-table-column label="操作" width="180" align="center">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button>
-          <el-button v-if="row.status !== 'closed' && checkPermi(['pms:quality:update'])" link type="success" size="small" @click.stop="closeIssue(row)">关闭</el-button>
+          <el-button link type="warning" size="small" @click.stop="editIssue(row)" v-if="row.status !== 'closed' && checkPermi(['pms:quality:update'])">编辑</el-button>
+          <el-button link type="success" size="small" @click.stop="closeIssue(row)" v-if="row.status !== 'closed' && checkPermi(['pms:quality:update'])">关闭</el-button>
+          <el-button link type="danger" size="small" @click.stop="deleteIssue(row)" v-if="checkPermi(['pms:quality:delete'])">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -84,7 +86,7 @@
     </el-drawer>
 
     <!-- 录入弹窗 -->
-    <el-dialog v-model="showForm" title="录入质量问题" width="560px">
+    <el-dialog v-model="showForm" :title="editingIssue ? '编辑质量问题' : '录入质量问题'" width="560px">
       <el-form label-width="90px">
         <el-form-item label="问题描述" required><el-input v-model="newIssue.description" type="textarea" :rows="3" /></el-form-item>
         <el-row :gutter="16">
@@ -114,7 +116,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getQualityIssueList, createQualityIssue, updateQualityIssue } from '@/api/pms/quality'
+import { getQualityIssueList, createQualityIssue, updateQualityIssue, deleteQualityIssue } from '@/api/pms/quality'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
@@ -133,6 +135,7 @@ const filterStatus = ref('')
 const drawerVisible = ref(false)
 const selected = ref<any>(null)
 const showForm = ref(false)
+const editingIssue = ref<any>(null)
 const issueList = ref<any[]>([])
 
 const filteredList = computed(() => {
@@ -180,25 +183,67 @@ async function submitIssue() {
   if (!newIssue.description) { ElMessage.warning('请填写问题描述'); return }
   saving.value = true
   try {
-    await createQualityIssue({
-      issueCode: `QI-${Date.now().toString().slice(-6)}`,
-      issueDescription: newIssue.description,
-      severity: newIssue.severity,
-      rootCauseCategory: newIssue.category,
-      responsiblePerson: newIssue.responsiblePerson,
-      rootCauseDetail: newIssue.rootCause,
-      solution: newIssue.solution,
-      source: newIssue.source,
-      impactScope: '',
-      projectId: props.projectId,
-      status: 'open'
-    } as any)
-    ElMessage.success('问题已录入')
+    if (editingIssue.value) {
+      // 编辑模式
+      await updateQualityIssue({
+        issueId: editingIssue.value.issueId,
+        issueDescription: newIssue.description,
+        severity: newIssue.severity,
+        rootCauseCategory: newIssue.category,
+        responsiblePerson: newIssue.responsiblePerson,
+        rootCauseDetail: newIssue.rootCause,
+        solution: newIssue.solution,
+        source: newIssue.source
+      } as any)
+      ElMessage.success('问题已更新')
+    } else {
+      // 新建模式
+      await createQualityIssue({
+        issueCode: `QI-${Date.now().toString().slice(-6)}`,
+        issueDescription: newIssue.description,
+        severity: newIssue.severity,
+        rootCauseCategory: newIssue.category,
+        responsiblePerson: newIssue.responsiblePerson,
+        rootCauseDetail: newIssue.rootCause,
+        solution: newIssue.solution,
+        source: newIssue.source,
+        impactScope: '',
+        projectId: props.projectId,
+        status: 'open'
+      } as any)
+      ElMessage.success('问题已录入')
+    }
     showForm.value = false
+    editingIssue.value = null
     Object.assign(newIssue, { description: '', severity: 'minor', category: 'design', responsiblePerson: '', source: '', rootCause: '', solution: '' })
     await fetchList()
   } catch (e) { console.error(e) }
   finally { saving.value = false }
+}
+
+function editIssue(row: any) {
+  editingIssue.value = row
+  Object.assign(newIssue, {
+    description: row.issueDescription || '',
+    severity: row.severity || 'minor',
+    category: row.rootCauseCategory || 'design',
+    responsiblePerson: row.responsiblePerson || '',
+    source: row.source || '',
+    rootCause: row.rootCauseDetail || '',
+    solution: row.solution || ''
+  })
+  showForm.value = true
+}
+
+async function deleteIssue(row: any) {
+  try {
+    await ElMessageBox.confirm('确认删除此质量问题？删除后不可恢复。', '删除确认', {
+      confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning'
+    })
+    await deleteQualityIssue(row.issueId)
+    ElMessage.success('问题已删除')
+    await fetchList()
+  } catch (e) { if (e !== 'cancel') console.error(e) }
 }
 
 async function fetchList() {

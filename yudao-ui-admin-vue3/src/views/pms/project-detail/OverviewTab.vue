@@ -158,10 +158,12 @@ const getDelayDays = (planEndDate: any) => {
 // ==================== 任务分类列表 (PRD-003) ====================
 const weekDueTasks = computed(() => {
   const now = new Date()
+  now.setHours(0, 0, 0, 0) // 重置为当天0点，避免时间干扰
   const weekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   return props.tasks.filter(t => {
     if (!t.planEndDate || t.completeStatus === 'completed') return false
     const end = parseDate(t.planEndDate)
+    end.setHours(0, 0, 0, 0)
     return end >= now && end <= weekLater
   })
 })

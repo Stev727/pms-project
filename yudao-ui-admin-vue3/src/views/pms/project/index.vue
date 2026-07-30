@@ -13,9 +13,7 @@
         </el-form-item>
         <el-form-item label="阶段">
           <el-select v-model="queryParams.currentStage" placeholder="全部" clearable style="width: 120px">
-            <template v-for="(v, k) in phaseColorMap" :key="k">
-              <el-option v-if="!['立项','设计','开发','测试','验收','结项'].includes(k as string)" :label="v.label" :value="k" />
-            </template>
+            <el-option v-for="(v, k) in phaseColorMap" :key="k" :label="v.label" :value="k" />
           </el-select>
         </el-form-item>
         <el-form-item label="类型">
@@ -65,6 +63,9 @@
         <el-row :gutter="16">
           <el-col :xs="24" :sm="12" :md="8" :lg="6" v-for="project in pagedCardList" :key="project.projectId" style="margin-bottom: 16px">
             <el-card class="project-card" shadow="hover" @click="goDetail(project)">
+              <div class="card-checkbox" @click.stop>
+                <el-checkbox :model-value="isCardSelected(project)" @change="(val: any) => toggleCardSelection(project, val)" />
+              </div>
               <div class="card-header">
                 <span class="card-title" :title="project.projectName">{{ project.projectName }}</span>
                 <el-dropdown trigger="click" @click.stop placement="bottom-end" :append-to-body="false" :popper-options="{ strategy: 'fixed' }">
@@ -577,4 +578,5 @@ onMounted(async () => {
   padding: 60px 0;
   text-align: center;
 }
+.card-checkbox { position: absolute; top: 8px; left: 8px; z-index: 10; }
 </style>

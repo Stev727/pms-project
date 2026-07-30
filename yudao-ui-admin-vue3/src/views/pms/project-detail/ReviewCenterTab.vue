@@ -130,7 +130,7 @@ const submitReview = async () => {
   }
   submitting.value = true
   try {
-    await reviewTaskCompletion(currentTask.value.taskId, reviewForm.result === 'approve')
+    await reviewTaskCompletion(currentTask.value.taskId, reviewForm.result === 'approve', reviewForm.opinion)
     ElMessage.success(reviewForm.result === 'approve' ? '已通过审核' : '已驳回')
     reviewDialogVisible.value = false
     await loadTasks()
@@ -172,7 +172,7 @@ const handleBatchReject = async () => {
     for (const id of selectedIds.value) {
       const task = allTasks.value.find(t => String(t.taskId) === id)
       if (task) {
-        await reviewTaskCompletion(task.taskId, false)
+        await reviewTaskCompletion(task.taskId, false, opinion)
         success++
       }
     }
