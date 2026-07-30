@@ -896,20 +896,24 @@ function openAddTask() {
 }
 
 function editTask(row: any, _index: number) {
-  editingTask.value = row
+  // 关键修复: row 来自 stageGroups（computed创建的新对象），不是 adjustedTasks 的引用
+  // 必须根据 taskId 在 adjustedTasks 中找到原始任务，否则编辑不会保存
+  const originalTask = adjustedTasks.value.find(t => t.taskId === row.taskId)
+  editingTask.value = originalTask || row
+  const taskData = editingTask.value
   Object.assign(taskForm, {
-    taskName: row.taskName,
-    stageName: row.stageName,
-    taskType: row.taskType || 'design',
-    cycle: row.cycle || 5,
-    planStartDate: row.planStartDate || '',
-    planEndDate: row.planEndDate || '',
-    priority: row.priority || 'normal',
-    isMilestone: row.isMilestone || false,
-    mainOwnerId: row.mainOwnerId || undefined,
-    helperIds: row.helperIds || [],
-    description: row.description || '',
-    outputRequirement: row.outputRequirement || ''
+    taskName: taskData.taskName,
+    stageName: taskData.stageName,
+    taskType: taskData.taskType || 'design',
+    cycle: taskData.cycle || 5,
+    planStartDate: taskData.planStartDate || '',
+    planEndDate: taskData.planEndDate || '',
+    priority: taskData.priority || 'normal',
+    isMilestone: taskData.isMilestone || false,
+    mainOwnerId: taskData.mainOwnerId || undefined,
+    helperIds: taskData.helperIds || [],
+    description: taskData.description || '',
+    outputRequirement: taskData.outputRequirement || ''
   })
   showAddTask.value = true
 }
