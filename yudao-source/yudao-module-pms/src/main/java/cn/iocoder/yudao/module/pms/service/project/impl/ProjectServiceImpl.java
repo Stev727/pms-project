@@ -333,8 +333,12 @@ public class ProjectServiceImpl implements ProjectService {
         if (involvedProjectIds.isEmpty()) {
             wrapper.eq(PmsProjectDO::getProjectManagerId, userId);
         } else {
-            wrapper.and(w -> w.eq(PmsProjectDO::getProjectManagerId, userId)
-                    .or().in(PmsProjectDO::getProjectId, involvedProjectIds));
+            // 修复：拆分链式调用，避免 .eq() 返回父类导致 OR 作用域错误
+            wrapper.and(w -> {
+                w.eq(PmsProjectDO::getProjectManagerId, userId);
+                w.or();
+                w.in(PmsProjectDO::getProjectId, involvedProjectIds);
+            });
         }
 
         List<PmsProjectDO> projects = projectMapper.selectList(wrapper);

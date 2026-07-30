@@ -240,7 +240,7 @@
 
             <template v-if="batchAction === 'set_owner'">
               <el-select v-model="batchOwner" filterable placeholder="选择责任人" size="small" style="width: 150px">
-                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
               </el-select>
             </template>
             <template v-if="batchAction === 'set_priority'">
@@ -370,14 +370,14 @@
               <el-col :span="12">
                 <el-form-item label="责任人">
                   <el-select v-model="taskForm.mainOwnerId" filterable placeholder="选择责任人" class="w-full" clearable>
-                    <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+                    <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
                   </el-select>
                 </el-form-item>
               </el-col>
               <el-col :span="12">
                 <el-form-item label="协助人">
                   <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选协助人" class="w-full">
-                    <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+                    <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -801,12 +801,13 @@ async function loadTemplateTasks(templateId: number | string) {
     const tplStages = (stages as StageVO[]).filter(s => String(s.projectId) === tplId)
     stageList.value = tplStages
     const tplTasks = (tasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
+    const taskIdBase = Date.now() + Math.floor(Math.random() * 100000)
     let taskCounter = 0
     adjustedTasks.value = tplTasks.map(t => {
       const matchedStage = tplStages.find(s => String(s.stageId) === String(t.stageId))
       taskCounter++
       return {
-        taskId: Date.now() + taskCounter,
+        taskId: taskIdBase + taskCounter,
         taskName: t.taskName, // 仅带出任务名称
         stageName: matchedStage?.stageName || '未分组',
         stageId: matchedStage?.stageId ?? t.stageId,

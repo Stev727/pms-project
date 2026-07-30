@@ -57,7 +57,7 @@
                   <el-date-picker v-model="editForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
                 </el-form-item>
                 <el-form-item label="计划结束">
-                  <el-date-picker v-model="editForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+                  <el-date-picker v-model="editForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" :disabled-date="disabledTaskEndDate" />
                 </el-form-item>
                 <el-form-item label="任务类型">
                   <el-select v-model="editForm.taskType" class="w-full">
@@ -827,6 +827,11 @@ const changeOwner = async () => {
 }
 
 defineExpose({ open })
+
+const disabledTaskEndDate = (date: Date) => {
+  if (!editForm.planStartDate) return false
+  return date.getTime() < new Date(editForm.planStartDate + ' 00:00:00').getTime()
+}
 </script>
 
 <style scoped>
