@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
-import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -112,6 +112,9 @@ public class ProjectServiceImpl implements ProjectService {
             if (task.getStageId() != null) {
                 task.setStageId(stageIdMap.get(task.getStageId()));
             }
+            normalizeTaskSchedule(task);
+            task.setCompleteStatus("not_started");
+            task.setProgress(0);
             taskMapper.insert(task);
         }
         List<PmsNotifyRuleDO> rules;
@@ -209,31 +212,8 @@ public class ProjectServiceImpl implements ProjectService {
         templateTasks.sort(Comparator.comparingInt(t -> t.getSortOrder() == null ? 0 : t.getSortOrder()));
 
         Map<Long, Long> taskIdMap = new HashMap<>();
-        // P0-02 修复: 根据项目 planStartDate 和任务 cycle 计算每个任务的计划日期
-        LocalDate projectStartDate = entity.getPlanStartDate();
-        LocalDate projectEndDate = entity.getPlanEndDate();
         for (PmsTaskDO task : templateTasks) {
-            PmsTaskDO newTask = new PmsTaskDO();
-            BeanUtil.copyProperties(task, newTask,
-                    "taskId", "projectId", "stageId", "parentTaskId", "actualCompleteDate",
-                    "completeStatus", "progress", "isDispatched", "dispatchTime",
-                    "delayDate", "delayLevel", "exceptionReason", "improvementPlan",
-                    "reviewOpinion", "actualHours", "planStartDate", "planEndDate");
-            newTask.setProjectId(newProjectId);
-            newTask.setStageId(stageIdMap.get(task.getStageId()));
-            newTask.setCompleteStatus("not_started");
-            newTask.setProgress(0);
-            // 计算任务计划日期: planStartDate = 项目开始日期, planEndDate = planStartDate + cycle 天
-            if (projectStartDate != null) {
-                Integer cycle = task.getCycle() != null ? task.getCycle() : 5;
-                LocalDate taskStart = projectStartDate;
-                LocalDate taskEnd = taskStart.plusDays(cycle);
-                if (projectEndDate != null && taskEnd.isAfter(projectEndDate)) {
-                    taskEnd = projectEndDate;
-                }
-                newTask.setPlanStartDate(taskStart);
-                newTask.setPlanEndDate(taskEnd);
-            }
+            PmsTaskDO newTask = newTemplateTask(task, newProjectId, stageIdMap.get(task.getStageId()));
             taskMapper.insert(newTask);
             taskIdMap.put(task.getTaskId(), newTask.getTaskId());
         }
@@ -263,6 +243,30 @@ public class ProjectServiceImpl implements ProjectService {
             newDep.setTaskId(taskIdMap.get(dep.getTaskId()));
             newDep.setPreTaskId(taskIdMap.get(dep.getPreTaskId()));
             taskDependencyMapper.insert(newDep);
+        }
+    }
+
+    static PmsTaskDO newTemplateTask(PmsTaskDO template, Long projectId, Long stageId) {
+        PmsTaskDO task = new PmsTaskDO();
+        task.setProjectId(projectId);
+        task.setStageId(stageId);
+        task.setTaskName(template.getTaskName());
+        task.setSortOrder(template.getSortOrder());
+        task.setCompleteStatus("not_started");
+        task.setProgress(0);
+        return task;
+    }
+
+    private static void normalizeTaskSchedule(PmsTaskDO task) {
+        boolean hasStart = task.getPlanStartDate() != null;
+        boolean hasEnd = task.getPlanEndDate() != null;
+        if (hasStart != hasEnd || (hasStart && task.getPlanEndDate().isBefore(task.getPlanStartDate()))) {
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_DATE_INVALID);
+        }
+        if (hasStart) {
+            task.setCycle((int) ChronoUnit.DAYS.between(task.getPlanStartDate(), task.getPlanEndDate()) + 1);
+        } else {
+            task.setCycle(null);
         }
     }
 
@@ -322,14 +326,18 @@ public class ProjectServiceImpl implements ProjectService {
         taskWrapper.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
                         .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
         List<PmsTaskDO> userTasks = taskMapper.selectList(taskWrapper);
-        Set<Long> involvedProjectIds = userTasks.stream()
-                .map(PmsTaskDO::getProjectId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        // 项目成员即使尚未分配任务，也应能在“我参与的”范围看到项目。
+        // 只按任务责任人查询会导致新建项目在任务分配前从成员列表中消失。
+        List<PmsProjectMemberDO> memberships = projectMemberMapper.selectList(
+                new LambdaQueryWrapperX<PmsProjectMemberDO>()
+                        .eq(PmsProjectMemberDO::getUserId, userId));
+        Set<Long> involvedProjectIds = collectInvolvedProjectIds(userTasks, memberships);
 
         // 2. 查询项目经理是当前用户的项目，或用户有任务参与的项目（排除模板）
         LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
-        wrapper.ne(PmsProjectDO::getProjectType, "standard_template");
+        // 兼容历史数据 project_type 为空；SQL 的 NULL != value 不成立，直接 ne 会误删全部旧项目。
+        wrapper.and(w -> w.isNull(PmsProjectDO::getProjectType)
+                .or().ne(PmsProjectDO::getProjectType, "standard_template"));
         if (involvedProjectIds.isEmpty()) {
             wrapper.eq(PmsProjectDO::getProjectManagerId, userId);
         } else {
@@ -350,12 +358,27 @@ public class ProjectServiceImpl implements ProjectService {
         return projects;
     }
 
+    static Set<Long> collectInvolvedProjectIds(List<PmsTaskDO> tasks,
+                                                List<PmsProjectMemberDO> memberships) {
+        Set<Long> projectIds = tasks.stream()
+                .map(PmsTaskDO::getProjectId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        memberships.stream()
+                .filter(member -> member.getStatus() == null || "active".equals(member.getStatus()))
+                .map(PmsProjectMemberDO::getProjectId)
+                .filter(Objects::nonNull)
+                .forEach(projectIds::add);
+        return projectIds;
+    }
+
     @Override
     public Map<Long, Long> countByTemplate() {
         // 查询所有使用了模板的真实项目（非模板项目，template_id 不为空），绕过权限过滤
         LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
         wrapper.isNotNull(PmsProjectDO::getTemplateId);
-        wrapper.ne(PmsProjectDO::getProjectType, "standard_template");
+        wrapper.and(w -> w.isNull(PmsProjectDO::getProjectType)
+                .or().ne(PmsProjectDO::getProjectType, "standard_template"));
         List<PmsProjectDO> projects = projectMapper.selectList(wrapper);
         
         // 按 template_id 分组计数

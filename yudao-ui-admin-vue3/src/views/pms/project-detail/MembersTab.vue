@@ -59,7 +59,7 @@
             :disabled="!!editing"
             @focus="onUserSelectFocus"
           >
-            <el-option v-for="u in selectUserOptions" :key="u.id" :label="`${u.nickname} (${u.id})`" :value="String(u.id)" />
+            <el-option v-for="u in selectUserOptions" :key="u.id" :label="`${u.nickname} (${u.id})`" :value="Number(u.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目角色" required>

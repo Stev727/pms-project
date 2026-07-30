@@ -116,7 +116,7 @@
                     <div class="card-title" :title="task.taskName">{{ task.taskName }}</div>
                     <div class="card-info">
                       <span>{{ getManagerName(task) }}</span>
-                      <span v-if="task.planEndDate" style="color: #86909C">{{ formatDate(task.planEndDate, 'MM-DD') }}</span>
+                      <span v-if="task.planEndDate" style="color: #86909C">{{ formatDate(task.planEndDate) }}</span>
                     </div>
                     <el-progress v-if="task.progress > 0" :percentage="task.progress" :stroke-width="4" :show-text="false" :color="col.color" />
                   </div>
@@ -219,14 +219,14 @@
           <el-col :span="12">
             <el-form-item label="责任人" prop="mainOwnerId">
               <el-select v-model="taskForm.mainOwnerId" filterable placeholder="请选择" class="w-full">
-                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="协助人">
               <el-select v-model="taskForm.helperIds" multiple filterable placeholder="可选" class="w-full">
-                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+                <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -614,7 +614,7 @@ const openCreateTaskDialog = async () => {
   await loadProjectMembers(projectId.value)
   // 默认责任人为项目经理 (PM)
   if (!taskForm.mainOwnerId && project.value?.projectManagerId) {
-    taskForm.mainOwnerId = String(project.value.projectManagerId) as any
+    taskForm.mainOwnerId = Number(project.value.projectManagerId) as any
   }
   createTaskDialogVisible.value = true
 }
