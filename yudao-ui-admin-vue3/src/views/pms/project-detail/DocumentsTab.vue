@@ -99,6 +99,47 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 上传弹窗 -->
+    <el-dialog v-model="uploadVisible" title="上传项目文档" width="560px">
+      <el-form label-width="80px">
+        <el-form-item label="文档分类">
+          <el-select v-model="uploadCategory" placeholder="选择分类" class="w-full">
+            <el-option label="技术文档" value="tech_doc" />
+            <el-option label="管理文档" value="mgmt_doc" />
+            <el-option label="项目文档" value="project_doc" />
+            <el-option label="输出物" value="deliverable" />
+            <el-option label="图纸" value="drawing" />
+            <el-option label="报告" value="report" />
+            <el-option label="标准文件" value="standard" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联任务">
+          <el-select v-model="uploadTaskId" filterable clearable placeholder="选择关联任务（可选）" class="w-full">
+            <el-option v-for="t in tasks" :key="t.taskId" :label="t.taskName" :value="String(t.taskId)" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <el-upload
+        action="/admin-api/infra/file/upload"
+        :headers="uploadHeaders"
+        :show-file-list="true"
+        :on-success="handleUploadSuccess"
+        :on-error="handleUploadError"
+        :on-remove="handleUploadRemove"
+        drag
+        multiple
+      >
+        <el-icon class="el-icon--upload"><Icon icon="ep:upload-filled" /></el-icon>
+        <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+        <template #tip>
+          <div class="el-upload__tip">支持任意格式文件，单个文件不超过 50MB</div>
+        </template>
+      </el-upload>
+      <template #footer>
+        <el-button @click="uploadVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -132,6 +173,9 @@ const previewVisible = ref(false)
 const previewDocData = ref<any>(null)
 const selectedRows = ref<any[]>([])
 const groupExpanded = ref<Record<string, boolean>>({})
+const uploadVisible = ref(false)
+const uploadCategory = ref('project_doc')
+const uploadTaskId = ref<string | undefined>(undefined)
 
 const categoryLabelMap: Record<string, string> = {
   tech_doc: '技术文档', mgmt_doc: '管理文档', project_doc: '项目文档',

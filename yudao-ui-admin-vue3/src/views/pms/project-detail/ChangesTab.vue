@@ -256,6 +256,18 @@ async function fetchList() {
   finally { loading.value = false }
 }
 
+function getTimelineType(status: string): string {
+  const map: Record<string, string> = {
+    draft: 'info',
+    pending: 'warning',
+    approving: 'primary',
+    approved: 'success',
+    rejected: 'danger',
+    executed: 'success'
+  }
+  return map[status] || 'info'
+}
+
 function openDetail(row: any) { selected.value = row; drawerVisible.value = true }
 
 async function submitChange() {

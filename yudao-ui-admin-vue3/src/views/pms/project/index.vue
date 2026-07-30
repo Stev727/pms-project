@@ -434,6 +434,19 @@ const handleTableSelection = (rows: ProjectVO[]) => {
 
 const handleQuickFilter = () => { cardCurrentPage.value = 1 }
 
+const isCardSelected = (project: ProjectVO) => {
+  return selectedProjects.value.some(p => String(p.projectId) === String(project.projectId))
+}
+const toggleCardSelection = (project: ProjectVO, val: any) => {
+  if (val) {
+    if (!selectedProjects.value.some(p => String(p.projectId) === String(project.projectId))) {
+      selectedProjects.value = [...selectedProjects.value, project]
+    }
+  } else {
+    selectedProjects.value = selectedProjects.value.filter(p => String(p.projectId) !== String(project.projectId))
+  }
+}
+
 const handleBatchArchive = () => {
   if (selectedProjects.value.length === 0) return
   message.confirm(`确认归档 ${selectedProjects.value.length} 个项目？`).then(async () => {
