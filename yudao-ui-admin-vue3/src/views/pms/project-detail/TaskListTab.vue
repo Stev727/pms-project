@@ -82,14 +82,14 @@
       </el-table-column>
       <el-table-column label="计划开始" width="110">
         <template #default="{ row }">
-          <span v-if="!row.isStageRow" style="font-size: 13px">{{ formatDate(row.planStartDate, 'MM-DD') }}</span>
+          <span v-if="!row.isStageRow" style="font-size: 13px">{{ formatDate(row.planStartDate) }}</span>
         </template>
       </el-table-column>
       <el-table-column label="到期日" width="120">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
             <span :style="{ color: isDelayed(row) ? '#F53F3F' : '#4E5969' }">
-              {{ formatDate(row.planEndDate, 'MM-DD') }}
+              {{ formatDate(row.planEndDate) }}
             </span>
             <el-tag v-if="isDelayed(row)" type="danger" size="small" effect="plain" style="margin-left: 4px">
               延期{{ getDelayDays(row) }}天
@@ -198,6 +198,30 @@
       <template #footer>
         <el-button @click="delayFormVisible = false">取消</el-button>
         <el-button type="primary" @click="confirmDelay">确认</el-button>
+      </template>
+    </el-dialog>
+    <!-- 新建阶段弹窗 -->
+    <el-dialog v-model="showStageDialog" title="新建阶段" width="480px">
+      <el-form label-width="80px">
+        <el-form-item label="阶段名称" required>
+          <el-input v-model="stageForm.stageName" placeholder="如：需求分析、方案设计" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="stageForm.sortOrder" :min="0" :step="1" />
+        </el-form-item>
+        <el-form-item label="里程碑">
+          <el-switch v-model="stageForm.isMilestone" />
+        </el-form-item>
+        <el-form-item label="计划开始">
+          <el-date-picker v-model="stageForm.planStartDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
+        </el-form-item>
+        <el-form-item label="计划结束">
+          <el-date-picker v-model="stageForm.planEndDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showStageDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmCreateStage" :loading="stageSaving">创建</el-button>
       </template>
     </el-dialog>
   </div>
