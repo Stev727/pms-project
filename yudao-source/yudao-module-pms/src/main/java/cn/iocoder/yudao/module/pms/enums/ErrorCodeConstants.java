@@ -11,4 +11,5 @@ public interface ErrorCodeConstants {
     ErrorCode CHANGE_STATUS_INVALID = new ErrorCode(1_040_000_005, "变更当前状态不允许此操作");
     ErrorCode PROJECT_MANAGER_REQUIRED = new ErrorCode(1_040_000_006, "只有项目经理可以执行此操作");
     ErrorCode DINGTALK_NOTIFY_FAILED = new ErrorCode(1_040_000_007, "钉钉通知发送失败，任务未派发");
+    ErrorCode TASK_DATE_INVALID = new ErrorCode(1_040_000_008, "计划开始和计划结束必须同时填写，且结束日期不能早于开始日期");
 }

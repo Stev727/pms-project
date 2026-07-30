@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
-import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -112,6 +112,9 @@ public class ProjectServiceImpl implements ProjectService {
             if (task.getStageId() != null) {
                 task.setStageId(stageIdMap.get(task.getStageId()));
             }
+            normalizeTaskSchedule(task);
+            task.setCompleteStatus("not_started");
+            task.setProgress(0);
             taskMapper.insert(task);
         }
         List<PmsNotifyRuleDO> rules;
@@ -209,31 +212,8 @@ public class ProjectServiceImpl implements ProjectService {
         templateTasks.sort(Comparator.comparingInt(t -> t.getSortOrder() == null ? 0 : t.getSortOrder()));
 
         Map<Long, Long> taskIdMap = new HashMap<>();
-        // P0-02 修复: 根据项目 planStartDate 和任务 cycle 计算每个任务的计划日期
-        LocalDate projectStartDate = entity.getPlanStartDate();
-        LocalDate projectEndDate = entity.getPlanEndDate();
         for (PmsTaskDO task : templateTasks) {
-            PmsTaskDO newTask = new PmsTaskDO();
-            BeanUtil.copyProperties(task, newTask,
-                    "taskId", "projectId", "stageId", "parentTaskId", "actualCompleteDate",
-                    "completeStatus", "progress", "isDispatched", "dispatchTime",
-                    "delayDate", "delayLevel", "exceptionReason", "improvementPlan",
-                    "reviewOpinion", "actualHours", "planStartDate", "planEndDate");
-            newTask.setProjectId(newProjectId);
-            newTask.setStageId(stageIdMap.get(task.getStageId()));
-            newTask.setCompleteStatus("not_started");
-            newTask.setProgress(0);
-            // 计算任务计划日期: planStartDate = 项目开始日期, planEndDate = planStartDate + cycle 天
-            if (projectStartDate != null) {
-                Integer cycle = task.getCycle() != null ? task.getCycle() : 5;
-                LocalDate taskStart = projectStartDate;
-                LocalDate taskEnd = taskStart.plusDays(cycle);
-                if (projectEndDate != null && taskEnd.isAfter(projectEndDate)) {
-                    taskEnd = projectEndDate;
-                }
-                newTask.setPlanStartDate(taskStart);
-                newTask.setPlanEndDate(taskEnd);
-            }
+            PmsTaskDO newTask = newTemplateTask(task, newProjectId, stageIdMap.get(task.getStageId()));
             taskMapper.insert(newTask);
             taskIdMap.put(task.getTaskId(), newTask.getTaskId());
         }
@@ -263,6 +243,30 @@ public class ProjectServiceImpl implements ProjectService {
             newDep.setTaskId(taskIdMap.get(dep.getTaskId()));
             newDep.setPreTaskId(taskIdMap.get(dep.getPreTaskId()));
             taskDependencyMapper.insert(newDep);
+        }
+    }
+
+    static PmsTaskDO newTemplateTask(PmsTaskDO template, Long projectId, Long stageId) {
+        PmsTaskDO task = new PmsTaskDO();
+        task.setProjectId(projectId);
+        task.setStageId(stageId);
+        task.setTaskName(template.getTaskName());
+        task.setSortOrder(template.getSortOrder());
+        task.setCompleteStatus("not_started");
+        task.setProgress(0);
+        return task;
+    }
+
+    private static void normalizeTaskSchedule(PmsTaskDO task) {
+        boolean hasStart = task.getPlanStartDate() != null;
+        boolean hasEnd = task.getPlanEndDate() != null;
+        if (hasStart != hasEnd || (hasStart && task.getPlanEndDate().isBefore(task.getPlanStartDate()))) {
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_DATE_INVALID);
+        }
+        if (hasStart) {
+            task.setCycle((int) ChronoUnit.DAYS.between(task.getPlanStartDate(), task.getPlanEndDate()) + 1);
+        } else {
+            task.setCycle(null);
         }
     }
 

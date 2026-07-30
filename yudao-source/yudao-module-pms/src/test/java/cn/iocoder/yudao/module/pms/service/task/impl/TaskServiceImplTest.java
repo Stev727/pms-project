@@ -12,6 +12,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import java.util.List;
+import java.time.LocalDate;
 
 class TaskServiceImplTest {
     @Test
@@ -85,6 +86,36 @@ class TaskServiceImplTest {
         TaskMapper mapper = mock(TaskMapper.class);
         ReflectionTestUtils.setField(service, "taskMapper", mapper);
         assertThrows(ServiceException.class, () -> service.submitCompletion(404L, null, null));
+    }
+
+    @Test
+    void updateCompletedTaskSetsProgressToOneHundred() {
+        TaskServiceImpl service = new TaskServiceImpl();
+        TaskMapper mapper = mock(TaskMapper.class);
+        ReflectionTestUtils.setField(service, "taskMapper", mapper);
+        PmsTaskDO task = task("completed");
+        task.setProgress(30);
+
+        service.updateTask(task);
+
+        assertEquals(100, task.getProgress());
+        verify(mapper).updateById(task);
+    }
+
+    @Test
+    void updateTaskCalculatesInclusiveCycleAndRejectsIncompleteDates() {
+        TaskServiceImpl service = new TaskServiceImpl();
+        TaskMapper mapper = mock(TaskMapper.class);
+        ReflectionTestUtils.setField(service, "taskMapper", mapper);
+        PmsTaskDO task = task("in_progress");
+        task.setPlanStartDate(LocalDate.of(2026, 7, 31));
+        task.setPlanEndDate(LocalDate.of(2026, 8, 1));
+
+        service.updateTask(task);
+        assertEquals(2, task.getCycle());
+
+        task.setPlanEndDate(null);
+        assertThrows(ServiceException.class, () -> service.updateTask(task));
     }
 
     private static TaskServiceImpl serviceWithProjectManager(Long managerId) {

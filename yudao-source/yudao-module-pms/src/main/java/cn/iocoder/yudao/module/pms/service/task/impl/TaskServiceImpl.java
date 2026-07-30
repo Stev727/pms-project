@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.List;
+import java.time.temporal.ChronoUnit;
 
 @Service
 public class TaskServiceImpl implements TaskService {
@@ -37,6 +38,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public Long createTask(PmsTaskDO entity) {
+        normalizeSchedule(entity);
         taskMapper.insert(entity);
 
         return entity.getTaskId();
@@ -143,7 +145,22 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public void updateTask(PmsTaskDO entity) {
+        normalizeSchedule(entity);
+        if ("completed".equals(entity.getCompleteStatus())) {
+            entity.setProgress(100);
+        }
         taskMapper.updateById(entity);
+    }
+
+    private void normalizeSchedule(PmsTaskDO task) {
+        boolean hasStart = task.getPlanStartDate() != null;
+        boolean hasEnd = task.getPlanEndDate() != null;
+        if (hasStart != hasEnd || (hasStart && task.getPlanEndDate().isBefore(task.getPlanStartDate()))) {
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_DATE_INVALID);
+        }
+        if (hasStart) {
+            task.setCycle((int) ChronoUnit.DAYS.between(task.getPlanStartDate(), task.getPlanEndDate()) + 1);
+        }
     }
 
     @Override

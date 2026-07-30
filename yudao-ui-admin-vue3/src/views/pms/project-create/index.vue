@@ -176,7 +176,7 @@
           </el-table-column>
           <el-table-column label="操作" width="80" align="center">
             <template #default="{ row, $index }">
-              <el-button link type="danger" size="small" @click="removeMember($index)" v-if="row.roleCode !== 'pm'">移除</el-button>
+              <el-button link type="danger" size="small" @click="removeMember($index)">移除</el-button>
               <span v-else style="font-size: 12px; color: #86909C">自动</span>
             </template>
           </el-table-column>
@@ -644,9 +644,9 @@ function confirmAddMember() {
 
 function removeMember(index: number) {
   const member = selectedMembers.value[index]
-  if (member.roleCode === 'pm') {
-    ElMessage.warning('项目经理不可移除')
-    return
+  if (String(member.userId) === String(projectForm.projectManagerId || '')) {
+    projectForm.projectManagerId = undefined
+    ElMessage.warning('已移除当前项目经理，请重新选择项目经理')
   }
   selectedMembers.value.splice(index, 1)
 }

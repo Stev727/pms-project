@@ -89,7 +89,6 @@
             <!-- 查看模式 -->
             <el-descriptions v-else :column="2" border size="small">
               <el-descriptions-item label="任务名称" :span="2">{{ task?.taskName }}</el-descriptions-item>
-              <el-descriptions-item label="任务编号">{{ task?.taskCode || '-' }}</el-descriptions-item>
               <el-descriptions-item label="任务类型">{{ getTaskTypeLabel(task?.taskType) }}</el-descriptions-item>
               <el-descriptions-item label="优先级">
                 <el-tag :color="priorityMap[task?.priority || 'normal']?.color" effect="plain" size="small">
@@ -113,12 +112,6 @@
               </el-descriptions-item>
               <el-descriptions-item label="实际完成">{{ formatDate(task?.actualCompleteDate) }}</el-descriptions-item>
               <el-descriptions-item label="工期">{{ task?.cycle || '-' }}天</el-descriptions-item>
-              <el-descriptions-item label="预估工时">{{ task?.estimatedHours || '-' }}h</el-descriptions-item>
-              <el-descriptions-item label="实际工时">{{ task?.actualHours || '-' }}h</el-descriptions-item>
-              <el-descriptions-item label="关键路径">
-                <el-tag v-if="task?.isCriticalPath" type="danger" size="small" effect="plain">是</el-tag>
-                <span v-else>否</span>
-              </el-descriptions-item>
               <el-descriptions-item label="描述" :span="2">{{ task?.description || '-' }}</el-descriptions-item>
               <el-descriptions-item label="输出物要求" :span="2">{{ task?.outputRequirement || '-' }}</el-descriptions-item>
               <el-descriptions-item label="完成标准" :span="2">{{ task?.completionStandard || '-' }}</el-descriptions-item>
@@ -251,7 +244,15 @@
       <el-form label-width="80px">
         <el-form-item label="当前进度">{{ task?.progress || 0 }}%</el-form-item>
         <el-form-item label="填报进度">
-          <el-slider v-model="progressForm.progress" :min="task?.progress || 0" :max="100" show-input />
+          <el-input-number
+            v-model="progressForm.progress"
+            :min="task?.progress || 0"
+            :max="100"
+            :step="10"
+            :precision="0"
+            controls-position="right"
+          />
+          <span class="ml-8px">%</span>
         </el-form-item>
         <el-form-item label="剩余工期">
           <el-input-number v-model="progressForm.remainingDays" :min="0" />天
@@ -326,7 +327,7 @@ import { getDocumentList } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
 import {
   taskStatusMap, priorityMap, taskTypeOptions, priorityOptions,
-  formatDate, calcDelayDays
+  formatDate, calcDelayDays, calcDuration
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { getAccessToken } from '@/utils/auth'
@@ -356,6 +357,15 @@ const projectMembers = ref<any[]>([])
 const isEditMode = ref(false)
 const savingEdit = ref(false)
 const editForm = reactive<any>({})
+
+watch(
+  () => [editForm.planStartDate, editForm.planEndDate],
+  ([start, end]) => {
+    if (start && end && end >= start) {
+      editForm.cycle = calcDuration(start, end)
+    }
+  }
+)
 
 // 列表数据
 const progressList = ref<any[]>([])
@@ -509,6 +519,16 @@ const cancelEdit = () => {
 
 const saveEdit = async () => {
   if (!task.value) return
+  const hasStart = !!editForm.planStartDate
+  const hasEnd = !!editForm.planEndDate
+  if (hasStart !== hasEnd) {
+    message.warning('计划开始和计划结束必须同时填写或同时留空')
+    return
+  }
+  if (hasStart && editForm.planEndDate < editForm.planStartDate) {
+    message.warning('计划结束日期不能早于计划开始日期')
+    return
+  }
   savingEdit.value = true
   try {
     const submitData: any = { ...editForm }

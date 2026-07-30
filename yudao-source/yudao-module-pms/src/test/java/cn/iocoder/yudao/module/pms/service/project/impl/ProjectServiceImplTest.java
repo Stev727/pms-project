@@ -27,4 +27,28 @@ class ProjectServiceImplTest {
         assertEquals(Set.of(10L, 20L), ProjectServiceImpl.collectInvolvedProjectIds(
                 List.of(ownedTask), List.of(activeMember, exitedMember)));
     }
+
+    @Test
+    void templateTaskCopyKeepsOnlyStructureAndTaskName() {
+        PmsTaskDO template = new PmsTaskDO();
+        template.setTaskName("结构设计");
+        template.setStageId(20L);
+        template.setPlanStartDate(java.time.LocalDate.of(2026, 8, 1));
+        template.setPlanEndDate(java.time.LocalDate.of(2026, 8, 8));
+        template.setMainOwnerId(1353L);
+        template.setHelperIds("1354");
+        template.setProgress(70);
+
+        PmsTaskDO copied = ProjectServiceImpl.newTemplateTask(template, 99L, 88L);
+
+        assertEquals("结构设计", copied.getTaskName());
+        assertEquals(99L, copied.getProjectId());
+        assertEquals(88L, copied.getStageId());
+        assertEquals(null, copied.getPlanStartDate());
+        assertEquals(null, copied.getPlanEndDate());
+        assertEquals(null, copied.getMainOwnerId());
+        assertEquals(null, copied.getHelperIds());
+        assertEquals(0, copied.getProgress());
+        assertEquals("not_started", copied.getCompleteStatus());
+    }
 }
