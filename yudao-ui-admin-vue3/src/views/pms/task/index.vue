@@ -272,7 +272,7 @@ const queryParams = reactive({
   mainOwnerId: ''
 })
 
-const myTasks = ref(true)
+const myTasks = ref(false)
 
 const filteredList = computed(() => {
   let list = taskList.value

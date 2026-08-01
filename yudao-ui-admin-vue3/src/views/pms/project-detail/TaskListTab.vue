@@ -133,10 +133,7 @@
               v-if="canTransition(row, 'reject_review')"
               link type="danger" size="small" @click.stop="handleTransition(row, 'reject_review')"
             >驳回</el-button>
-            <el-button
-              v-if="canTransition(row, 'mark_delayed')"
-              link type="warning" size="small" @click.stop="handleTransition(row, 'mark_delayed')"
-            >标记延期</el-button>
+
             <el-button
               v-if="canTransition(row, 'pause')"
               link type="warning" size="small" @click.stop="handleTransition(row, 'pause')"
@@ -307,10 +304,7 @@ const filterAssignee = ref('')
 const expandAll = ref(true)
 const onlyMyTasks = ref(false)
 
-// 延期填写
-const delayFormVisible = ref(false)
-const delayTarget = ref<any>(null)
-const delayForm = reactive({ exceptionReason: '', improvementPlan: '' })
+
 const expandedRowKeys = ref<string[]>([])
 
 // 提交完成
@@ -436,7 +430,6 @@ const transitionRules: Record<string, { from: string[]; to: string; label: strin
   submit: { from: ['in_progress', 'delayed'], to: 'completion_pending_review', label: '提交完成', roles: ['assignee'] },
   approve: { from: ['completion_pending_review'], to: 'completed', label: '审核通过', roles: ['pm', 'reviewer'] },
   reject_review: { from: ['completion_pending_review'], to: 'in_progress', label: '驳回', roles: ['pm', 'reviewer'] },
-  mark_delayed: { from: ['in_progress'], to: 'delayed', label: '标记延期', roles: ['pm', 'assignee'] },
   pause: { from: ['in_progress'], to: 'paused', label: '暂停', roles: ['assignee', 'pm'] },
   resume: { from: ['delayed', 'paused'], to: 'in_progress', label: '恢复', roles: ['assignee', 'pm'] }
 }
@@ -468,14 +461,6 @@ async function handleTransition(row: TreeRow, action: string) {
     return
   }
 
-  // 延期标记 — 弹出异常原因+改善方案填写
-  if (action === 'mark_delayed') {
-    delayTarget.value = row
-    delayForm.exceptionReason = ''
-    delayForm.improvementPlan = ''
-    delayFormVisible.value = true
-    return
-  }
 
   try {
     if (action === 'dispatch' || action === 'redispatch') {
@@ -495,24 +480,6 @@ async function handleTransition(row: TreeRow, action: string) {
   }
 }
 
-async function confirmDelay() {
-  if (!delayForm.exceptionReason) { ElMessage.warning('请填写异常原因'); return }
-  if (!delayForm.improvementPlan) { ElMessage.warning('请填写改善方案'); return }
-  if (!delayTarget.value) return
-  try {
-    await updateTask({
-      taskId: delayTarget.value.taskId,
-      completeStatus: 'delayed',
-      exceptionReason: delayForm.exceptionReason,
-      improvementPlan: delayForm.improvementPlan
-    } as TaskVO)
-    ElMessage.success('延期已记录')
-    delayFormVisible.value = false
-    emit('refresh')
-  } catch (e: any) {
-    ElMessage.error(e?.message || '操作失败')
-  }
-}
 
 async function confirmSubmit() {
   if (!submitTarget.value) return

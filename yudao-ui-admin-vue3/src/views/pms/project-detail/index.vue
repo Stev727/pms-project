@@ -516,7 +516,7 @@ const loadProjectData = async () => {
   try {
     const [proj, tasks, stages] = await Promise.all([
       getProject(projectId.value),
-      getTaskList(),
+      getTaskList({ projectId: projectId.value }),
       getStageList()
     ])
     project.value = proj

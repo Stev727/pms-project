@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 import java.time.temporal.ChronoUnit;
 
 @Service
@@ -220,20 +222,64 @@ public class TaskServiceImpl implements TaskService {
                 .orderByAsc(PmsTaskDO::getSortOrder));
         }
 
-        // 检查指定项目是否为模板项目 —— 模板项目不过滤用户
+        // 指定项目查询：判断是否为项目经理
         if (projectId != null) {
             PmsProjectDO project = projectMapper.selectById(projectId);
-            if (project != null && "standard_template".equals(project.getProjectType())) {
-                return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
-                    .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
-                    .eqIfPresent(PmsTaskDO::getProjectId, projectId)
-                    .orderByAsc(PmsTaskDO::getSortOrder));
+            if (project != null) {
+                // 模板项目不过滤
+                if ("standard_template".equals(project.getProjectType())) {
+                    return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                        .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
+                        .eqIfPresent(PmsTaskDO::getProjectId, projectId)
+                        .orderByAsc(PmsTaskDO::getSortOrder));
+                }
+                // 项目经理看全部任务
+                if (project.getProjectManagerId() != null && project.getProjectManagerId().equals(userId)) {
+                    return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                        .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
+                        .eqIfPresent(PmsTaskDO::getProjectId, projectId)
+                        .orderByAsc(PmsTaskDO::getSortOrder));
+                }
             }
+            // 非项目经理：只返回当前用户负责/协助的任务
+            LambdaQueryWrapperX<PmsTaskDO> wrapper = new LambdaQueryWrapperX<>();
+            wrapper.eqIfPresent(PmsTaskDO::getProjectId, projectId);
+            wrapper.orderByAsc(PmsTaskDO::getSortOrder);
+            wrapper.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
+                .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
+            return taskMapper.selectList(wrapper);
         }
 
-        // 非管理员：只返回当前用户作为主责任人或协助人的任务
+        // 全局查询（projectId == null）：项目经理看自己负责项目的全部任务 + 其他项目自己负责/协助的任务
+        List<PmsProjectDO> pmProjects = projectMapper.selectList(new LambdaQueryWrapperX<PmsProjectDO>()
+            .eq(PmsProjectDO::getProjectManagerId, userId)
+            .ne(PmsProjectDO::getProjectType, "standard_template"));
+
+        if (pmProjects != null && !pmProjects.isEmpty()) {
+            List<Long> pmProjectIds = pmProjects.stream()
+                .map(PmsProjectDO::getProjectId)
+                .collect(Collectors.toList());
+
+            // 批1：PM项目的全部任务
+            List<PmsTaskDO> result = new ArrayList<>(taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                .in(PmsTaskDO::getProjectId, pmProjectIds)
+                .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
+                .orderByAsc(PmsTaskDO::getSortOrder)));
+
+            // 批2：非PM项目中自己负责/协助的任务
+            LambdaQueryWrapperX<PmsTaskDO> wrapper2 = new LambdaQueryWrapperX<>();
+            wrapper2.notIn(PmsTaskDO::getProjectId, pmProjectIds);
+            wrapper2.eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId);
+            wrapper2.orderByAsc(PmsTaskDO::getSortOrder);
+            wrapper2.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
+                .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
+            result.addAll(taskMapper.selectList(wrapper2));
+            return result;
+        }
+
+        // 没有作为PM的项目：只返回自己负责/协助的任务
         LambdaQueryWrapperX<PmsTaskDO> wrapper = new LambdaQueryWrapperX<>();
-        wrapper.eqIfPresent(PmsTaskDO::getProjectId, projectId);
+        wrapper.eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId);
         wrapper.orderByAsc(PmsTaskDO::getSortOrder);
         wrapper.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
             .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
