@@ -139,7 +139,7 @@
         <!-- 成员 Tab (NEW - FATAL-1 修复) -->
         <el-tab-pane label="成员" name="members">
           <template v-if="activeTab === 'members'">
-            <MembersTab :project-id="projectId" ref="membersTabRef" / :project="project">
+            <MembersTab :project-id="projectId" ref="membersTabRef" :project="project" />
           </template>
         </el-tab-pane>
 
