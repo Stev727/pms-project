@@ -320,18 +320,12 @@ public class ProjectServiceImpl implements ProjectService {
             return templates;
         }
 
-        // 非管理员查看项目：按参与情况过滤
-        // 1. 查询用户参与的任务（主责任人或协助人），获取相关项目ID
-        LambdaQueryWrapperX<PmsTaskDO> taskWrapper = new LambdaQueryWrapperX<>();
-        taskWrapper.and(w -> w.eq(PmsTaskDO::getMainOwnerId, userId)
-                        .or().apply("FIND_IN_SET({0}, helper_ids) > 0", userId));
-        List<PmsTaskDO> userTasks = taskMapper.selectList(taskWrapper);
-        // 项目成员即使尚未分配任务，也应能在“我参与的”范围看到项目。
-        // 只按任务责任人查询会导致新建项目在任务分配前从成员列表中消失。
+        // 非管理员查看项目：只返回 PM=userId 或项目成员包含 userId 的项目
+        // 任务责任人/协助人不能仅凭任务看到项目，必须先成为项目成员
         List<PmsProjectMemberDO> memberships = projectMemberMapper.selectList(
                 new LambdaQueryWrapperX<PmsProjectMemberDO>()
                         .eq(PmsProjectMemberDO::getUserId, userId));
-        Set<Long> involvedProjectIds = collectInvolvedProjectIds(userTasks, memberships);
+        Set<Long> involvedProjectIds = collectInvolvedProjectIds(null, memberships);
 
         // 2. 查询项目经理是当前用户的项目，或用户有任务参与的项目（排除模板）
         LambdaQueryWrapperX<PmsProjectDO> wrapper = new LambdaQueryWrapperX<>();
@@ -360,7 +354,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     static Set<Long> collectInvolvedProjectIds(List<PmsTaskDO> tasks,
                                                 List<PmsProjectMemberDO> memberships) {
-        Set<Long> projectIds = tasks.stream()
+        Set<Long> projectIds = tasks == null ? new java.util.HashSet<>() : tasks.stream()
                 .map(PmsTaskDO::getProjectId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
