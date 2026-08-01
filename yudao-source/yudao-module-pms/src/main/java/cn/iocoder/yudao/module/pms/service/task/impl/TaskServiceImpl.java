@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.util.List;
+import java.time.temporal.ChronoUnit;
 
 @Service
 public class TaskServiceImpl implements TaskService {
@@ -37,6 +38,7 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public Long createTask(PmsTaskDO entity) {
+        normalizeSchedule(entity);
         taskMapper.insert(entity);
 
         return entity.getTaskId();
@@ -110,9 +112,10 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
-    public void reviewCompletion(Long taskId, boolean approved, Long operatorId) {
+    @Transactional(rollbackFor = Exception.class)
+    public void reviewCompletion(Long taskId, boolean approved, String reviewOpinion, Long operatorId) {
         PmsTaskDO task = requireTask(taskId);
-        requireProjectManager(task, operatorId);
+        PmsProjectDO project = requireProjectManager(task, operatorId);
         if (!"completion_pending_review".equals(task.getCompleteStatus())) {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_STATUS_INVALID);
         }
@@ -123,14 +126,42 @@ public class TaskServiceImpl implements TaskService {
         } else {
             task.setCompleteStatus("in_progress");
         }
+        task.setReviewOpinion(reviewOpinion);
         taskMapper.updateById(task);
+
+        java.util.LinkedHashSet<Long> receiverIds = new java.util.LinkedHashSet<>();
+        if (task.getMainOwnerId() != null) {
+            receiverIds.add(task.getMainOwnerId());
+        }
+        if (project.getProjectManagerId() != null) {
+            receiverIds.add(project.getProjectManagerId());
+        }
+        if (!receiverIds.isEmpty()) {
+            String result = approved ? "通过" : "驳回";
+            dingTalkNotifyService.sendNotifyDirect(
+                    "【PMS】任务完成审核" + result,
+                    "项目「" + (project.getProjectName() == null ? "" : project.getProjectName())
+                            + "」任务「" + task.getTaskName() + "」完成审核已" + result
+                            + (reviewOpinion == null || reviewOpinion.isBlank() ? "" : "，意见：" + reviewOpinion),
+                    new java.util.ArrayList<>(receiverIds),
+                    approved ? "completion_approved" : "completion_rejected", "task", taskId);
+        }
     }
 
-    private void requireProjectManager(PmsTaskDO task, Long operatorId) {
+    private PmsProjectDO requireProjectManager(PmsTaskDO task, Long operatorId) {
         PmsProjectDO project = projectMapper.selectById(task.getProjectId());
-        if (project == null || !java.util.Objects.equals(project.getProjectManagerId(), operatorId)) {
-            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
+        if (project == null) {
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_NOT_EXISTS);
         }
+        // 超管(super_admin)可以审核所有任务/变更
+        if (securityFrameworkService.hasAnyRoles("super_admin")) {
+            return project;
+        }
+        // 项目经理可以审核
+        if (java.util.Objects.equals(project.getProjectManagerId(), operatorId)) {
+            return project;
+        }
+        throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
     }
 
     private PmsTaskDO requireTask(Long taskId) {
@@ -143,7 +174,22 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public void updateTask(PmsTaskDO entity) {
+        normalizeSchedule(entity);
+        if ("completed".equals(entity.getCompleteStatus())) {
+            entity.setProgress(100);
+        }
         taskMapper.updateById(entity);
+    }
+
+    private void normalizeSchedule(PmsTaskDO task) {
+        boolean hasStart = task.getPlanStartDate() != null;
+        boolean hasEnd = task.getPlanEndDate() != null;
+        if (hasStart != hasEnd || (hasStart && task.getPlanEndDate().isBefore(task.getPlanStartDate()))) {
+            throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.TASK_DATE_INVALID);
+        }
+        if (hasStart) {
+            task.setCycle((int) ChronoUnit.DAYS.between(task.getPlanStartDate(), task.getPlanEndDate()) + 1);
+        }
     }
 
     @Override

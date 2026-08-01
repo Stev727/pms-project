@@ -216,7 +216,7 @@
           <el-date-picker v-model="stageForm.planStartDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
         </el-form-item>
         <el-form-item label="计划结束">
-          <el-date-picker v-model="stageForm.planEndDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
+          <el-date-picker v-model="stageForm.planEndDate" type="date" value-format="YYYY-MM-DD" class="w-full" :disabled-date="(date: Date) => disabledStageEndDate(date)" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -251,6 +251,12 @@ const props = defineProps<{
 // 新建阶段
 const showStageDialog = ref(false)
 const stageSaving = ref(false)
+
+const disabledStageEndDate = (date: Date) => {
+  // 限制结束日期不能早于开始日期
+  if (!stageForm.planStartDate) return false
+  return date.getTime() < new Date(stageForm.planStartDate + " 00:00:00").getTime()
+}
 const stageForm = reactive({
   stageName: '',
   sortOrder: 0,
