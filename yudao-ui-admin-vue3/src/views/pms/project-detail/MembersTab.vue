@@ -103,6 +103,7 @@ import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useCache } from '@/hooks/web/useCache'
+import { useUserStore } from '@/store/modules/user'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { getDictOptions } from '../pms-utils'
 
@@ -115,12 +116,22 @@ const props = defineProps<{
 
 // 当前用户是否是项目经理（或超管）
 const isPM = computed(() => {
-  if (!props.project?.projectManagerId) return false
-  const userInfo = useCache().wsCache.get('userInfo')
-  const uid = String(userInfo?.id || '')
-  if (String(props.project.projectManagerId) === uid) return true
+  const projectManagerId = props.project?.projectManagerId
+  if (!projectManagerId && projectManagerId !== 0) return false
+  // 优先从 useUserStore 取（更可靠）
+  const userStore = useUserStore()
+  const storeUser = userStore.getUser || {}
+  let uid = storeUser.id
+  // fallback: 从 cache 取
+  if (!uid) {
+    const cacheUser = useCache().wsCache.get('userInfo') || {}
+    uid = cacheUser.id
+  }
+  const uidStr = String(uid || '')
+  const pmIdStr = String(projectManagerId)
+  if (uidStr && pmIdStr === uidStr) return true
   // super_admin 角色豁免
-  const roles = userInfo?.roles || []
+  const roles = storeUser.roles || []
   return Array.isArray(roles) && roles.includes('super_admin')
 })
 
