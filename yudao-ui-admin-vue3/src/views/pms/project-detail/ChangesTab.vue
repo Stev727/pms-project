@@ -33,8 +33,28 @@
               <el-tag v-if="item.urgent" type="danger" effect="dark" size="small">紧急</el-tag>
             </div>
             <div class="change-card-title">{{ item.title }}</div>
+
+            <!-- P1: 变更前/变更后直接展示，无需点入详情 -->
+            <div class="change-card-compare" v-if="item.beforeContent || item.afterContent">
+              <div class="compare-cell before">
+                <div class="compare-label">变更前</div>
+                <div class="compare-text">{{ item.beforeContent || '--' }}</div>
+              </div>
+              <div class="compare-arrow">
+                <Icon icon="ep:right" />
+              </div>
+              <div class="compare-cell after">
+                <div class="compare-label">变更后</div>
+                <div class="compare-text">{{ item.afterContent || '--' }}</div>
+              </div>
+            </div>
+
             <div class="change-card-meta">
-              <span><Icon icon="ep:user" class="mr-2px" />{{ item.applicant }}</span>
+              <span v-if="item.applicant"><Icon icon="ep:user" class="mr-2px" />{{ item.applicant }}</span>
+              <span v-if="item.taskName" class="meta-task"><Icon icon="ep:list" class="mr-2px" />{{ item.taskName }}</span>
+              <span v-if="item.reason" class="meta-reason" :title="item.reason">
+                <Icon icon="ep:chat-line-square" class="mr-2px" />{{ item.reason.length > 30 ? item.reason.slice(0, 30) + '...' : item.reason }}
+              </span>
               <template v-if="item.impacts && item.impacts.length > 0">
                 <el-tag v-for="(impact, i) in item.impacts" :key="i" size="small" type="warning" effect="plain" style="margin-right: 4px">
                   {{ impact }}
@@ -130,7 +150,6 @@
           </el-form>
         </template>
         <div v-if="selected.status === 'approved'" class="section-title">执行操作</div>
-        <el-button v-if="selected.status === 'approved'" type="success" :loading="saving" @click="executeApproved">执行变更</el-button>
       </template>
     </el-drawer>
 
@@ -164,7 +183,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getChangeRecordList, createChangeRecord, reviewChangeRecord, executeChangeRecord, ChangeRecordVO } from '@/api/pms/change'
+import { getChangeRecordList, createChangeRecord, reviewChangeRecord, ChangeRecordVO } from '@/api/pms/change'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
@@ -325,18 +344,6 @@ async function submitApproval() {
   finally { saving.value = false }
 }
 
-async function executeApproved() {
-  if (!selected.value) return
-  saving.value = true
-  try {
-    await executeChangeRecord(selected.value.changeId)
-    ElMessage.success('变更已执行')
-    drawerVisible.value = false
-    await fetchList()
-  } catch (e) { console.error(e); ElMessage.error('执行失败') }
-  finally { saving.value = false }
-}
-
 async function loadTasks() {
   try {
     const data = await getTaskList()
@@ -375,5 +382,44 @@ defineExpose({ refresh: fetchList })
 .change-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .change-card-number { font-size: 13px; color: #86909C; font-weight: 600; }
 .change-card-title { font-size: 14px; font-weight: 500; color: #1D2129; margin-bottom: 6px; }
-.change-card-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #86909C; }
+.change-card-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #86909C; flex-wrap: wrap; margin-top: 8px; }
+.change-card-meta .meta-task { color: #2468F2; }
+.change-card-meta .meta-reason { color: #FF7D00; }
+/* 变更前/变更后对比 */
+.change-card-compare {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+.change-card-compare .compare-cell {
+  flex: 1;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  padding: 6px 10px;
+  min-height: 36px;
+}
+.change-card-compare .compare-cell.before { background: #FFF7E8; border-color: #FFD79C; }
+.change-card-compare .compare-cell.after { background: #E8FFEA; border-color: #A8E5B5; }
+.change-card-compare .compare-label {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.change-card-compare .compare-cell.before .compare-label { color: #FF7D00; }
+.change-card-compare .compare-cell.after .compare-label { color: #00B42A; }
+.change-card-compare .compare-text {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #1D2129;
+  line-height: 1.5;
+}
+.change-card-compare .compare-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #86909C;
+  font-size: 16px;
+}
 </style>

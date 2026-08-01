@@ -16,6 +16,11 @@ export interface ChangeRecordVO {
   scheduleImpact?: number
   executeTime?: string
   createTime?: string
+  beforeContent?: string
+  afterContent?: string
+  changeStatus?: string
+  beforeState?: string
+  afterState?: string
 }
 
 export const createChangeRecord = (data: ChangeRecordVO) => {
@@ -39,7 +44,7 @@ export const getChangeRecordList = () => {
 }
 
 export const reviewChangeRecord = (id: string | number, approved: boolean) => {
-  return request.put({ url: '/pms/change-record/review', params: { id, approved } })
+  return request.post({ url: '/pms/change-record/review', params: { id, approved } })
 }
 
 export const executeChangeRecord = (id: string | number) => {
