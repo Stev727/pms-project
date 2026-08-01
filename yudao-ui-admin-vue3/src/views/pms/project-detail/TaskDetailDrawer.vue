@@ -472,7 +472,7 @@ const loadChangeList = async () => {
     const res = await getChangeRecordList()
     const allChanges = ((res as any)?.data || (res as any[]) || [])
     // P0-03: 变更记录按当前 taskId 隔离过滤
-    changeList.value = allChanges.filter(c => String(c.taskId) === String(task.value!.taskId))
+    changeList.value = allChanges.filter(c => String(c.taskId || c.affectedTasks) === String(task.value!.taskId))
   } catch {
     changeList.value = []
   }

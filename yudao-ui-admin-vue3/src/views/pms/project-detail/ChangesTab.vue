@@ -419,6 +419,12 @@ async function submitChange() {
       taskId: newChange.affectedTasks,
       beforeContent,
       afterContent,
+      afterState: JSON.stringify({
+        taskName: afterSnapshot.taskName || null,
+        mainOwnerId: afterSnapshot.mainOwnerId || null,
+        planStartDate: afterSnapshot.planStartDate || null,
+        planEndDate: afterSnapshot.planEndDate || null
+      }),
       urgent: newChange.urgent,
       costImpact: newChange.costImpact ?? 0,
       scheduleImpact: newChange.scheduleImpact ?? 0,

@@ -3,7 +3,7 @@
     <!-- 工具栏 -->
     <div class="tab-toolbar">
       <span class="toolbar-title">项目成员 ({{ memberList.length }})</span>
-      <el-button type="primary" size="small" @click="handleAdd" v-if="checkPermi(['pms:member:create'])">
+      <el-button type="primary" size="small" @click="handleAdd" v-if="isPM">
         <Icon icon="ep:plus" class="mr-4px" />添加成员
       </el-button>
     </div>
@@ -35,8 +35,8 @@
       </el-table-column>
       <el-table-column label="操作" width="140" align="center">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="editMember(row)" v-if="checkPermi(['pms:member:update'])">编辑</el-button>
-          <el-button link type="danger" size="small" @click="removeMember(row)" v-if="checkPermi(['pms:member:delete'])">移除</el-button>
+          <el-button link type="primary" size="small" @click="editMember(row)" v-if="isPM">编辑</el-button>
+          <el-button link type="danger" size="small" @click="removeMember(row)" v-if="isPM">移除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -102,6 +102,7 @@ import { getProjectMemberList, createProjectMember, updateProjectMember, deleteP
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import { useCache } from '@/hooks/web/useCache'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { getDictOptions } from '../pms-utils'
 
@@ -109,7 +110,19 @@ defineOptions({ name: 'MembersTab' })
 
 const props = defineProps<{
   projectId: string
+  project?: any  // 项目整体，用于判断当前用户是否是PM
 }>()
+
+// 当前用户是否是项目经理（或超管）
+const isPM = computed(() => {
+  if (!props.project?.projectManagerId) return false
+  const userInfo = useCache().wsCache.get('userInfo')
+  const uid = String(userInfo?.id || '')
+  if (String(props.project.projectManagerId) === uid) return true
+  // super_admin 角色豁免
+  const roles = userInfo?.roles || []
+  return Array.isArray(roles) && roles.includes('super_admin')
+})
 
 const { userList, getUserName, ensureLoaded: ensureUsersLoaded, remoteUserList, remoteLoading, searchUsers: rawSearchUsers } = useUserNames()
 const loading = ref(false)

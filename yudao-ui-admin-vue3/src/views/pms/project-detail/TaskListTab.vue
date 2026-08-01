@@ -6,7 +6,7 @@
         <el-button type="primary" size="small" @click="$emit('create-task')" v-if="checkPermi(['pms:task:create'])">
           <Icon icon="ep:plus" class="mr-4px" />新建任务
         </el-button>
-        <el-button size="small" @click="showStageDialog = true" v-if="checkPermi(['pms:task:create'])">
+        <el-button size="small" @click="openStageDialog" v-if="isPM">
           <Icon icon="ep:folder-add" class="mr-4px" />新建阶段
         </el-button>
         <el-input v-model="searchKeyword" placeholder="搜索任务名称" clearable size="small" style="width: 200px">
@@ -97,7 +97,7 @@
           </template>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
             <!-- 状态流转按钮 -->
@@ -149,6 +149,16 @@
             >发起变更</el-button>
             <!-- 详情 -->
             <el-button link type="primary" size="small" @click.stop="$emit('taskClick', row)">详情</el-button>
+            <!-- 删除任务：PM可删所有，非PM只能删自己负责的 -->
+            <el-button
+              v-if="isPM || String(row.mainOwnerId) === currentUserId"
+              link type="danger" size="small" @click.stop="handleDeleteTask(row)"
+            >删除</el-button>
+          </template>
+          <!-- 阶段行操作：编辑/删除（仅PM可见） -->
+          <template v-if="row.isStageRow && isPM">
+            <el-button link type="primary" size="small" @click.stop="handleEditStage(row)">编辑</el-button>
+            <el-button link type="danger" size="small" @click.stop="handleDeleteStage(row)">删除</el-button>
           </template>
         </template>
       </el-table-column>
@@ -182,7 +192,7 @@
     </el-dialog>
 
     <!-- 新建阶段弹窗 -->
-    <el-dialog v-model="showStageDialog" title="新建阶段" width="480px">
+    <el-dialog v-model="showStageDialog" :title="editingStageId ? '编辑阶段' : '新建阶段'" width="480px">
       <el-form label-width="80px">
         <el-form-item label="阶段名称" required>
           <el-input v-model="stageForm.stageName" placeholder="如：需求分析、方案设计" />
@@ -211,9 +221,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { updateTask, dispatchTask, submitTaskCompletion } from '@/api/pms/task'
+import { updateTask, dispatchTask, submitTaskCompletion, deleteTask } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
-import { StageVO, createStage } from '@/api/pms/stage'
+import { StageVO, createStage, updateStage, deleteStage } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -232,6 +242,11 @@ const props = defineProps<{
 
 // 新建阶段
 const showStageDialog = ref(false)
+const openStageDialog = () => {
+  editingStageId.value = null
+  Object.assign(stageForm, { stageName: '', sortOrder: 0, isMilestone: false, planStartDate: '', planEndDate: '' })
+  showStageDialog.value = true
+}
 const stageSaving = ref(false)
 
 // 限制阶段开始日期必须在项目周期内
@@ -266,7 +281,21 @@ async function confirmCreateStage() {
   }
   stageSaving.value = true
   try {
-    await createStage({
+    if (editingStageId.value) {
+      // 编辑模式
+      await updateStage({
+        stageId: editingStageId.value,
+        projectId: props.projectId,
+        stageName: stageForm.stageName,
+        sortOrder: stageForm.sortOrder || 0,
+        isMilestone: stageForm.isMilestone,
+        planStartDate: stageForm.planStartDate || undefined,
+        planEndDate: stageForm.planEndDate || undefined
+      } as any)
+      ElMessage.success('阶段更新成功')
+    } else {
+      // 创建模式
+      await createStage({
       projectId: props.projectId,
       stageName: stageForm.stageName,
       sortOrder: stageForm.sortOrder || 0,
@@ -274,8 +303,10 @@ async function confirmCreateStage() {
       planStartDate: stageForm.planStartDate || undefined,
       planEndDate: stageForm.planEndDate || undefined
     } as any)
-    ElMessage.success('阶段创建成功')
+      ElMessage.success('阶段创建成功')
+    }
     showStageDialog.value = false
+    editingStageId.value = null
     Object.assign(stageForm, { stageName: '', sortOrder: 0, isMilestone: false, planStartDate: '', planEndDate: '' })
     emit('refresh')
   } catch (e) {
@@ -283,6 +314,56 @@ async function confirmCreateStage() {
     ElMessage.error('创建阶段失败')
   } finally {
     stageSaving.value = false
+  }
+}
+
+// 编辑阶段
+const editingStageId = ref<string | null>(null)
+const handleEditStage = (row: TreeRow) => {
+  editingStageId.value = String(row.stageId)
+  Object.assign(stageForm, {
+    stageName: row.stageName || '',
+    sortOrder: row.sortOrder || 0,
+    isMilestone: row.isMilestone || false,
+    planStartDate: row.planStartDate || '',
+    planEndDate: row.planEndDate || ''
+  })
+  showStageDialog.value = true
+}
+
+// 删除阶段（级联删除任务）
+const handleDeleteStage = async (row: TreeRow) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除阶段「${row.stageName}」吗？该阶段下的所有任务将一并删除，此操作不可恢复！`,
+      '危险操作',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+  try {
+    await deleteStage(String(row.stageId))
+    ElMessage.success('阶段已删除')
+    emit('refresh')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '删除阶段失败')
+  }
+}
+
+// 删除任务
+const handleDeleteTask = async (row: TreeRow) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除任务「${row.taskName}」吗？此操作不可恢复！`,
+      '危险操作',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+  try {
+    await deleteTask(String(row.taskId))
+    ElMessage.success('任务已删除')
+    emit('refresh')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '删除任务失败')
   }
 }
 
@@ -394,6 +475,15 @@ const filteredTreeData = computed<TreeRow[]>(() => {
 const currentUserId = computed(() => {
   const userStore = useUserStore()
   return String(userStore.getUser?.id || '')
+})
+
+// 当前用户是否是项目经理（或超管）
+const isPM = computed(() => {
+  if (!props.project?.projectManagerId) return false
+  if (String(props.project.projectManagerId) === currentUserId.value) return true
+  const userStore = useUserStore()
+  const roles = userStore.getUser?.roles || []
+  return Array.isArray(roles) && roles.includes('super_admin')
 })
 
 // 过滤后的任务总数（不含阶段行）

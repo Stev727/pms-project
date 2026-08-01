@@ -196,6 +196,19 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public void deleteTask(Long id) {
+        // 权限校验：PM、super_admin、或任务主责任人可删除
+        if (!securityFrameworkService.hasAnyRoles("super_admin")) {
+            Long userId = SecurityFrameworkUtils.getLoginUserId();
+            PmsTaskDO task = taskMapper.selectById(id);
+            if (task != null) {
+                PmsProjectDO project = projectMapper.selectById(task.getProjectId());
+                boolean isPM = project != null && java.util.Objects.equals(project.getProjectManagerId(), userId);
+                boolean isOwner = java.util.Objects.equals(task.getMainOwnerId(), userId);
+                if (!isPM && !isOwner) {
+                    throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
+                }
+            }
+        }
         taskMapper.deleteById(id);
     }
 
