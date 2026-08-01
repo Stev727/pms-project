@@ -13,14 +13,6 @@
           <el-radio-button :value="'phase'">阶段</el-radio-button>
           <el-radio-button :value="'task'">任务</el-radio-button>
         </el-radio-group>
-        <el-divider direction="vertical" />
-        <span class="toolbar-label">时间：</span>
-        <el-radio-group v-model="scale" size="small" @change="changeScale">
-          <el-radio-button :value="'day'">日</el-radio-button>
-          <el-radio-button :value="'week'">周</el-radio-button>
-          <el-radio-button :value="'month'">月</el-radio-button>
-          <el-radio-button :value="'quarter'">季</el-radio-button>
-        </el-radio-group>
       </div>
       <div class="toolbar-right">
         <el-checkbox v-model="showCritical" @change="renderGantt">显示关键路径</el-checkbox>

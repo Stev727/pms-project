@@ -3,6 +3,9 @@ package cn.iocoder.yudao.module.pms.controller.admin.project;
 import cn.iocoder.yudao.module.pms.controller.admin.project.vo.ProjectCreateBundleReqVO;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
+import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
+import cn.iocoder.yudao.framework.web.core.util.WebFrameworkUtils;
+
 import cn.iocoder.yudao.module.pms.service.project.ProjectService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -42,6 +45,20 @@ public class ProjectController {
     @Operation(summary = "更新项目")
     @PreAuthorize("@ss.hasPermission('pms:project:update')")
     public CommonResult<Boolean> update(@RequestBody PmsProjectDO entity) {
+        // P0: 限制只有项目经理或超管可以修改项目基本信息
+        Long currentUserId = SecurityFrameworkUtils.getLoginUserId();
+        boolean isSuperAdmin = SecurityFrameworkUtils.getLoginUser() != null
+                && SecurityFrameworkUtils.getLoginUser().getScopes() != null
+                && SecurityFrameworkUtils.getLoginUser().getScopes().contains("super_admin");
+        if (!isSuperAdmin) {
+            // 从数据库读取真实项目信息判断是否PM
+            PmsProjectDO existing = projectService.getProject(entity.getProjectId());
+            if (existing != null && existing.getProjectManagerId() != null
+                    && !existing.getProjectManagerId().equals(currentUserId)) {
+                throw new cn.iocoder.yudao.framework.common.exception.ServiceException(
+                    cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
+            }
+        }
         projectService.updateProject(entity);
         return success(true);
     }
