@@ -153,27 +153,82 @@
       </template>
     </el-drawer>
 
-    <!-- 发起变更弹窗 -->
-    <el-dialog v-model="showForm" title="发起变更" width="600px">
-      <el-form label-width="90px">
+    <!-- 发起变更弹窗 - 重新设计: 关联任务自动带出旧值 -->
+    <el-dialog v-model="showForm" title="发起变更" width="720px" :close-on-click-modal="false">
+      <el-form label-width="100px">
         <el-form-item label="变更标题" required><el-input v-model="newChange.title" placeholder="请输入变更标题" /></el-form-item>
         <el-form-item label="变更类型" required>
           <el-select v-model="newChange.type" class="w-full">
             <el-option v-for="(v, k) in changeTypes" :key="k" :label="v.label" :value="k" />
           </el-select>
         </el-form-item>
-        <el-form-item label="关联任务">
-          <el-select v-model="newChange.affectedTasks" filterable placeholder="选择关联任务（可选）" class="w-full">
-            <el-option v-for="t in tasks" :key="t.taskId" :label="t.taskName" :value="String(t.taskId)" />
+        <el-form-item label="关联任务" required>
+          <el-select v-model="newChange.affectedTasks" filterable placeholder="选择关联任务（必填，自动带出旧值）" class="w-full" @change="onTaskSelect">
+            <el-option v-for="t in tasks" :key="t.taskId" :label="`${t.taskName}${t.taskCode ? '(' + t.taskCode + ')' : ''}`" :value="String(t.taskId)" />
           </el-select>
         </el-form-item>
+
+        <!-- 旧值自动带出（只读） -->
+        <div v-if="newChange.affectedTasks" class="change-form-section">
+          <div class="section-subtitle">旧值（任务当前值，自动带出）</div>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="任务名">
+                <el-input v-model="beforeSnapshot.taskName" disabled />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="责任人">
+                <el-input v-model="beforeSnapshot.mainOwnerName" disabled />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="计划开始">
+                <el-date-picker v-model="beforeSnapshot.planStartDate" type="date" value-format="YYYY-MM-DD" disabled class="w-full" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="计划结束">
+                <el-date-picker v-model="beforeSnapshot.planEndDate" type="date" value-format="YYYY-MM-DD" disabled class="w-full" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 新值（用户填写） -->
+        <div v-if="newChange.affectedTasks" class="change-form-section">
+          <div class="section-subtitle">新值（请填写变更后的值，未改字段留空）</div>
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="新任务名">
+                <el-input v-model="afterSnapshot.taskName" placeholder="留空表示不修改" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="新责任人">
+                <el-select v-model="afterSnapshot.mainOwnerId" filterable clearable placeholder="留空表示不修改" class="w-full">
+                  <el-option v-for="u in projectMemberUsers" :key="u.id" :label="u.nickname" :value="Number(u.id)" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="新计划开始">
+                <el-date-picker v-model="afterSnapshot.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="留空表示不修改" class="w-full" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="新计划结束">
+                <el-date-picker v-model="afterSnapshot.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="留空表示不修改" class="w-full" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item label="紧急程度"><el-switch v-model="newChange.urgent" active-text="紧急" inactive-text="普通" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="成本影响(元)"><el-input-number v-model="newChange.costImpact" :min="0" class="w-full" /></el-form-item></el-col>
         </el-row>
-        <el-form-item label="变更前内容"><el-input v-model="newChange.beforeContent" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="变更后内容"><el-input v-model="newChange.afterContent" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="变更原因" required><el-input v-model="newChange.reason" type="textarea" :rows="2" placeholder="请详细说明变更原因" /></el-form-item>
+        <el-form-item label="变更原因" required><el-input v-model="newChange.reason" type="textarea" :rows="3" placeholder="请详细说明变更原因" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="showForm = false">取消</el-button><el-button type="primary" @click="submitChange" :loading="saving">提交</el-button></template>
     </el-dialog>
@@ -188,6 +243,7 @@ import { getTaskList, TaskVO } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useProjectMembers } from '@/hooks/pms/useProjectMembers' 
 import { useCache } from '@/hooks/web/useCache'
 
 defineOptions({ name: 'ChangesTab' })
@@ -197,6 +253,7 @@ const { getUserName } = useUserNames()
 const props = defineProps<{
   projectId: string
 }>()
+const { projectMemberUsers, loadProjectMembers } = useProjectMembers()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -236,9 +293,35 @@ const filteredList = computed(() => {
 })
 
 const newChange = reactive({
-  title: '', type: 'requirement', urgent: false, beforeContent: '', afterContent: '',
+  title: '', type: 'requirement', urgent: false,
   reason: '', affectedTasks: '', costImpact: 0, scheduleImpact: 0
 })
+
+// P1: 变更前快照（自动从任务带出）
+const beforeSnapshot = reactive({
+  taskName: '', planStartDate: '', planEndDate: '', mainOwnerId: undefined as number | undefined, mainOwnerName: ''
+})
+// P1: 变更后快照（用户填写）
+const afterSnapshot = reactive({
+  taskName: '', planStartDate: '', planEndDate: '', mainOwnerId: undefined as number | undefined
+})
+
+// 关联任务选择后自动带出旧值
+const onTaskSelect = (taskId: string) => {
+  const task = tasks.value.find(t => String(t.taskId) === String(taskId))
+  if (!task) {
+    Object.assign(beforeSnapshot, { taskName: '', planStartDate: '', planEndDate: '', mainOwnerId: undefined, mainOwnerName: '' })
+    Object.assign(afterSnapshot, { taskName: '', planStartDate: '', planEndDate: '', mainOwnerId: undefined })
+    return
+  }
+  beforeSnapshot.taskName = task.taskName || ''
+  beforeSnapshot.planStartDate = task.planStartDate || ''
+  beforeSnapshot.planEndDate = task.planEndDate || ''
+  beforeSnapshot.mainOwnerId = task.mainOwnerId
+  beforeSnapshot.mainOwnerName = task.mainOwnerId ? getUserName(task.mainOwnerId) : ''
+  // 清空新值
+  Object.assign(afterSnapshot, { taskName: '', planStartDate: '', planEndDate: '', mainOwnerId: undefined })
+}
 
 const getTaskCode = (taskId: any) => {
   if (!taskId) return ''
@@ -289,37 +372,63 @@ function getTimelineType(status: string): string {
 
 function openDetail(row: any) { selected.value = row; drawerVisible.value = true }
 
+// P1: 生成结构化变更文本（仅展示被修改的字段）
+const buildChangeText = (snapshot: any, isBefore: boolean) => {
+  const parts: string[] = []
+  if (isBefore) {
+    parts.push('任务名: ' + (beforeSnapshot.taskName || '-'))
+    parts.push('责任人: ' + (beforeSnapshot.mainOwnerName || '-'))
+    parts.push('计划开始: ' + (beforeSnapshot.planStartDate || '-'))
+    parts.push('计划结束: ' + (beforeSnapshot.planEndDate || '-'))
+  } else {
+    // 新值只展示用户修改过的字段
+    if (afterSnapshot.taskName) parts.push('任务名: ' + afterSnapshot.taskName)
+    if (afterSnapshot.mainOwnerId) {
+      const uname = projectMemberUsers.value.find(u => Number(u.id) === Number(afterSnapshot.mainOwnerId))?.nickname || ''
+      if (uname) parts.push('责任人: ' + uname)
+    }
+    if (afterSnapshot.planStartDate) parts.push('计划开始: ' + afterSnapshot.planStartDate)
+    if (afterSnapshot.planEndDate) parts.push('计划结束: ' + afterSnapshot.planEndDate)
+    if (parts.length === 0) parts.push('（未修改任何字段）')
+  }
+  return parts.join('; ')
+}
+
 async function submitChange() {
   if (!newChange.title) { ElMessage.warning('请填写变更标题'); return }
   if (!newChange.reason) { ElMessage.warning('请填写变更原因'); return }
+  if (!newChange.affectedTasks) { ElMessage.warning('请选择关联任务'); return }
   saving.value = true
   try {
-    // P1-05: 获取当前用户 ID 作为申请人
     const userInfo = useCache().wsCache.get('userInfo')
     const currentUserId = userInfo?.id
+    // 自动生成 beforeContent / afterContent
+    const beforeContent = buildChangeText(beforeSnapshot, true)
+    const afterContent = buildChangeText(afterSnapshot, false)
     const submitData: any = {
       changeDescription: newChange.title,
       changeType: newChange.type,
       changeReason: newChange.reason,
       projectId: props.projectId,
-      affectedTasks: newChange.affectedTasks || null,
-      taskId: newChange.affectedTasks || null,
-      beforeContent: newChange.beforeContent,
-      afterContent: newChange.afterContent,
+      affectedTasks: newChange.affectedTasks,
+      taskId: newChange.affectedTasks,
+      beforeContent,
+      afterContent,
       urgent: newChange.urgent,
       costImpact: newChange.costImpact ?? 0,
       scheduleImpact: newChange.scheduleImpact ?? 0,
       changeCode: `CR-${Date.now().toString().slice(-6)}`,
       approvalStatus: 'pending'
     }
-    // 仅在有 userInfo 时才传 initiatorId，避免传入字符串 "undefined"
     if (currentUserId) {
       submitData.initiatorId = String(currentUserId)
     }
     await createChangeRecord(submitData as unknown as ChangeRecordVO)
     ElMessage.success('变更已提交')
     showForm.value = false
-    Object.assign(newChange, { title: '', type: 'requirement', urgent: false, beforeContent: '', afterContent: '', reason: '', affectedTasks: '', costImpact: 0, scheduleImpact: 0 })
+    Object.assign(newChange, { title: '', type: 'requirement', urgent: false, reason: '', affectedTasks: '', costImpact: 0, scheduleImpact: 0 })
+    Object.assign(beforeSnapshot, { taskName: '', planStartDate: '', planEndDate: '', mainOwnerId: undefined, mainOwnerName: '' })
+    Object.assign(afterSnapshot, { taskName: '', planStartDate: '', planEndDate: '', mainOwnerId: undefined })
     await fetchList()
   } catch (e) { console.error(e); ElMessage.error('提交失败') }
   finally { saving.value = false }
@@ -352,7 +461,7 @@ async function loadTasks() {
 }
 
 onMounted(async () => {
-  await loadTasks()
+  await Promise.all([loadTasks(), loadProjectMembers(props.projectId)])
   await fetchList()
 })
 
@@ -385,6 +494,22 @@ defineExpose({ refresh: fetchList })
 .change-card-meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: #86909C; flex-wrap: wrap; margin-top: 8px; }
 .change-card-meta .meta-task { color: #2468F2; }
 .change-card-meta .meta-reason { color: #FF7D00; }
+/* 发起变更表单分组 */
+.change-form-section {
+  border: 1px dashed var(--el-border-color);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #FAFBFC;
+}
+.section-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1D2129;
+  margin-bottom: 12px;
+  padding-left: 6px;
+  border-left: 3px solid var(--el-color-primary);
+}
 /* 变更前/变更后对比 */
 .change-card-compare {
   display: flex;
