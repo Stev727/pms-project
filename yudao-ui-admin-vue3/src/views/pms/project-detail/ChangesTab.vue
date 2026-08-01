@@ -465,7 +465,16 @@ onMounted(async () => {
   await fetchList()
 })
 
-defineExpose({ refresh: fetchList })
+// 暴露给父组件调用：从任务列表点"发起变更"时自动打开对话框并预填任务
+const openChangeForm = (taskId?: string) => {
+  if (taskId) {
+    newChange.affectedTasks = String(taskId)
+    onTaskSelect(String(taskId))
+  }
+  showForm.value = true
+}
+
+defineExpose({ refresh: fetchList, openChangeForm })
 </script>
 
 <style scoped>

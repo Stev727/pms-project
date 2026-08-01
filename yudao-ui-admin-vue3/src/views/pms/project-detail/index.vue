@@ -174,7 +174,7 @@
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
-    <TaskDetailDrawer ref="taskDrawerRef" @refresh="onTaskDataRefresh" />
+    <TaskDetailDrawer ref="taskDrawerRef" @refresh="onTaskDataRefresh" @create-change="handleStartChange" />
 
     <!-- P0: 项目编辑弹窗 -->
     <ProjectForm ref="projectFormRef" @success="loadProjectData" />
@@ -660,9 +660,15 @@ const handleEdit = () => {
   }
 }
 
-const handleStartChange = () => {
+const handleStartChange = (task?: any) => {
   activeTab.value = 'changes'
-  nextTick(() => changesTabRef.value?.refresh?.())
+  nextTick(() => {
+    changesTabRef.value?.refresh?.()
+    // 如果传了任务，自动打开发起变更对话框并预填任务
+    if (task?.taskId) {
+      nextTick(() => changesTabRef.value?.openChangeForm?.(String(task.taskId)))
+    }
+  })
 }
 
 const handleCopyProject = () => {
