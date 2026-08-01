@@ -167,7 +167,7 @@
         <!-- 变更 Tab (NEW - SEVERE-4 修复) -->
         <el-tab-pane label="变更记录" name="changes">
           <template v-if="activeTab === 'changes'">
-            <ChangesTab :project-id="projectId" ref="changesTabRef" />
+            <ChangesTab :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
           </template>
         </el-tab-pane>
       </el-tabs>

@@ -252,6 +252,7 @@ const { getUserName } = useUserNames()
 
 const props = defineProps<{
   projectId: string
+  tasks?: TaskVO[]  // P1: 由父组件传入任务列表（避免非PM看不到任务的问题）
 }>()
 const { projectMemberUsers, loadProjectMembers } = useProjectMembers()
 
@@ -266,6 +267,10 @@ const approveResult = ref('approve')
 const approveOpinion = ref('')
 const autoAdjust = ref(true)
 const tasks = ref<TaskVO[]>([])
+// P1: 监听 props.tasks 变化同步到本地（避免非PM用户调用 getTaskList 拿不到数据）
+watch(() => props.tasks, (val) => {
+  tasks.value = ((val as TaskVO[]) || []).filter(t => String(t.projectId) === String(props.projectId))
+}, { immediate: true })
 
 const changeTypes: Record<string, { label: string; color: string }> = {
   requirement: { label: '需求变更', color: '#2468F2' },
@@ -453,15 +458,14 @@ async function submitApproval() {
   finally { saving.value = false }
 }
 
-async function loadTasks() {
-  try {
-    const data = await getTaskList()
-    tasks.value = ((data as TaskVO[]) || []).filter(t => String(t.projectId) === String(props.projectId))
-  } catch (e) { console.error(e) }
-}
+// tasks 不再从本地加载，使用 props.tasks 同步赋值
+// 由 watch 监听 props.tasks 变化时更新
+
 
 onMounted(async () => {
-  await Promise.all([loadTasks(), loadProjectMembers(props.projectId)])
+  // 不再 loadTasks：非PM用户调用 getTaskList 会被后端过滤为空
+  // 直接用 props.projectTasks（来自父组件，已包含当前项目所有任务）
+  await loadProjectMembers(props.projectId)
   await fetchList()
 })
 
