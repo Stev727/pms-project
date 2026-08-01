@@ -3,7 +3,7 @@ import request from '@/config/axios'
 export interface DocumentVO {
   documentId: string
   projectId?: string
-  taskId?: number
+  taskId?: string
   fileName?: string
   fileType?: string
   category?: string

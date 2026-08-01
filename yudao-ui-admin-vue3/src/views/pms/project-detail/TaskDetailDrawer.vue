@@ -54,7 +54,7 @@
                   </el-select>
                 </el-form-item>
                 <el-form-item label="计划开始">
-                  <el-date-picker v-model="editForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" />
+                  <el-date-picker v-model="editForm.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" :disabled-date="disabledTaskStartDate" />
                 </el-form-item>
                 <el-form-item label="计划结束">
                   <el-date-picker v-model="editForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" :disabled-date="disabledTaskEndDate" />
@@ -343,6 +343,10 @@ const emit = defineEmits<{
 }>()
 const message = useMessage()
 const { getUserName, getUserNamesFromStr } = useUserNames()
+
+const props = defineProps<{
+  project?: any  // 项目整体，用于日期范围校验
+}>()
 
 const drawerVisible = ref(false)
 const activeTab = ref('info')
@@ -748,7 +752,7 @@ const handleFileSelect = async (event: Event) => {
     const nextVersion = String(Math.max(0, ...sameNameDocs.map(item => Number(item.versionNo) || 0)) + 1)
     await createDocument({
       projectId: String(task.value?.projectId || ''),
-      taskId: Number(task.value?.taskId),
+      taskId: String(task.value?.taskId),
       fileName,
       fileType: fileName.split('.').pop()?.toLowerCase() || 'unknown',
       category: 'deliverable',
@@ -846,9 +850,20 @@ const changeOwner = async () => {
 
 defineExpose({ open })
 
+// 限制任务开始日期必须在项目周期内
+const disabledTaskStartDate = (date: Date) => {
+  if (!props.project?.planStartDate) return false
+  const projStart = new Date(props.project.planStartDate + ' 00:00:00').getTime()
+  if (date.getTime() < projStart) return true
+  if (props.project?.planEndDate && date.getTime() > new Date(props.project.planEndDate + ' 23:59:59').getTime()) return true
+  return false
+}
+
 const disabledTaskEndDate = (date: Date) => {
   if (!editForm.planStartDate) return false
-  return date.getTime() < new Date(editForm.planStartDate + ' 00:00:00').getTime()
+  if (date.getTime() < new Date(editForm.planStartDate + ' 00:00:00').getTime()) return true
+  if (props.project?.planEndDate && date.getTime() > new Date(props.project.planEndDate + ' 23:59:59').getTime()) return true
+  return false
 }
 </script>
 

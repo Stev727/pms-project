@@ -93,7 +93,7 @@
         <!-- 任务列表 Tab -->
         <el-tab-pane label="任务列表" name="tasks">
           <template v-if="activeTab === 'tasks'">
-            <TaskListTab :project-id="projectId" :tasks="projectTasks" :stages="projectStages"
+            <TaskListTab :project-id="projectId" :tasks="projectTasks" :stages="projectStages" :project="project"
               @task-click="openTaskDrawer" @refresh="onTaskDataRefresh" @create-task="openCreateTaskDialog"
               @start-change="handleStartChange" />
           </template>
@@ -174,7 +174,7 @@
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
-    <TaskDetailDrawer ref="taskDrawerRef" @refresh="onTaskDataRefresh" @create-change="handleStartChange" />
+    <TaskDetailDrawer ref="taskDrawerRef" :project="project" @refresh="onTaskDataRefresh" @create-change="handleStartChange" />
 
     <!-- P0: 项目编辑弹窗 -->
     <ProjectForm ref="projectFormRef" @success="loadProjectData" />

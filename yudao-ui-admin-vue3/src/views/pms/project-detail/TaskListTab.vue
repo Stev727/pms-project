@@ -181,22 +181,6 @@
       </template>
     </el-dialog>
 
-    <!-- 延期填写弹窗（异常原因+改善方案） -->
-    <el-dialog v-model="delayFormVisible" title="延期处理" width="500px">
-      <el-alert title="任务已标记为延期，请填写异常原因和改善方案" type="warning" :closable="false" show-icon class="mb-16px" />
-      <el-form label-width="100px">
-        <el-form-item label="异常原因" required>
-          <el-input v-model="delayForm.exceptionReason" type="textarea" :rows="3" placeholder="请说明延期原因" />
-        </el-form-item>
-        <el-form-item label="改善方案" required>
-          <el-input v-model="delayForm.improvementPlan" type="textarea" :rows="3" placeholder="请填写改善方案和预计恢复时间" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="delayFormVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmDelay">确认</el-button>
-      </template>
-    </el-dialog>
     <!-- 新建阶段弹窗 -->
     <el-dialog v-model="showStageDialog" title="新建阶段" width="480px">
       <el-form label-width="80px">
@@ -210,7 +194,7 @@
           <el-switch v-model="stageForm.isMilestone" />
         </el-form-item>
         <el-form-item label="计划开始">
-          <el-date-picker v-model="stageForm.planStartDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
+          <el-date-picker v-model="stageForm.planStartDate" type="date" value-format="YYYY-MM-DD" class="w-full" :disabled-date="disabledStageStartDate" />
         </el-form-item>
         <el-form-item label="计划结束">
           <el-date-picker v-model="stageForm.planEndDate" type="date" value-format="YYYY-MM-DD" class="w-full" :disabled-date="(date: Date) => disabledStageEndDate(date)" />
@@ -241,6 +225,7 @@ defineOptions({ name: 'TaskListTab' })
 
 const props = defineProps<{
   projectId: string
+  project?: any  // 项目整体（含 planStartDate/planEndDate），用于日期范围校验
   tasks: TaskVO[]
   stages: StageVO[]
 }>()
@@ -249,10 +234,22 @@ const props = defineProps<{
 const showStageDialog = ref(false)
 const stageSaving = ref(false)
 
+// 限制阶段开始日期必须在项目周期内
+const disabledStageStartDate = (date: Date) => {
+  if (!props.project?.planStartDate) return false
+  const projStart = new Date(props.project.planStartDate + ' 00:00:00').getTime()
+  if (date.getTime() < projStart) return true
+  if (props.project?.planEndDate) {
+    const projEnd = new Date(props.project.planEndDate + ' 23:59:59').getTime()
+    if (date.getTime() > projEnd) return true
+  }
+  return false
+}
+// 限制阶段结束日期不能早于开始日期，也不能超出项目周期
 const disabledStageEndDate = (date: Date) => {
-  // 限制结束日期不能早于开始日期
-  if (!stageForm.planStartDate) return false
-  return date.getTime() < new Date(stageForm.planStartDate + " 00:00:00").getTime()
+  if (stageForm.planStartDate && date.getTime() < new Date(stageForm.planStartDate + ' 00:00:00').getTime()) return true
+  if (props.project?.planEndDate && date.getTime() > new Date(props.project.planEndDate + ' 23:59:59').getTime()) return true
+  return false
 }
 const stageForm = reactive({
   stageName: '',
@@ -390,7 +387,7 @@ const filteredTreeData = computed<TreeRow[]>(() => {
     }
   }
 
-  return tree.filter(node => !node.isStageRow || (node.children && node.children.length > 0))
+  return tree  // 显示所有阶段（含空阶段），解决新建阶段后不显示的问题
 })
 
 // 当前登录用户ID
