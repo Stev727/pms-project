@@ -96,7 +96,7 @@
             <el-col :span="12">
               <el-form-item label="项目经理" prop="projectManagerId">
                 <el-select v-model="projectForm.projectManagerId" filterable remote placeholder="请选择" class="w-full" :remote-method="searchUsers" :loading="remoteLoading" @change="onManagerChange">
-                  <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
+                  <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
                 </el-select>
               </el-form-item>
             </el-col>
@@ -188,7 +188,7 @@
           <el-form label-width="80px">
             <el-form-item label="成员" required>
               <el-select v-model="memberForm.userId" filterable remote placeholder="搜索用户名" class="w-full" :remote-method="searchUsers" :loading="remoteLoading">
-                <el-option v-for="u in dialogUserList" :key="u.id" :label="u.nickname" :value="String(u.id)" />
+                <el-option v-for="u in dialogUserList" :key="u.id" :label="u.nickname" :value="Number(u.id)" />
               </el-select>
             </el-form-item>
             <el-form-item label="项目角色" required>

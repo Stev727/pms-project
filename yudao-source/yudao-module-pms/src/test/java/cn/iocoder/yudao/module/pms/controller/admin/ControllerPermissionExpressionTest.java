@@ -15,10 +15,12 @@ class ControllerPermissionExpressionTest {
     @Test
     void newWorkflowEndpointsUseQuotedPermissionExpressions() throws Exception {
         assertPermission(ProjectController.class, "createBundle", "@ss.hasPermission('pms:project:create')", ProjectCreateBundleReqVO.class);
-        assertPermission(TaskController.class, "submitCompletion", "@ss.hasPermission('pms:task:update')", Long.class);
-        assertPermission(TaskController.class, "reviewCompletion", "@ss.hasPermission('pms:task:update')", Long.class, boolean.class);
+        assertPermission(TaskController.class, "submitCompletion", "@ss.hasPermission('pms:task:update')",
+                Long.class, String.class, String.class);
+        assertPermission(TaskController.class, "reviewCompletion", "@ss.hasPermission('pms:task:update')",
+                Long.class, Boolean.class, String.class);
         assertPermission(ChangeRecordController.class, "review", "@ss.hasPermission('pms:change:update')", Long.class, boolean.class);
-        assertPermission(ChangeRecordController.class, "execute", "@ss.hasPermission('pms:change:update')", Long.class);
+        assertPermission(ChangeRecordController.class, "executeChange", "@ss.hasPermission('pms:change:update')", Long.class);
     }
 
     private static void assertPermission(Class<?> controller, String methodName, String expected,

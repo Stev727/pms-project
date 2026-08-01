@@ -14,15 +14,15 @@ import static org.mockito.Mockito.*;
 
 class ChangeRecordReviewTest {
     @Test
-    void projectManagerApprovesAndExecutesChange() {
+    void projectManagerApprovalAutomaticallyExecutesChange() {
         ChangeRecordServiceImpl service = serviceWithManager(1353L);
         ChangeRecordMapper mapper = (ChangeRecordMapper) ReflectionTestUtils.getField(service, "changeRecordMapper");
         PmsChangeRecordDO record = record("pending", "pending_review");
         when(mapper.selectById(1L)).thenReturn(record);
         service.reviewChange(1L, true, 1353L);
-        service.executeApprovedChange(1L, 1353L);
         assertEquals("executed", record.getChangeStatus());
-        verify(mapper, times(2)).updateById(any(PmsChangeRecordDO.class));
+        assertNotNull(record.getExecuteTime());
+        verify(mapper).updateById(any(PmsChangeRecordDO.class));
     }
 
     @Test

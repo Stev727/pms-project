@@ -12,6 +12,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import java.util.List;
+import java.time.LocalDate;
 
 class TaskServiceImplTest {
     @Test
@@ -66,7 +67,7 @@ class TaskServiceImplTest {
         TaskMapper mapper = (TaskMapper) ReflectionTestUtils.getField(service, "taskMapper");
         PmsTaskDO task = task("completion_pending_review");
         when(mapper.selectById(20L)).thenReturn(task);
-        service.reviewCompletion(20L, true, 1353L);
+        service.reviewCompletion(20L, true, "同意", 1353L);
         assertEquals("completed", task.getCompleteStatus());
         assertEquals(100, task.getProgress());
     }
@@ -76,7 +77,7 @@ class TaskServiceImplTest {
         TaskServiceImpl service = serviceWithProjectManager(1353L);
         TaskMapper mapper = (TaskMapper) ReflectionTestUtils.getField(service, "taskMapper");
         when(mapper.selectById(20L)).thenReturn(task("completion_pending_review"));
-        assertThrows(ServiceException.class, () -> service.reviewCompletion(20L, true, 1L));
+        assertThrows(ServiceException.class, () -> service.reviewCompletion(20L, true, "同意", 1L));
     }
 
     @Test
@@ -87,14 +88,65 @@ class TaskServiceImplTest {
         assertThrows(ServiceException.class, () -> service.submitCompletion(404L, null, null));
     }
 
+    @Test
+    void updateCompletedTaskSetsProgressToOneHundred() {
+        TaskServiceImpl service = new TaskServiceImpl();
+        TaskMapper mapper = mock(TaskMapper.class);
+        ReflectionTestUtils.setField(service, "taskMapper", mapper);
+        PmsTaskDO task = task("completed");
+        task.setProgress(30);
+
+        service.updateTask(task);
+
+        assertEquals(100, task.getProgress());
+        verify(mapper).updateById(task);
+    }
+
+    @Test
+    void updateTaskCalculatesInclusiveCycleAndRejectsIncompleteDates() {
+        TaskServiceImpl service = new TaskServiceImpl();
+        TaskMapper mapper = mock(TaskMapper.class);
+        ReflectionTestUtils.setField(service, "taskMapper", mapper);
+        PmsTaskDO task = task("in_progress");
+        task.setPlanStartDate(LocalDate.of(2026, 7, 31));
+        task.setPlanEndDate(LocalDate.of(2026, 8, 1));
+
+        service.updateTask(task);
+        assertEquals(2, task.getCycle());
+
+        task.setPlanEndDate(null);
+        assertThrows(ServiceException.class, () -> service.updateTask(task));
+    }
+
+    @Test
+    void rejectedCompletionStoresOpinionAndNotifiesOwnerAndManager() {
+        TaskServiceImpl service = serviceWithProjectManager(1353L);
+        TaskMapper mapper = (TaskMapper) ReflectionTestUtils.getField(service, "taskMapper");
+        DingTalkNotifyService notifyService = mock(DingTalkNotifyService.class);
+        ReflectionTestUtils.setField(service, "dingTalkNotifyService", notifyService);
+        PmsTaskDO task = task("completion_pending_review");
+        task.setTaskName("结构设计");
+        task.setMainOwnerId(1354L);
+        when(mapper.selectById(20L)).thenReturn(task);
+
+        service.reviewCompletion(20L, false, "输出物不完整", 1353L);
+
+        assertEquals("in_progress", task.getCompleteStatus());
+        assertEquals("输出物不完整", task.getReviewOpinion());
+        verify(notifyService).sendNotifyDirect(contains("驳回"), contains("输出物不完整"),
+                eq(List.of(1354L, 1353L)), eq("completion_rejected"), eq("task"), eq(20L));
+    }
+
     private static TaskServiceImpl serviceWithProjectManager(Long managerId) {
         TaskServiceImpl service = new TaskServiceImpl();
         TaskMapper taskMapper = mock(TaskMapper.class);
         ProjectMapper projectMapper = mock(ProjectMapper.class);
         ReflectionTestUtils.setField(service, "taskMapper", taskMapper);
         ReflectionTestUtils.setField(service, "projectMapper", projectMapper);
+        ReflectionTestUtils.setField(service, "dingTalkNotifyService", mock(DingTalkNotifyService.class));
         PmsProjectDO project = new PmsProjectDO();
         project.setProjectId(10L);
+        project.setProjectName("PMS测试项目");
         project.setProjectManagerId(managerId);
         when(projectMapper.selectById(10L)).thenReturn(project);
         return service;

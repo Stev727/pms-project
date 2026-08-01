@@ -251,14 +251,14 @@ yudao:
     miniprogram-state: developer # 跳转小程序类型：开发版为 “developer”；体验版为 “trial”为；正式版为 “formal”
   tencent-lbs-key: TVDBZ-TDILD-4ON4B-PFDZA-RNLKH-VVF6E # QQ 地图的密钥 https://lbs.qq.com/service/staticV2/staticGuide/staticDoc
   dingtalk:
-    corp-id:  # 钉钉企业CorpId，用于H5微应用免登（由用户提供后填入）
+    corp-id: dingf48455fd2d000580f5bf40eda33b7ba0
 
 justauth:
   enabled: true
   type:
     DINGTALK: # 钉钉
-      client-id: dingvrnreaje3yqvzhxg
-      client-secret: i8E6iZyDvZj51JIb0tYsYfVQYOks9Cq1lgryEjFRqC79P3iJcrxEwT6Qk2QvLrLI
+      client-id: ding2uiwodeygy8fgcr4
+      client-secret: nKLf-Or3-dyphXsjQPKYQrB1-OXAGXW-VllwA2d3ALoWNJz_CB7kvCBMjLDLEYoM
       ignore-check-redirect-uri: true
     WECHAT_ENTERPRISE: # 企业微信
       client-id: wwd411c69a39ad2e54

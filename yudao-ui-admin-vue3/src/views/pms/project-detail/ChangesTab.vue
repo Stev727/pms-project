@@ -236,7 +236,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getChangeRecordList, createChangeRecord, reviewChangeRecord, ChangeRecordVO } from '@/api/pms/change'
 import { getTaskList, TaskVO } from '@/api/pms/task'
