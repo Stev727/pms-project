@@ -100,7 +100,7 @@
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item label="责任人">
             <el-select v-model="newIssue.responsiblePerson" filterable clearable placeholder="请选择责任人" class="w-full">
-              <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
+              <el-option v-for="u in projectMemberUsers" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
             </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="来源"><el-input v-model="newIssue.source" placeholder="测试/评审/现场" /></el-form-item></el-col>
