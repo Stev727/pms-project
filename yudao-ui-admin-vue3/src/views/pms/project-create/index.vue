@@ -743,12 +743,26 @@ const stageGroups = computed(() => {
     if (!groups[stage]) groups[stage] = []
     groups[stage].push(t)
   })
-  return Object.entries(groups).map(([stageName, tasks]) => ({
-    stageName,
-    taskName: stageName + ` (${tasks.length} 个任务)`,
-    isStage: true,
-    tasks: tasks.map(t => ({ ...t, roleName: t.roleName || '未指定' }))
-  }))
+  // 阶段顺序按模板 stageList.sortOrder 排序，不要按任务出现顺序变动模板顺序
+  const stageOrder: Record<string, number> = {}
+  stageList.value.forEach((s, idx) => {
+    stageOrder[s.stageName] = s.sortOrder ?? idx
+  })
+  return Object.entries(groups)
+    .map(([stageName, tasks]) => ({
+      stageName,
+      taskName: stageName + ` (${tasks.length} 个任务)`,
+      isStage: true,
+      tasks: tasks.map(t => ({ ...t, roleName: t.roleName || '未指定' }))
+    }))
+    .sort((a, b) => {
+      const orderA = stageOrder[a.stageName]
+      const orderB = stageOrder[b.stageName]
+      if (orderA !== undefined && orderB !== undefined) return orderA - orderB
+      if (orderA !== undefined) return -1
+      if (orderB !== undefined) return 1
+      return a.stageName.localeCompare(b.stageName)
+    })
 })
 
 const totalCycleDays = computed(() => {
