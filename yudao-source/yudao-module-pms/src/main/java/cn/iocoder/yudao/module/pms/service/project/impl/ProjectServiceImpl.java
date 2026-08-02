@@ -96,6 +96,11 @@ public class ProjectServiceImpl implements ProjectService {
         project.setTemplateId(null);
         Long projectId = createProject(project);
         Map<Long, Long> stageIdMap = copyTemplateStages(templateId, projectId);
+        // 兼容:前端可能发 String 类型 stageId(19位bigint用Number()会丢精度)
+        Map<String, Long> stageIdStringMap = new HashMap<>();
+        for (Map.Entry<Long, Long> e : stageIdMap.entrySet()) {
+            stageIdStringMap.put(String.valueOf(e.getKey()), e.getValue());
+        }
         if (templateId != null) {
             PmsProjectDO templateUpdate = new PmsProjectDO();
             templateUpdate.setProjectId(projectId);
@@ -109,8 +114,14 @@ public class ProjectServiceImpl implements ProjectService {
         }
         for (PmsTaskDO task : tasks) {
             task.setProjectId(projectId);
-            if (task.getStageId() != null) {
-                task.setStageId(stageIdMap.get(task.getStageId()));
+            Long origStageId = task.getStageId();
+            if (origStageId != null) {
+                Long mapped = stageIdMap.get(origStageId);
+                if (mapped == null) {
+                    // 兼容:如果 stageId 是 String 类型(经 Jackson 转换后),用 String key 查找
+                    mapped = stageIdStringMap.get(String.valueOf(origStageId));
+                }
+                task.setStageId(mapped);
             }
             normalizeTaskSchedule(task);
             task.setCompleteStatus("not_started");
