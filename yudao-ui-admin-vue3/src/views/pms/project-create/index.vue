@@ -331,8 +331,8 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="所属阶段" required>
-                  <el-select v-model="taskForm.stageName" placeholder="请选择" class="w-full">
-                    <el-option v-for="s in stageList" :key="s.stageName" :label="s.stageName" :value="s.stageName" />
+                  <el-select v-model="taskForm.stageId" :value-on-clear="undefined" placeholder="请选择" class="w-full" @change="onStageSelect">
+                    <el-option v-for="s in stageList" :key="s.stageId" :label="s.stageName" :value="Number(s.stageId)" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -656,8 +656,15 @@ const stageList = ref<StageVO[]>([])
 const adjustedTasks = ref<any[]>([])
 const showAddTask = ref(false)
 const editingTask = ref<any>(null)
+// 阶段选择 @change 同步 stageName
+const onStageSelect = (stageId: number | undefined) => {
+  const stage = stageList.value.find(s => Number(s.stageId) === Number(stageId))
+  taskForm.stageName = stage?.stageName || ''
+}
+
 const taskForm = reactive({
   taskName: '',
+  stageId: undefined as number | undefined,
   stageName: '',
   taskType: 'design',
   cycle: 5,
@@ -871,7 +878,7 @@ function goBack() {
 function openAddTask() {
   editingTask.value = null
   Object.assign(taskForm, {
-    taskName: '', stageName: '', taskType: 'design', cycle: 5,
+    taskName: '', stageId: undefined, stageName: '', taskType: 'design', cycle: 5,
     planStartDate: '', planEndDate: '',
     priority: 'normal', isMilestone: false, mainOwnerId: undefined, helperIds: [],
     description: '', outputRequirement: '', roleName: ''
@@ -887,6 +894,7 @@ function editTask(row: any, _index: number) {
   const taskData = editingTask.value
   Object.assign(taskForm, {
     taskName: taskData.taskName,
+    stageId: taskData.stageId,
     stageName: taskData.stageName,
     taskType: taskData.taskType || 'design',
     cycle: taskData.cycle || 5,
@@ -922,6 +930,7 @@ function confirmAddTask() {
   if (editingTask.value) {
     Object.assign(editingTask.value, {
       taskName: taskForm.taskName,
+      stageId: taskForm.stageId,
       stageName: taskForm.stageName,
       taskType: taskForm.taskType,
       cycle: taskForm.cycle,
@@ -945,6 +954,7 @@ function confirmAddTask() {
     const newTask: any = {
       taskId: Date.now(),
       taskName: taskForm.taskName,
+      stageId: taskForm.stageId,
       stageName: taskForm.stageName,
       taskType: taskForm.taskType,
       cycle: taskForm.cycle,
@@ -967,7 +977,7 @@ function confirmAddTask() {
   }
   showAddTask.value = false
   Object.assign(taskForm, {
-    taskName: '', stageName: '', taskType: 'design', cycle: 5,
+    taskName: '', stageId: undefined, stageName: '', taskType: 'design', cycle: 5,
     planStartDate: '', planEndDate: '',
     priority: 'normal', isMilestone: false, mainOwnerId: undefined, helperIds: [],
     description: '', outputRequirement: ''
