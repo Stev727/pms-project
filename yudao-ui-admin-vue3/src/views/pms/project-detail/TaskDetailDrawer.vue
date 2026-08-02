@@ -45,12 +45,12 @@
                 </el-form-item>
                 <el-form-item label="责任人">
                   <el-select v-model="editForm.mainOwnerId" filterable placeholder="选择责任人" class="w-full">
-                    <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="Number(m.userId)" />
+                    <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="String(m.userId)" />
                   </el-select>
                 </el-form-item>
                 <el-form-item label="协助人">
                   <el-select v-model="editForm.helperIds" multiple filterable placeholder="选择协助人" class="w-full">
-                    <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="Number(m.userId)" />
+                    <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="String(m.userId)" />
                   </el-select>
                 </el-form-item>
                 <el-form-item label="计划开始">
@@ -275,7 +275,7 @@
         </el-form-item>
         <el-form-item label="新责任人">
           <el-select v-model="newOwnerId" filterable placeholder="选择项目成员" class="w-full">
-            <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="Number(m.userId)" />
+            <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="String(m.userId)" />
           </el-select>
         </el-form-item>
       </el-form>
