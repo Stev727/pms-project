@@ -332,7 +332,7 @@
               <el-col :span="12">
                 <el-form-item label="所属阶段" required>
                   <el-select v-model="taskForm.stageId" :value-on-clear="undefined" placeholder="请选择" class="w-full" @change="onStageSelect">
-                    <el-option v-for="s in stageList" :key="s.stageId" :label="s.stageName" :value="Number(s.stageId)" />
+                    <el-option v-for="s in stageList" :key="s.stageId" :label="s.stageName" :value="String(s.stageId)" />
                   </el-select>
                 </el-form-item>
               </el-col>
@@ -657,14 +657,14 @@ const adjustedTasks = ref<any[]>([])
 const showAddTask = ref(false)
 const editingTask = ref<any>(null)
 // 阶段选择 @change 同步 stageName
-const onStageSelect = (stageId: number | undefined) => {
-  const stage = stageList.value.find(s => Number(s.stageId) === Number(stageId))
+const onStageSelect = (stageId: string | undefined) => {
+  const stage = stageList.value.find(s => String(s.stageId) === String(stageId))
   taskForm.stageName = stage?.stageName || ''
 }
 
 const taskForm = reactive({
   taskName: '',
-  stageId: undefined as number | undefined,
+  stageId: undefined as string | undefined,
   stageName: '',
   taskType: 'design',
   cycle: 5,
