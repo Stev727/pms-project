@@ -53,12 +53,12 @@ public class DingTalkTodoServiceImpl implements DingTalkTodoService {
     /**
      * 待办创建 API（新版）：路径参数为接收人 unionId
      */
-    private static final String CREATE_TODO_PATH = "/v1.0/todo/users/{unionId}/tasks";
+    private static final String CREATE_TODO_PATH = "/v1.0/todo/users/{}/tasks";
 
     /**
      * 待办完成 API（新版）：路径参数为接收人 unionId 与待办 taskId
      */
-    private static final String COMPLETE_TODO_PATH = "/v1.0/todo/users/{unionId}/tasks/{taskId}";
+    private static final String COMPLETE_TODO_PATH = "/v1.0/todo/users/{}/tasks/{}";
 
     @Resource
     private DingTalkApiService dingTalkApiService;
