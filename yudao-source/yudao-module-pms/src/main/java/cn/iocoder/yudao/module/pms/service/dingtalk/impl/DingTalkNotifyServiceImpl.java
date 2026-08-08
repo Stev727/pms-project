@@ -16,6 +16,9 @@ import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkApiService;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
+import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkTodoService;
+import cn.iocoder.yudao.module.pms.service.message.PmsMessageService;
+import cn.iocoder.yudao.module.pms.service.notification.TaskNotificationPolicy;
 import javax.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
@@ -31,6 +34,42 @@ import java.util.stream.Collectors;
 
 /**
  * 钉钉通知服务实现
+ *
+ * ============================ 改造说明（v2）============================
+ * 版本：v2（在线上原文件基础上改造，原方法签名/行为全部保留兼容）
+ *
+ * 【#4 消息提醒增强】
+ *   - {@link #sendNotifyDirect(String, String, List, String, String, Long)}
+ *     在原"发钉钉工作通知"基础上，同步落"站内消息"（pms_message）
+ *     并根据 triggerEvent 自动管理"钉钉待办"（创建/完成）。
+ *
+ *   - 站内消息：对每个 receiverUser 调 {@link PmsMessageService#sendMessage}，
+ *     落库失败仅记日志，不影响主流程。
+ *
+ *   - 钉钉待办触发规则：
+ *       task_dispatched / completion_submitted → 给每个 receiver 创建待办
+ *       task_review_approved / completion_approved / task_review_auto_passed
+ *         → 把该 taskId 下所有 pending 待办标记完成（业务完成即完结待办）
+ *
+ *   - 失败降级：站内消息 / 钉钉待办失败均不抛异常，不阻塞调用方。
+ *
+ *   - 错误码：{@link cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants#DINGTALK_TODO_FAILED}
+ *     仅作为"返回值标记"，本类不主动抛出该异常（保持 sendNotifyDirect 兼容）。
+ *
+ * 【通知规则打通】
+ *   - {@link TaskNotificationPolicy#isSupported} 白名单已扩展，新增事件：
+ *     task_review_submitted / task_review_approved / task_review_rejected /
+ *     task_review_auto_passed。运营可在通知规则页（pms_notify_rule）配置。
+ *
+ * 【与任务模块对接】
+ *   TaskServiceImpl 通过 5 处调用 sendNotifyDirect 触发通知：
+ *     1) dispatchTask        → triggerEvent=task_dispatched
+ *     2) reviewCompletion    → completion_approved / completion_rejected
+ *     3) submitReview(skip) → task_review_auto_passed
+ *     4) submitReview       → task_review_submitted
+ *     5) approveReview/rejectReview → task_review_approved / task_review_rejected
+ *   本服务方法签名保持原样，无需任务模块改动。
+ * =====================================================================
  */
 @Service
 @Slf4j
@@ -58,6 +97,18 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
     @Resource
     private JdbcTemplate jdbcTemplate;
+
+    /**
+     * #4 钉钉待办服务。失败降级，业务继续走。
+     */
+    @Resource
+    private DingTalkTodoService dingTalkTodoService;
+
+    /**
+     * #4 站内消息服务。落库失败仅记日志，不阻塞主流程。
+     */
+    @Resource
+    private PmsMessageService pmsMessageService;
 
     @Override
     public boolean sendNotifyByRule(Long ruleId, Map<String, Object> templateVars, List<Long> receiverUserIds) {
@@ -114,6 +165,13 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         String sendResult = taskId != null ? "task_id=" + taskId : "发送失败";
         saveNotifyLog(rule, title, content, receiverUserIds, sendStatus, sendResult, businessType, businessId);
 
+        // 7. #4 站内消息（同步落库，失败仅记日志）
+        sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, rule.getTriggerEvent());
+
+        // 8. #4 钉钉待办（按 triggerEvent 决定创建/完成）
+        handleDingTalkTodoSafely(rule.getTriggerEvent(), businessType, businessId,
+                receiverUserIds, title, content);
+
         return taskId != null;
     }
 
@@ -122,6 +180,10 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
                                      String triggerEvent, String businessType, Long businessId) {
         PmsDingTalkConfigDO config = dingTalkApiService.getConfig();
         if (config.getNotifyEnabled() == null || !config.getNotifyEnabled()) {
+            // #4：钉钉通知未启用，仍要落站内消息
+            sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
+            handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
+                    receiverUserIds, title, content);
             return false;
         }
 
@@ -132,6 +194,10 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
                     receiverUserIds, dingTalkUsers != null ? dingTalkUsers.size() : 0);
             saveNotifyLog(null, title, content, receiverUserIds, "failed",
                     "接收人缺少有效钉钉用户映射", businessType, businessId);
+            // #4：钉钉发不出，仍要落站内消息 + 待办
+            sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
+            handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
+                    receiverUserIds, title, content);
             return false;
         }
         String userIdList = dingTalkUsers.stream()
@@ -143,6 +209,9 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             log.warn("[DingTalkNotify] 接收人无钉钉用户映射: userIds={}", receiverUserIds);
             saveNotifyLog(null, title, content, receiverUserIds, "failed",
                     "接收人缺少有效钉钉用户映射", businessType, businessId);
+            sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
+            handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
+                    receiverUserIds, title, content);
             return false;
         }
 
@@ -150,6 +219,11 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         String sendStatus = taskId != null ? "success" : "failed";
         saveNotifyLog(null, title, content, receiverUserIds, sendStatus,
                 taskId != null ? "task_id=" + taskId : "发送失败", businessType, businessId);
+
+        // #4：同步落站内消息 + 待办管理（不论钉钉工作通知成功与否，都要做）
+        sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
+        handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
+                receiverUserIds, title, content);
 
         return taskId != null;
     }
@@ -415,4 +489,75 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         }
         return result;
     }
+
+    // ==================================================================
+    // #4 新增：站内消息 + 钉钉待办（私有方法，失败降级）
+    // ==================================================================
+
+    /**
+     * #4 站内消息：给每个 receiverUser 落一条站内消息。
+     * 落库失败仅记日志，不影响主流程。
+     */
+    private void sendInAppMessageSafely(List<Long> receiverUserIds, String title, String content,
+                                       String businessType, Long businessId, String triggerEvent) {
+        if (receiverUserIds == null || receiverUserIds.isEmpty()) {
+            return;
+        }
+        for (Long receiverId : receiverUserIds) {
+            try {
+                pmsMessageService.sendMessage(receiverId, title, content, businessType, businessId, triggerEvent);
+            } catch (Exception e) {
+                log.error("[DingTalkNotify] 站内消息落库失败: receiverId={}, bizType={}, bizId={}",
+                        receiverId, businessType, businessId, e);
+            }
+        }
+    }
+
+    /**
+     * #4 钉钉待办：根据 triggerEvent 决定创建或完成待办。
+     *
+     * <p>规则：
+     * <ul>
+     *   <li>task_dispatched / completion_submitted → 给每个 receiver 创建待办</li>
+     *   <li>task_review_approved / completion_approved / task_review_auto_passed
+     *         → 把该 taskId 下所有 pending 待办标记完成</li>
+     *   <li>其它事件（如 task_review_rejected / task_overdue）→ 不动待办</li>
+     * </ul>
+     *
+     * <p>注意：businessId 在本服务的语义是 taskId（调用方 TaskServiceImpl 全部传 taskId），
+     * 用作 dingTalkTodoService 的 bizTaskId 参数。
+     */
+    private void handleDingTalkTodoSafely(String triggerEvent, String businessType, Long businessId,
+                                         List<Long> receiverUserIds, String title, String content) {
+        if (!"task".equals(businessType) || businessId == null) {
+            return;
+        }
+        try {
+            if ("task_dispatched".equals(triggerEvent) || "completion_submitted".equals(triggerEvent)) {
+                // 派发 / 提交完成 → 为每个接收人创建待办
+                if (receiverUserIds == null || receiverUserIds.isEmpty()) {
+                    return;
+                }
+                for (Long receiverId : receiverUserIds) {
+                    try {
+                        dingTalkTodoService.createTodoForTask(businessId, receiverId, title, content);
+                    } catch (Exception e) {
+                        log.error("[DingTalkNotify] 创建钉钉待办失败: bizTaskId={}, userId={}",
+                                businessId, receiverId, e);
+                    }
+                }
+            } else if ("task_review_approved".equals(triggerEvent)
+                    || "completion_approved".equals(triggerEvent)
+                    || "task_review_auto_passed".equals(triggerEvent)) {
+                // 任务完成（审核通过 / 自动通过）→ 标记该 task 全部 pending 待办完成
+                dingTalkTodoService.completeTodoByTask(businessId);
+            }
+            // 其它事件：不动待办
+        } catch (Exception e) {
+            log.error("[DingTalkNotify] 钉钉待办管理异常: triggerEvent={}, bizTaskId={}",
+                    triggerEvent, businessId, e);
+        }
+    }
+
 }
+

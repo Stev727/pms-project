@@ -285,3 +285,43 @@ justauth:
     type: REDIS
     prefix: 'social_auth_state:' # 缓存前缀，目前只对 Redis 缓存生效，默认 JUSTAUTH::STATE::
     timeout: 24h # 超时时长，目前只对 Redis 缓存生效，默认 3 分钟
+
+# ============================================================
+# PMS 文档预览配置（#6 文件预览）
+# ============================================================
+# 将以下片段追加到 application-local.yaml（或 application.yaml）中。
+# 对应配置类：cn.iocoder.yudao.module.pms.config.PmsPreviewProperties
+#
+# 依赖：服务器需安装 LibreOffice headless（见 README_文档模块.md 安装步骤）。
+
+pms:
+  preview:
+    # 是否启用文档在线预览。关闭后预览接口直接返回不支持。
+    enabled: true
+    # LibreOffice soffice 可执行文件路径。
+    # Linux: /usr/bin/soffice（通常用包管理器安装后自动在此路径）
+    # Mac: /Applications/LibreOffice.app/Contents/MacOS/soffice
+    soffice-path: /usr/bin/soffice
+    # 预览缓存目录（转换后的 PDF 落盘位置）。启动时自动创建。
+    # 建议挂载到容量充足的磁盘，定期清理（见 sql/06_文件预览.sql 清理脚本）。
+    cache-dir: /home/ai/projects/rdpms/pms-preview-cache
+    # 单次转换超时时间（秒）。超时则认为转换失败，返回 DOCUMENT_CONVERT_FAILED。
+    timeout-seconds: 60
+    # 支持预览的文件扩展名（小写，不含点）。不在此列表内的返回不支持。
+    supported-extensions:
+      - pdf
+      - jpg
+      - jpeg
+      - png
+      - gif
+      - bmp
+      - webp
+      - doc
+      - docx
+      - xls
+      - xlsx
+      - ppt
+      - pptx
+      - txt
+      - md
+

@@ -1,6 +1,6 @@
 <template>
   <div class="p-20px">
-    <!-- 时间范围筛选 -->
+    <!-- 时间范围筛选 + 部门筛选器（#9 BI 部门数据权限） -->
     <ContentWrap>
       <div style="display: flex; justify-content: space-between; align-items: center">
         <el-form :inline="true" class="mb-0">
@@ -11,6 +11,20 @@
               <el-option label="本季度" value="quarter" />
               <el-option label="本年" value="year" />
             </el-select>
+          </el-form-item>
+          <!-- #9 部门筛选器：只显示自己有权看的部门树，默认选中自己所在部门 -->
+          <el-form-item v-if="deptTreeData.length > 0" label="部门">
+            <el-tree-select
+              v-model="selectedDeptId"
+              :data="deptTreeData"
+              :props="{ value: 'id', label: 'name', children: 'children' }"
+              node-key="id"
+              placeholder="全部可见部门"
+              clearable
+              check-strictly
+              style="width: 220px"
+              @change="loadData"
+            />
           </el-form-item>
           <el-form-item>
             <el-button @click="handleExport" v-if="false"><Icon icon="ep:download" class="mr-5px" />导出</el-button>
@@ -148,9 +162,27 @@
 </template>
 
 <script setup lang="ts">
-import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getTaskList, TaskVO } from '@/api/pms/task'
-import { getStageList, StageVO } from '@/api/pms/stage'
+/**
+ * PMS 看板（#9 BI 看板按部门数据权限 改造版）
+ *
+ * 改造点：
+ * 1. 顶部新增「部门筛选器」（el-tree-select），只显示自己有权看的部门树，
+ *    默认选中当前用户所在部门（如可用）；超管看到全部部门。
+ * 2. 数据源从原 getProjectList/getTaskList/getStageList 切换到
+ *    /pms/dashboard/{projects,tasks,stages,depts}，由后端 PmsDataScopeService
+ *    统一按"超管/部门负责人/普通用户"三档过滤。
+ * 3. 部门筛选器选中后，后端按 deptId 二次过滤（含下级部门）。
+ *
+ * 兼容性：原 ProjectVO/TaskVO/StageVO 结构不变，前端无需改类型。
+ */
+import {
+  getDashboardProjects,
+  getDashboardTasks,
+  getDashboardStages,
+  getVisibleDeptTree,
+  buildDeptTree,
+  PmsDeptTreeNode
+} from '@/api/pms/dashboard'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import {
@@ -158,16 +190,24 @@ import {
   formatDate, calcDelayDays
 } from '../pms-utils'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useUserStore } from '@/store/modules/user'
 import { useRouter } from 'vue-router'
 
 const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 const router = useRouter()
+const userStore = useUserStore()
 
 defineOptions({ name: 'PmsDashboard' })
 
 const timeRange = ref('month')
-const projectList = ref<ProjectVO[]>([])
-const taskList = ref<TaskVO[]>([])
+const projectList = ref<any[]>([])
+const taskList = ref<any[]>([])
+const stageList = ref<any[]>([])
+
+// #9 部门筛选器
+const deptTreeData = ref<PmsDeptTreeNode[]>([])
+const selectedDeptId = ref<number | string | undefined>(undefined)
+const userDeptIdLoaded = ref(false)
 
 // P0-1: 根据 timeRange 计算时间范围起止日期
 const timeRangeDates = computed(() => {
@@ -223,7 +263,6 @@ const filteredTasks = computed(() => {
     return ct >= start && ct <= end
   })
 })
-const stageList = ref<StageVO[]>([])
 
 // 图表 ref
 const phaseChartRef = ref<HTMLElement>()
@@ -349,13 +388,46 @@ const goToProject = (projectId: string | number) => {
   router.push(`/pms/project-detail/${projectId}`)
 }
 
+// ==================== #9 部门筛选器初始化 ====================
+/**
+ * 加载当前用户可见部门树，并默认选中"自己所在部门"（如有权看）。
+ * 超管/全局权限：后端返回全部部门树，默认不选中（让超管主动选）。
+ * 部门负责人：默认选中自己作为负责人的部门。
+ * 普通用户：默认选中自己所在部门。
+ */
+const loadDeptTree = async () => {
+  try {
+    const list = await getVisibleDeptTree()
+    deptTreeData.value = buildDeptTree(list || [])
+    if (deptTreeData.value.length === 0) {
+      return
+    }
+    // 仅首次加载时尝试默认选中
+    if (userDeptIdLoaded.value) return
+    userDeptIdLoaded.value = true
+    // 普通用户：默认选中自己所在部门（如果部门树里包含它）
+    const userDeptId = (userStore.getUser as any)?.deptId
+    if (userDeptId) {
+      const exists = (list || []).some((d) => d.id === userDeptId)
+      if (exists) {
+        selectedDeptId.value = userDeptId
+      }
+    }
+  } catch (e) {
+    // 部门树加载失败不影响主流程：不显示筛选器即可
+    console.warn('加载部门树失败', e)
+  }
+}
+
 // ==================== 数据加载 ====================
 const loadData = async () => {
   try {
+    // #9：走 BI 数据范围接口
+    const deptParam = selectedDeptId.value || undefined
     const [projects, tasks, stages] = await Promise.all([
-      getProjectList(),
-      getTaskList(),
-      getStageList()
+      getDashboardProjects(deptParam),
+      getDashboardTasks(deptParam),
+      getDashboardStages(deptParam)
     ])
     projectList.value = projects || []
     taskList.value = tasks || []
@@ -448,7 +520,6 @@ const renderDelayTrendChart = () => {
   const chart = getOrCreateChart(delayTrendChartRef.value)
   if (!chart) return
 
-  // P0-2: 使用实际延期数据按月份聚合，不再使用 Math.max 模拟
   const now = new Date()
   const months: string[] = []
   const monthKeys: string[] = []
@@ -459,19 +530,16 @@ const renderDelayTrendChart = () => {
     monthKeys.push(key)
   }
 
-  // 按月份聚合延期项目
   const delayedProjectByMonth = new Array(5).fill(0)
   projectList.value.forEach(p => {
     if (p.status === 'completed' || !p.planEndDate) return
     if (new Date(p.planEndDate) >= now || (p.progress || 0) >= 100) return
-    // 取项目的计划结束月份
     const endDate = new Date(p.planEndDate)
     const mKey = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`
     const idx = monthKeys.indexOf(mKey)
     if (idx >= 0) delayedProjectByMonth[idx]++
   })
 
-  // 按月份聚合延期任务
   const delayedTaskByMonth = new Array(5).fill(0)
   taskList.value.forEach(t => {
     if (calcDelayDays(t.planEndDate, t.completeStatus) <= 0) return
@@ -599,7 +667,7 @@ const getPhaseTagStyle = (stage?: string) => {
   const p = phaseColorMap[stage || '']
   return p ? `color: ${p.color}; background: ${p.bg}; border-color: ${p.border};` : ''
 }
-const getProgressColor = (project: ProjectVO) => {
+const getProgressColor = (project: any) => {
   if (project.status === 'completed') return '#00B42A'
   if (project.status !== 'completed' && project.planEndDate && new Date(project.planEndDate) < new Date() && (project.progress || 0) < 100) return '#F53F3F'
   return '#2468F2'
@@ -610,8 +678,10 @@ const handleExport = () => {
 }
 
 // ==================== 生命周期 ====================
-onMounted(() => {
-  loadData()
+onMounted(async () => {
+  // #9：先加载部门树（含默认选中），再加载 BI 数据
+  await loadDeptTree()
+  await loadData()
   window.addEventListener('resize', handleResize)
 })
 
@@ -705,3 +775,4 @@ const handleResize = () => {
   padding-bottom: 20px;
 }
 </style>
+

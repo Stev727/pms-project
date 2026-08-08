@@ -12,6 +12,20 @@ import java.time.LocalDateTime;
 
 /**
  * 任务 DO
+ *
+ * ============================ 改造说明 ============================
+ * 版本：v2（在线上原文件基础上改造，原有字段一个未动，仅在末尾追加新字段）
+ * 改造内容：
+ *   【#1 子任务层级】
+ *     + level        任务层级（1=顶层，最多 3 级）           对应列 `level`
+ *     + reviewerId   审核人（子任务默认=父任务主责任人）      对应列 reviewer_id
+ *   【#3 任务派发审核】
+ *     + assignerId    派发人                                 对应列 assigner_id
+ *     + reviewStatus  审核状态 none/submitted/completed/rejected  对应列 review_status
+ *     + reviewComment 审核意见 / 驳回原因                      对应列 review_comment
+ *     + reviewPolicy  任务级审核策略覆盖（空=跟随项目）         对应列 review_policy
+ * 依赖 DDL：sql/01_子任务层级.sql、sql/03_派发审核.sql
+ * ==================================================================
  */
 @TableName("pms_task")
 @Data
@@ -193,4 +207,44 @@ public class PmsTaskDO extends TenantBaseDO {
      */
     private String completionNote;
 
+    // ==================== #1 子任务层级（新增） ====================
+
+    /**
+     * 任务层级：1=顶层任务，2/3=子任务，最大 3 级。
+     * 由后端按父任务自动计算，前端不需要传。
+     */
+    private Integer level;
+
+    /**
+     * 审核人ID。
+     * 子任务默认 = 父任务的主责任人；顶层任务默认 = 项目经理。
+     * 创建 / 派发时若未显式指定，由后端自动解析填充。
+     */
+    private Long reviewerId;
+
+    // ==================== #3 任务派发审核（新增） ====================
+
+    /**
+     * 派发人ID：执行「派发任务」操作的用户
+     */
+    private Long assignerId;
+
+    /**
+     * 审核状态：none 未提交 / submitted 待审核 / completed 已通过 / rejected 已驳回。
+     * 取值见 PmsTaskReviewStatusEnum
+     */
+    private String reviewStatus;
+
+    /**
+     * 审核意见 / 驳回原因。驳回时必填
+     */
+    private String reviewComment;
+
+    /**
+     * 任务级审核策略覆盖：need_review / self_review / skip。
+     * 为空表示跟随项目级 pms_project.review_policy。取值见 PmsReviewPolicyEnum
+     */
+    private String reviewPolicy;
+
 }
+

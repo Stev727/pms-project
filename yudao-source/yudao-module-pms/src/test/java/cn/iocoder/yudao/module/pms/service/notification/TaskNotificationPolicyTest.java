@@ -14,8 +14,11 @@ class TaskNotificationPolicyTest {
     void dispatchReviewAndOverdueEventsAreAllowed() {
         assertEquals(Set.of(
                 "task_overdue", "task_dispatched",
+                "task_t_minus_3",
                 "change_submitted", "change_approved", "change_rejected",
-                "completion_submitted", "completion_approved", "completion_rejected"
+                "completion_submitted", "completion_approved", "completion_rejected",
+                "task_review_submitted", "task_review_approved", "task_review_rejected",
+                "task_review_auto_passed"
         ), TaskNotificationPolicy.supportedEvents());
         assertFalse(TaskNotificationPolicy.isSupported("task_created"));
         assertTrue(TaskNotificationPolicy.isSupported("task_dispatched"));

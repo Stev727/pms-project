@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.pms.service.changerecord.impl;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
 import cn.iocoder.yudao.module.pms.dal.dataobject.changerecord.PmsChangeRecordDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.changerecord.ChangeRecordMapper;
@@ -47,6 +48,9 @@ class ChangeRecordReviewTest {
         ProjectMapper projectMapper = mock(ProjectMapper.class);
         ReflectionTestUtils.setField(service, "changeRecordMapper", mapper);
         ReflectionTestUtils.setField(service, "projectMapper", projectMapper);
+        SecurityFrameworkService securityFrameworkService = mock(SecurityFrameworkService.class);
+        when(securityFrameworkService.hasAnyRoles("super_admin")).thenReturn(false);
+        ReflectionTestUtils.setField(service, "securityFrameworkService", securityFrameworkService);
         PmsProjectDO project = new PmsProjectDO();
         project.setProjectId(10L);
         project.setProjectManagerId(managerId);

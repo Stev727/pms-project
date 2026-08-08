@@ -1,12 +1,29 @@
 package cn.iocoder.yudao.module.pms.service.task;
 
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
+
 import java.util.List;
 
 /**
  * 任务 Service 接口
+ *
+ * ============================ 改造说明 ============================
+ * 版本：v2（在线上原文件基础上改造，原有 10 个方法签名一个未改，仅追加新方法）
+ * 改造内容：
+ *   【#1 子任务层级】
+ *     + getSubTaskList(parentTaskId)      查直接子任务
+ *     + getTaskTreeByProject(projectId)   查项目任务（含层级字段，前端自行组树）
+ *     + updateTaskProgress(taskId, progress) 进度填报并自底向上汇总父任务进度
+ *   【#3 任务派发审核】
+ *     + submitReview(taskId)                       提交审核
+ *     + approveReview(taskId, reviewComment)       审核通过
+ *     + rejectReview(taskId, reviewComment)        审核驳回（原因必填）
+ *     + getMyReviewTaskList(projectId, reviewStatus) 待我审核的任务
+ * ==================================================================
  */
 public interface TaskService {
+
+    // ==================== 既有方法（签名保持不变） ====================
 
     Long createTask(PmsTaskDO entity);
 
@@ -26,7 +43,7 @@ public interface TaskService {
 
     /**
      * 获取任务列表（含权限过滤）
-     * 非管理员只能看到自己作为主责任人或协助人的任务
+     * 非管理员只能看到自己作为主责任人、协助人或审核人的任务
      */
     List<PmsTaskDO> getTaskList();
 
@@ -38,4 +55,66 @@ public interface TaskService {
      */
     List<PmsTaskDO> getTaskList(Long mainOwnerId, Long projectId, String projectType);
 
+    // ==================== #1 子任务层级（新增） ====================
+
+    /**
+     * 查询某任务的直接子任务列表
+     *
+     * @param parentTaskId 父任务ID
+     * @return 子任务列表，按 sortOrder 升序
+     */
+    List<PmsTaskDO> getSubTaskList(Long parentTaskId);
+
+    /**
+     * 查询某项目的全部任务（含 level / parentTaskId 字段，由前端组装成树）。
+     * 与 getTaskList(null, projectId, null) 的区别：本方法不做「只看自己的任务」过滤，
+     * 保证子任务分派给他人时树形结构不会断层；仅在调用方已确认有项目查看权时使用。
+     *
+     * @param projectId 项目ID
+     */
+    List<PmsTaskDO> getTaskTreeByProject(Long projectId);
+
+    /**
+     * 进度填报。更新自身进度后，自底向上重算所有祖先任务的进度（v1 均权平均）。
+     *
+     * @param taskId   任务ID
+     * @param progress 进度 0-100
+     */
+    void updateTaskProgress(Long taskId, Integer progress);
+
+    // ==================== #3 任务派发审核（新增） ====================
+
+    /**
+     * 提交审核：review_status none/rejected -> submitted。
+     * 若审核策略为 self_review / skip，则直接置为 completed。
+     *
+     * @param taskId 任务ID
+     */
+    void submitReview(Long taskId);
+
+    /**
+     * 审核通过：review_status submitted -> completed，同时 complete_status -> completed、进度置 100。
+     *
+     * @param taskId        任务ID
+     * @param reviewComment 审核意见，可为空
+     */
+    void approveReview(Long taskId, String reviewComment);
+
+    /**
+     * 审核驳回：review_status submitted -> rejected，同时 complete_status 回到 in_progress。
+     *
+     * @param taskId        任务ID
+     * @param reviewComment 驳回原因，必填
+     */
+    void rejectReview(Long taskId, String reviewComment);
+
+    /**
+     * 查询「待我审核」的任务列表
+     *
+     * @param projectId    项目ID，可为空表示全部项目
+     * @param reviewStatus 审核状态，可为空默认 submitted
+     */
+    List<PmsTaskDO> getMyReviewTaskList(Long projectId, String reviewStatus);
+
 }
+

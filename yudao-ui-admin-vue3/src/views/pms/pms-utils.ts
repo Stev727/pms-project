@@ -34,6 +34,39 @@ export const taskStatusMap: Record<string, { textColor: string; bgColor: string;
   cancelled: { textColor: '#86909C', bgColor: '#F7F8FA', borderColor: '#C9CDD4', label: '已取消', type: 'info' },
 }
 
+// ==================== 任务审核状态映射（#3 派发审核） ====================
+// reviewStatus 与 completeStatus 是两套独立状态：
+//   none       未提交审核
+//   submitted  已提交，等待审核（对应 completeStatus=completion_pending_review）
+//   completed  审核通过（对应 completeStatus=completed）
+//   rejected   审核驳回（对应 completeStatus=in_progress，需返工）
+export const reviewStatusMap: Record<string, { label: string; textColor: string; bgColor: string; borderColor: string; type: string }> = {
+  none: { label: '未提交', textColor: '#4E5969', bgColor: '#F2F3F5', borderColor: '#E5E6EB', type: 'info' },
+  submitted: { label: '待审核', textColor: '#722ED1', bgColor: '#F0E8FF', borderColor: '#722ED1', type: 'primary' },
+  completed: { label: '审核通过', textColor: '#009A29', bgColor: '#E8FFEA', borderColor: '#00B42A', type: 'success' },
+  rejected: { label: '已驳回', textColor: '#CB2634', bgColor: '#FFECE8', borderColor: '#F53F3F', type: 'danger' },
+}
+
+export function getReviewStatusLabel(status?: string): string {
+  return reviewStatusMap[status || '']?.label || (status || '未提交')
+}
+
+export function getReviewStatusStyle(status?: string): string {
+  const s = reviewStatusMap[status || '']
+  return s ? `color: ${s.textColor}; background: ${s.bgColor}; border-color: ${s.borderColor};` : ''
+}
+
+// ==================== 审核策略映射（#3 派发审核） ====================
+export const reviewPolicyMap: Record<string, { label: string }> = {
+  need_review: { label: '需审核' },
+  self_review: { label: '自检' },
+  skip: { label: '免审' },
+}
+
+export function getReviewPolicyLabel(policy?: string): string {
+  return reviewPolicyMap[policy || '']?.label || '继承项目'
+}
+
 // ==================== 项目状态映射 ====================
 export const projectStatusMap: Record<string, { label: string; type: string; color: string }> = {
   initiating: { label: '立项中', type: 'info', color: '#86909C' },
@@ -201,3 +234,4 @@ export const generateNotifyContent = (template: string, task: any, project?: any
   content = content.replace(/\{项目名称\}/g, project?.projectName || '未知项目')
   return content
 }
+

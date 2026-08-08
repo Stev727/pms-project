@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.pms.service.task.impl;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
+import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
@@ -95,6 +96,7 @@ class TaskServiceImplTest {
         ReflectionTestUtils.setField(service, "taskMapper", mapper);
         PmsTaskDO task = task("completed");
         task.setProgress(30);
+        when(mapper.selectById(20L)).thenReturn(task);
 
         service.updateTask(task);
 
@@ -110,6 +112,7 @@ class TaskServiceImplTest {
         PmsTaskDO task = task("in_progress");
         task.setPlanStartDate(LocalDate.of(2026, 7, 31));
         task.setPlanEndDate(LocalDate.of(2026, 8, 1));
+        when(mapper.selectById(20L)).thenReturn(task);
 
         service.updateTask(task);
         assertEquals(2, task.getCycle());
@@ -144,6 +147,9 @@ class TaskServiceImplTest {
         ReflectionTestUtils.setField(service, "taskMapper", taskMapper);
         ReflectionTestUtils.setField(service, "projectMapper", projectMapper);
         ReflectionTestUtils.setField(service, "dingTalkNotifyService", mock(DingTalkNotifyService.class));
+        SecurityFrameworkService securityFrameworkService = mock(SecurityFrameworkService.class);
+        when(securityFrameworkService.hasAnyRoles("super_admin")).thenReturn(false);
+        ReflectionTestUtils.setField(service, "securityFrameworkService", securityFrameworkService);
         PmsProjectDO project = new PmsProjectDO();
         project.setProjectId(10L);
         project.setProjectName("PMS测试项目");

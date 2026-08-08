@@ -1,9 +1,9 @@
 <template>
   <div>
-    <!-- ���具栏 -->
+    <!-- 工具栏 -->
     <div class="task-toolbar">
       <div style="display: flex; gap: 8px; align-items: center">
-        <el-button type="primary" size="small" @click="$emit('create-task')" v-if="checkPermi(['pms:task:create'])">
+        <el-button type="primary" size="small" @click="$emit('create-task')" v-if="checkPermi(['pms:task:create']) && canProject(PERM.TASK_CREATE)">
           <Icon icon="ep:plus" class="mr-4px" />新建任务
         </el-button>
         <el-button size="small" @click="openStageDialog" v-if="isPM">
@@ -37,7 +37,7 @@
       <el-switch v-model="onlyMyTasks" active-text="仅看我负责的" @change="handleFilterChange" />
     </div>
 
-    <!-- 树形表格 -->
+    <!-- 树形表格（阶段 → 父任务 → 子任务，三级） -->
     <el-table
       :data="filteredTreeData"
       row-key="rowKey"
@@ -51,6 +51,10 @@
           <div style="display: flex; align-items: center; gap: 6px">
             <el-icon v-if="row.isStageRow" style="color: #2468F2"><Icon icon="ep:folder" /></el-icon>
             <el-icon v-else-if="row.isMilestone" style="color: #FF7D00"><Icon icon="ep:star-filled" /></el-icon>
+            <!-- 子任务层级标识 -->
+            <el-tag v-if="!row.isStageRow && (row.level || 1) > 1" type="info" size="small" effect="plain">
+              {{ row.parentTaskId ? '子任务' : '' }}
+            </el-tag>
             <span :style="{ fontWeight: row.isStageRow ? '600' : 'normal', color: row.isStageRow ? '#1D2129' : '#4E5969' }">
               {{ row.taskName }}
             </span>
@@ -71,6 +75,24 @@
               {{ getTaskStatusLabel(row.completeStatus) }}
             </el-tag>
           </template>
+        </template>
+      </el-table-column>
+      <!-- #3 派发审核：审核状态列 -->
+      <el-table-column label="审核" width="100">
+        <template #default="{ row }">
+          <template v-if="!row.isStageRow">
+            <el-tag :style="getReviewStatusStyle(row.reviewStatus)" size="small" effect="light">
+              {{ getReviewStatusLabel(row.reviewStatus) }}
+            </el-tag>
+          </template>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
+      <!-- #1 子任务层级：层级列 -->
+      <el-table-column label="层级" width="70">
+        <template #default="{ row }">
+          <span v-if="!row.isStageRow">{{ row.level || 1 }}级</span>
+          <span v-else>-</span>
         </template>
       </el-table-column>
       <el-table-column label="进度" width="120">
@@ -97,7 +119,7 @@
           </template>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
             <!-- 状态流转按钮 -->
@@ -142,11 +164,16 @@
               v-if="canTransition(row, 'resume')"
               link type="primary" size="small" @click.stop="handleTransition(row, 'resume')"
             >恢复</el-button>
-            <!-- 已完成任务：发起变更入口 (SEVERE-8 修复) -->
+            <!-- 已完成任务：发起变更入口 -->
             <el-button
               v-if="row.completeStatus === 'completed'"
               link type="warning" size="small" @click.stop="handleChangeRequest(row)"
             >发起变更</el-button>
+            <!-- 添加子任务（#1）：层级未达上限且拥有任务创建权限 -->
+            <el-button
+              v-if="canAddSubtask(row)"
+              link type="primary" size="small" @click.stop="$emit('add-subtask', row)"
+            >添加子任务</el-button>
             <!-- 详情 -->
             <el-button link type="primary" size="small" @click.stop="$emit('taskClick', row)">详情</el-button>
             <!-- 删除任务：PM可删所有，非PM只能删自己负责的 -->
@@ -164,7 +191,7 @@
       </el-table-column>
     </el-table>
 
-    <!-- 提交完成确认弹窗（输出物校验 - SEVERE-7 修复） -->
+    <!-- 提交完成确认弹窗（输出物校验） -->
     <el-dialog v-model="submitConfirmVisible" title="提交完成确认" width="480px">
       <div class="submit-confirm-content">
         <el-alert
@@ -219,14 +246,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { updateTask, dispatchTask, submitTaskCompletion, deleteTask } from '@/api/pms/task'
+import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
 import { StageVO, createStage, updateStage, deleteStage } from '@/api/pms/stage'
-import { taskStatusMap, formatDate, calcDelayDays } from '../pms-utils'
+import { taskStatusMap, formatDate, calcDelayDays, getReviewStatusLabel, getReviewStatusStyle } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useProjectPerm, PERM } from '@/hooks/pms/useProjectPerm'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCache } from '@/hooks/web/useCache'
 import { useUserStore } from '@/store/modules/user'
@@ -239,6 +267,15 @@ const props = defineProps<{
   tasks: TaskVO[]
   stages: StageVO[]
 }>()
+
+// ==================== 项目级权限（降级放行） ====================
+// 权限矩阵未初始化（空集合）或尚未加载完成 → 降级放行，避免存量项目误隐藏按钮
+const { loadPerm, can, permLoaded, permKeys } = useProjectPerm()
+const canProject = (permKey: string): boolean => {
+  if (!permLoaded.value) return true
+  if (permKeys.value.size === 0) return true
+  return can(permKey)
+}
 
 // 新建阶段
 const showStageDialog = ref(false)
@@ -349,7 +386,7 @@ const handleDeleteStage = async (row: TreeRow) => {
   }
 }
 
-// 删除任务
+// 删除任务（#1：后端已校验有无子任务，有子任务则拒绝）
 const handleDeleteTask = async (row: TreeRow) => {
   try {
     await ElMessageBox.confirm(
@@ -371,6 +408,7 @@ const emit = defineEmits<{
   taskClick: [task: TaskVO]
   refresh: []
   'create-task': []
+  'add-subtask': [parent: TaskVO]
   'start-change': [task: TaskVO]
 }>()
 
@@ -398,6 +436,26 @@ interface TreeRow extends TaskVO {
   hasChildren?: boolean
 }
 
+// 将任务列表按 parentTaskId 组装成层级树（仅在同一阶段分组内嵌套）
+function buildHierarchy(list: TaskVO[]): TreeRow[] {
+  const map = new Map<string, TreeRow>()
+  list.forEach(t => {
+    map.set(String(t.taskId), { ...t, rowKey: `task_${t.taskId}`, children: [], hasChildren: false })
+  })
+  const roots: TreeRow[] = []
+  map.forEach(node => {
+    const pid = node.parentTaskId
+    if (pid && map.has(String(pid))) {
+      const parent = map.get(String(pid))!
+      parent.children!.push(node)
+      parent.hasChildren = true
+    } else {
+      roots.push(node)
+    }
+  })
+  return roots
+}
+
 const filteredTreeData = computed<TreeRow[]>(() => {
   let tasks = props.tasks
 
@@ -412,7 +470,7 @@ const filteredTreeData = computed<TreeRow[]>(() => {
   if (filterStatus.value) {
     tasks = tasks.filter(t => t.completeStatus === filterStatus.value)
   }
-  // 我的任务筛选 (MINOR-5 修复)
+  // 我的任务筛选
   if (filterAssignee.value === 'mine') {
     const userInfo = useCache().wsCache.get('userInfo')
     const currentUserId = userInfo?.id
@@ -443,6 +501,12 @@ const filteredTreeData = computed<TreeRow[]>(() => {
   // 按阶段分组
   const tree: TreeRow[] = []
   const stageMap = new Map<string, TreeRow>()
+  const tasksByStage = new Map<string, TaskVO[]>()
+  for (const t of tasks) {
+    const key = String(t.stageId || '')
+    if (!tasksByStage.has(key)) tasksByStage.set(key, [])
+    tasksByStage.get(key)!.push(t)
+  }
 
   for (const stage of props.stages) {
     const stageRow: TreeRow = {
@@ -453,20 +517,15 @@ const filteredTreeData = computed<TreeRow[]>(() => {
       children: [],
       hasChildren: true
     }
+    // 阶段内任务按 parentTaskId 组装成层级树
+    stageRow.children = buildHierarchy(tasksByStage.get(String(stage.stageId)) || [])
     stageMap.set(String(stage.stageId), stageRow)
     tree.push(stageRow)
   }
 
-  for (const task of tasks) {
-    const stageKey = String(task.stageId || '')
-    const stageNode = stageMap.get(stageKey)
-    const taskRow: TreeRow = { ...task, rowKey: `task_${task.taskId}` }
-    if (stageNode) {
-      stageNode.children!.push(taskRow)
-    } else {
-      tree.push(taskRow)
-    }
-  }
+  // 无阶段归属的任务，统一挂在表格末尾（同样支持父子嵌套）
+  const noStageRoots = buildHierarchy(tasksByStage.get('') || [])
+  noStageRoots.forEach(r => tree.push(r))
 
   return tree  // 显示所有阶段（含空阶段），解决新建阶段后不显示的问题
 })
@@ -485,6 +544,14 @@ const isPM = computed(() => {
   const roles = userStore.getUser?.roles || []
   return Array.isArray(roles) && roles.includes('super_admin')
 })
+
+// #1 是否可添加子任务：层级未满 3 级
+const canAddSubtask = (row: TreeRow): boolean => {
+  if (!checkPermi(['pms:task:create'])) return false
+  if (!canProject(PERM.TASK_CREATE)) return false
+  const level = row.level || 1
+  return level < 3
+}
 
 // 过滤后的任务总数（不含阶段行）
 const filteredTaskCount = computed(() => {
@@ -526,7 +593,6 @@ function canTransition(row: TreeRow, action: string): boolean {
   const rule = transitionRules[action]
   if (!rule) return false
   // 仅检查状态流转条件（按钮权限由 v-if checkPermi 控制，角色校验由后端保障）
-  // P1-01 修复：移除 roles 检查，避免 currentUserRole 为空导致按钮不显示
   return rule.from.includes(row.completeStatus || '')
 }
 
@@ -535,7 +601,7 @@ async function handleTransition(row: TreeRow, action: string) {
   if (!rule) return
 
   if (action === 'submit') {
-    // 输出物校验 (SEVERE-7 修复)
+    // 输出物校验
     submitTarget.value = row
     try {
       const docs = await getDocumentList()
@@ -580,6 +646,19 @@ async function confirmSubmit() {
   }
 }
 
+// #1 进度填报（走聚合接口，父任务进度自动汇总）
+async function handleProgressChange(row: TreeRow, val: number) {
+  const value = Number(val) || 0
+  try {
+    await updateTaskProgress(row.taskId, value)
+    ElMessage.success('进度已更新，父任务进度已自动汇总')
+    emit('refresh')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '进度更新失败')
+    emit('refresh') // 失败则重新拉取，还原显示
+  }
+}
+
 function handleChangeRequest(row: TreeRow) {
   emit('start-change', row)
 }
@@ -600,6 +679,16 @@ const getProgressColor = (task: TaskVO) => {
 }
 const isDelayed = (task: TaskVO) => calcDelayDays(task.planEndDate, task.completeStatus) > 0
 const getDelayDays = (task: TaskVO) => calcDelayDays(task.planEndDate, task.completeStatus)
+
+onMounted(async () => {
+  ensureUsersLoaded()
+  // 加载项目级权限矩阵（未初始化时 useProjectPerm 内部按无权限处理，本组件 canProject 会降级放行）
+  if (props.projectId) {
+    try {
+      await loadPerm(props.projectId)
+    } catch { /* 权限模块未部署则忽略，按钮按降级策略显示 */ }
+  }
+})
 </script>
 
 <style scoped>
@@ -609,3 +698,4 @@ const getDelayDays = (task: TaskVO) => calcDelayDays(task.planEndDate, task.comp
 .mb-16px { margin-bottom: 16px; }
 .submit-confirm-content { }
 </style>
+

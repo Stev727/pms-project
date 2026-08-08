@@ -44,6 +44,13 @@
         <el-button @click="batchClose" :disabled="!selectedRows.length" v-if="checkPermi(['pms:quality:update'])">
           <Icon icon="ep:circle-close" class="mr-5px" />批量关闭
         </el-button>
+        <el-button @click="downloadImportTemplate" v-if="checkPermi(['pms:quality:query'])">
+          <Icon icon="ep:download" class="mr-5px" />下载导入模板
+        </el-button>
+        <el-button @click="chooseImportFile" :loading="importing" v-if="checkPermi(['pms:quality:create'])">
+          <Icon icon="ep:upload" class="mr-5px" />批量导入
+        </el-button>
+        <input ref="importFileInput" type="file" accept=".xlsx,.xls" class="hidden-file-input" @change="handleImportFile" />
       </div>
       <el-table :data="filteredList" v-loading="loading" border stripe @selection-change="onSelectionChange" @row-click="openDetail">
         <el-table-column type="selection" width="42" />
@@ -176,9 +183,18 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getQualityIssueList, createQualityIssue, updateQualityIssue, deleteQualityIssue, QualityIssueVO } from '@/api/pms/quality'
+import {
+  getQualityIssueList,
+  createQualityIssue,
+  updateQualityIssue,
+  deleteQualityIssue,
+  getQualityIssueImportTemplate,
+  importQualityIssues,
+  QualityIssueVO
+} from '@/api/pms/quality'
 import { formatDate, taskStatusMap, phaseColorMap } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
+import download from '@/utils/download'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 
@@ -189,6 +205,8 @@ const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames(
 const { projectMemberUsers, loadProjectMembers } = useProjectMembers()
 const loading = ref(false)
 const saving = ref(false)
+const importing = ref(false)
+const importFileInput = ref<HTMLInputElement>()
 const projectList = ref<ProjectVO[]>([])
 
 // ==================== 常量映射 ====================
@@ -230,6 +248,48 @@ const handleReset = () => Object.assign(queryParams, { issueNo: '', projectId: '
 
 const selectedRows = ref<any[]>([])
 const onSelectionChange = (rows: any[]) => { selectedRows.value = rows }
+
+const requireImportProject = () => {
+  if (queryParams.projectId) return true
+  message.warning('请先在筛选栏选择导入归属项目')
+  return false
+}
+
+const downloadImportTemplate = async () => {
+  if (!requireImportProject()) return
+  const data = await getQualityIssueImportTemplate(queryParams.projectId)
+  download.excel(data as Blob, '质量问题导入模板.xlsx')
+}
+
+const chooseImportFile = () => {
+  if (!requireImportProject()) return
+  importFileInput.value?.click()
+}
+
+const handleImportFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || !queryParams.projectId) return
+  importing.value = true
+  try {
+    const response: any = await importQualityIssues(queryParams.projectId, file)
+    const blob = response.data as Blob
+    if ((response.headers?.['content-type'] || '').includes('application/json')) {
+      const result = JSON.parse(await blob.text())
+      if (result.code !== 0) throw new Error(result.msg || '导入失败')
+      message.success(`导入成功，共 ${result.data?.successCount || 0} 条`)
+      await fetchList()
+    } else {
+      download.excel(blob, '质量问题导入错误.xlsx')
+      message.warning('导入数据校验未通过，已下载错误明细')
+    }
+  } catch (error: any) {
+    message.error(error?.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
 
 // ==================== 数据加载 ====================
 const fetchList = async () => {
@@ -389,6 +449,7 @@ onMounted(async () => {
 <style scoped lang="scss">
 .pms-quality {
   .table-toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .hidden-file-input { display: none; }
   .section-title {
     font-size: 15px; font-weight: 600; color: #1D2129;
     margin: 20px 0 12px; padding-left: 8px;

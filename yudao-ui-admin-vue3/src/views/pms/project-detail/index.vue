@@ -95,7 +95,7 @@
           <template v-if="activeTab === 'tasks'">
             <TaskListTab :project-id="projectId" :tasks="projectTasks" :stages="projectStages" :project="project"
               @task-click="openTaskDrawer" @refresh="onTaskDataRefresh" @create-task="openCreateTaskDialog"
-              @start-change="handleStartChange" />
+              @add-subtask="handleAddSubtask" @start-change="handleStartChange" />
           </template>
         </el-tab-pane>
 
@@ -143,6 +143,13 @@
           </template>
         </el-tab-pane>
 
+        <!-- 权限配置 Tab (#2 项目权限分级) -->
+        <el-tab-pane label="权限配置" name="permission">
+          <template v-if="activeTab === 'permission'">
+            <PermissionTab :project-id="projectId" />
+          </template>
+        </el-tab-pane>
+
         <!-- 文档 Tab (NEW - FATAL-4 修复) -->
         <el-tab-pane label="文档" name="documents">
           <template v-if="activeTab === 'documents'">
@@ -170,11 +177,18 @@
             <ChangesTab :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
           </template>
         </el-tab-pane>
+
+        <!-- 物料跟踪 Tab (NEW - #10 物料跟踪嵌入项目详情) -->
+        <el-tab-pane label="物料跟踪" name="material">
+          <template v-if="activeTab === 'material'">
+            <MaterialTrackTab :project-id="projectId" ref="materialTrackTabRef" />
+          </template>
+        </el-tab-pane>
       </el-tabs>
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
-    <TaskDetailDrawer ref="taskDrawerRef" :project="project" @refresh="onTaskDataRefresh" @create-change="handleStartChange" />
+    <TaskDetailDrawer ref="taskDrawerRef" :project="project" @refresh="onTaskDataRefresh" @create-change="handleStartChange" @create-subtask="handleAddSubtask" />
 
     <!-- P0: 项目编辑弹窗 -->
     <ProjectForm ref="projectFormRef" @success="loadProjectData" />
@@ -193,6 +207,26 @@
               <el-select v-model="taskForm.stageId" placeholder="请选择阶段" class="w-full">
                 <el-option v-for="s in projectStages" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
               </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <!-- #1 子任务层级：父任务选择 -->
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="父任务" prop="parentTaskId">
+              <el-select v-model="taskForm.parentTaskId" filterable clearable placeholder="不选则为顶层任务" class="w-full">
+                <el-option
+                  v-for="p in candidateParentTasks"
+                  :key="p.taskId"
+                  :label="`${p.taskCode ? p.taskCode + ' - ' : ''}${p.taskName}（${p.level || 1}级）`"
+                  :value="String(p.taskId)"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12" v-if="taskForm.parentTaskId">
+            <el-form-item label="层级预览">
+              <span style="font-size: 13px; color: #86909c">将创建为「{{ parentLevelPreview }} 级」子任务</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -288,6 +322,8 @@ import ApprovalTab from './ApprovalTab.vue'
 import ChangesTab from './ChangesTab.vue'
 import QualityTab from './QualityTab.vue'
 import ReviewCenterTab from './ReviewCenterTab.vue'
+import MaterialTrackTab from './MaterialTrackTab.vue' // #10 物料跟踪嵌入项目详情
+import PermissionTab from './PermissionTab.vue' // #2 项目权限分级配置
 import ProjectForm from '../project/ProjectForm.vue'
 import {
   projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
@@ -348,6 +384,7 @@ const documentsTabRef = ref()
 const approvalTabRef = ref()
 const qualityTabRef = ref()
 const changesTabRef = ref()
+const materialTrackTabRef = ref() // #10 物料跟踪 Tab
 const projectFormRef = ref()
 
 // ==================== 任务创建弹窗 ====================
@@ -356,6 +393,7 @@ const taskFormRef = ref<FormInstance>()
 const taskForm = reactive({
   taskName: '',
   stageId: undefined as number | undefined,
+  parentTaskId: undefined as string | undefined, // #1 子任务层级：父任务ID（雪花ID，string）
   taskType: 'design',
   priority: 'normal',
   cycle: 5,
@@ -368,6 +406,15 @@ const taskForm = reactive({
   outputRequirement: '',
   completionStandard: '',
   estimatedHours: undefined as number | undefined
+})
+
+// #1 子任务层级：可作为父任务的候选（层级未满 3 级）
+const candidateParentTasks = computed(() => projectTasks.value.filter((t: TaskVO) => (t.level || 1) < 3))
+// 选择父任务后预览将创建的层级
+const parentLevelPreview = computed(() => {
+  if (!taskForm.parentTaskId) return 1
+  const p = projectTasks.value.find((t: TaskVO) => String(t.taskId) === String(taskForm.parentTaskId))
+  return (p?.level || 1) + 1
 })
 const taskFormRules = {
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
@@ -574,6 +621,8 @@ const handleTabChange = (tab: string) => {
   if (tab === 'approvals') { nextTick(() => approvalTabRef.value?.refresh?.()) }
   if (tab === 'quality') { nextTick(() => qualityTabRef.value?.refresh?.()) }
   if (tab === 'changes') { nextTick(() => changesTabRef.value?.refresh?.()) }
+  // #10 物料跟踪 Tab 首次切换时刷新数据
+  if (tab === 'material') { nextTick(() => materialTrackTabRef.value?.refresh?.()) }
 }
 
 // ==================== 辅助函数 ====================
@@ -601,15 +650,22 @@ const openTaskDrawer = (task: TaskVO) => {
   taskDrawerRef.value?.open(task)
 }
 
-const openCreateTaskDialog = async () => {
+const openCreateTaskDialog = async (parentTask?: TaskVO) => {
   taskFormRef.value?.resetFields?.()
   Object.assign(taskForm, {
-    taskName: '', stageId: projectStages.value[0]?.stageId, taskType: 'design',
+    taskName: '', stageId: projectStages.value[0]?.stageId, parentTaskId: undefined, taskType: 'design',
     priority: 'normal', cycle: 5, planStartDate: project.value?.planStartDate || '',
     planEndDate: '', mainOwnerId: undefined, helperIds: [], isMilestone: false,
     completionStandard: '', estimatedHours: undefined,
     description: '', outputRequirement: ''
   })
+  // #1 子任务层级：由列表/抽屉的「添加子任务」进入时预填父任务，继承父任务所在阶段
+  if (parentTask?.taskId) {
+    taskForm.parentTaskId = String(parentTask.taskId)
+    if (parentTask.stageId) {
+      taskForm.stageId = parentTask.stageId as any
+    }
+  }
   // 加载当前项目成员列表作为责任人/协助人下拉数据源
   await loadProjectMembers(projectId.value)
   // 默认责任人为项目经理 (PM)
@@ -617,6 +673,11 @@ const openCreateTaskDialog = async () => {
     taskForm.mainOwnerId = Number(project.value.projectManagerId) as any
   }
   createTaskDialogVisible.value = true
+}
+
+// #1 子任务层级：列表/抽屉触发「添加子任务」时打开新建弹窗并预填父任务
+const handleAddSubtask = (parent: TaskVO) => {
+  openCreateTaskDialog(parent)
 }
 
 const submitCreateTask = async () => {
@@ -636,7 +697,9 @@ const submitCreateTask = async () => {
       projectId: projectId.value,
       completeStatus: 'not_started',
       progress: 0,
-      taskCode: taskCode
+      taskCode: taskCode,
+      // #1 子任务层级：携带父任务ID（空则顶层）
+      parentTaskId: taskForm.parentTaskId || null
     }
     if (Array.isArray(submitData.helperIds)) {
       submitData.helperIds = submitData.helperIds.length > 0
@@ -798,3 +861,4 @@ onMounted(async () => {
 }
 .mt-8px { margin-top: 8px; }
 </style>
+

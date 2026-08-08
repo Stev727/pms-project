@@ -11,6 +11,14 @@ import java.time.LocalDate;
 
 /**
  * 项目 DO
+ *
+ * ============================ 改造说明 ============================
+ * 版本：v2（在线上原文件基础上改造，原有字段一个未动，仅在末尾追加 1 个字段）
+ * 改造内容：
+ *   【#3 任务派发审核】
+ *     + reviewPolicy 项目默认审核策略（need_review/self_review/skip） 对应列 review_policy
+ * 依赖 DDL：sql/03_派发审核.sql
+ * ==================================================================
  */
 @TableName("pms_project")
 @Data
@@ -122,4 +130,13 @@ public class PmsProjectDO extends TenantBaseDO {
      */
     private Boolean archived;
 
+    // ==================== #3 任务派发审核（新增） ====================
+
+    /**
+     * 项目默认审核策略：need_review 需审核 / self_review 提交即通过 / skip 跳过审核。
+     * 单个任务可通过 pms_task.review_policy 覆盖。取值见 PmsReviewPolicyEnum
+     */
+    private String reviewPolicy;
+
 }
+

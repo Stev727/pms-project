@@ -1,3 +1,13 @@
+<!--
+  文档管理页面（#6/#7 改造）
+  改造点：
+  1. 预览改用 PreviewDialog 组件（替换原空壳 el-empty）
+  2. 下载改用 downloadDocument（带权限校验）
+  3. 删除原内嵌预览弹窗，引入 PreviewDialog
+
+  注：此页面为全局文档管理，文档权限字段（visibility/allowedRoleIds/allowDownload）
+  的编辑在「项目详情 → 文档 Tab」的上传弹窗中完成（依赖项目角色列表）。
+-->
 <template>
   <div class="pms-document">
     <ContentWrap>
@@ -45,6 +55,13 @@
               <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
             </el-table-column>
             <el-table-column prop="fileType" label="类型" width="70" align="center" />
+            <el-table-column label="可见范围" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag :type="getVisibilityTagType(row.visibility)" size="small">
+                  {{ getVisibilityLabel(row.visibility) }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="上传人" width="80">
               <template #default="{ row }">{{ getUserName(row.uploadBy) }}</template>
             </el-table-column>
@@ -72,26 +89,13 @@
       </el-row>
     </ContentWrap>
 
-    <!-- 预览弹窗 -->
-    <el-dialog v-model="previewVisible" :title="previewDocData?.fileName || '文档预览'" width="800px">
-      <div v-if="previewDocData" class="preview-content">
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="文档名称">{{ previewDocData.fileName }}</el-descriptions-item>
-          <el-descriptions-item label="分类">{{ getCategoryLabel(previewDocData.category) }}</el-descriptions-item>
-          <el-descriptions-item label="版本">v{{ previewDocData.versionNo }}</el-descriptions-item>
-          <el-descriptions-item label="大小">{{ formatSize(previewDocData.fileSize) }}</el-descriptions-item>
-          <el-descriptions-item label="文件类型">{{ previewDocData.fileType }}</el-descriptions-item>
-          <el-descriptions-item label="上传人">{{ getUserName(previewDocData.uploadBy) }}</el-descriptions-item>
-          <el-descriptions-item label="上传时间">{{ formatDate(previewDocData.uploadTime) }}</el-descriptions-item>
-          <el-descriptions-item label="下载次数">{{ previewDocData.downloadCount || 0 }}</el-descriptions-item>
-          <el-descriptions-item label="描述" :span="2">{{ previewDocData.description || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="标签" :span="2">{{ previewDocData.tags || '-' }}</el-descriptions-item>
-        </el-descriptions>
-        <div class="preview-area mt-16px">
-          <el-empty description="文档预览功能" />
-        </div>
-      </div>
-    </el-dialog>
+    <!-- #6 预览弹窗 -->
+    <PreviewDialog
+      v-model="previewVisible"
+      :doc-id="previewDocId"
+      :file-name="previewDocName"
+      @downloaded="loadDocuments"
+    />
   </div>
 </template>
 
@@ -101,10 +105,17 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, Document } from '@element-plus/icons-vue'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
-import { getAccessToken } from '@/utils/auth'
+import { getAccessToken, getTenantId } from '@/utils/auth'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
-import { getDocumentList, createDocument, updateDocument, deleteDocument } from '@/api/pms/document'
+import {
+  getDocumentList,
+  createDocument,
+  deleteDocument,
+  downloadDocument,
+  getVisibilityLabel
+} from '@/api/pms/document'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import PreviewDialog from './PreviewDialog.vue'
 
 defineOptions({ name: 'PmsDocument' })
 
@@ -112,14 +123,15 @@ const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const uploadHeaders = computed(() => ({
   Authorization: 'Bearer ' + getAccessToken(),
-  'tenant-id': '1'
+  'tenant-id': String(getTenantId() || '')
 }))
 
 const searchName = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const previewVisible = ref(false)
-const previewDocData = ref<any>(null)
+const previewDocId = ref<string>('')
+const previewDocName = ref<string>('')
 const selectedCategory = ref('')
 const loading = ref(false)
 const projects = ref<ProjectVO[]>([])
@@ -147,6 +159,12 @@ function getProjectName(projectId: any): string {
   return p?.projectName || '-'
 }
 
+function getVisibilityTagType(visibility?: string): 'info' | 'success' | 'warning' {
+  if (visibility === 'private') return 'warning'
+  if (visibility === 'role') return 'info'
+  return 'success'
+}
+
 const documentList = ref<any[]>([])
 
 const filteredDocs = computed(() => {
@@ -163,16 +181,18 @@ function handleCategoryClick(node: any) {
 function searchDocs() { currentPage.value = 1 }
 
 function previewDoc(row: any) {
-  previewDocData.value = row
+  previewDocId.value = String(row.documentId)
+  previewDocName.value = row.fileName || ''
   previewVisible.value = true
 }
 
-function downloadDoc(row: any) {
-  if (row.storagePath) {
-    window.open(row.storagePath, '_blank')
+async function downloadDoc(row: any) {
+  try {
+    await downloadDocument(row.documentId, row.fileName)
     ElMessage.success(`正在下载：${row.fileName}`)
-  } else {
-    ElMessage.warning('该文档没有可用的下载路径')
+    await loadDocuments()
+  } catch (e) {
+    console.error(e)
   }
 }
 
@@ -190,7 +210,6 @@ function removeDoc(row: any) {
 
 async function handleUploadSuccess(response: any, uploadFile?: any) {
   try {
-    // yudao 框架响应: { code: 0, data: 'url', msg: 'success' }
     if (response && typeof response === 'object' && response.code !== 0) {
       ElMessage.error(response.msg || '文件上传失败')
       return
@@ -205,7 +224,9 @@ async function handleUploadSuccess(response: any, uploadFile?: any) {
       category: selectedCategory.value || 'project_doc',
       storagePath: fileUrl,
       versionNo: '1.0',
-      fileSize: fileSize
+      fileSize: fileSize,
+      visibility: 'public',
+      allowDownload: true
     } as any)
     ElMessage.success('文档上传成功')
     await loadDocuments()
@@ -257,6 +278,5 @@ onMounted(() => { loadData() })
   .tree-header { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
   .list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   .filters { display: flex; gap: 8px; }
-  .preview-area { min-height: 300px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--el-border-color); border-radius: 4px; }
 }
 </style>

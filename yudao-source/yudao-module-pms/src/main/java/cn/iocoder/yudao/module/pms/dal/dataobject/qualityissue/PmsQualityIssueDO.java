@@ -6,10 +6,17 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.IdType;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
  * 质量问题 DO
+ *
+ * 改造说明（#8 质量问题 Excel 批量导入）：
+ *  - 末尾追加 5 个字段：issueTitle / issueType / discoveredDate / discovererId / dueDate
+ *  - 配套 SQL：generated/sql/08_质量导入.sql（幂等 ALTER TABLE）
+ *  - discoveredDate / dueDate 使用 LocalDate（按契约 §1.3 日期类型约定）
+ *  - discovererId 与 assigneeId 同为 Long，分别记录"发现人"和"责任人/指派人"系统用户ID
  */
 @TableName("pms_quality_issue")
 @Data
@@ -62,7 +69,7 @@ public class PmsQualityIssueDO extends TenantBaseDO {
     private String rootCauseDetail;
 
     /**
-     * 责任人
+     * 责任人（姓名字符串，保留用于显示；匹配到的 userId 写入 assigneeId）
      */
     private String responsiblePerson;
 
@@ -72,7 +79,7 @@ public class PmsQualityIssueDO extends TenantBaseDO {
     private String source;
 
     /**
-     * 指派人ID
+     * 指派人ID（导入场景下复用为"责任人 userId"，用于钉钉通知）
      */
     private Long assigneeId;
 
@@ -116,4 +123,32 @@ public class PmsQualityIssueDO extends TenantBaseDO {
      */
     private Long deptId;
 
+    // ==================== #8 新增字段 ====================
+
+    /**
+     * 问题标题（#8 新增）
+     */
+    private String issueTitle;
+
+    /**
+     * 问题类型（#8 新增，如 需求缺陷/实现缺陷/流程缺陷/测试遗漏）
+     */
+    private String issueType;
+
+    /**
+     * 发现日期（#8 新增）
+     */
+    private LocalDate discoveredDate;
+
+    /**
+     * 发现人ID（#8 新增，按姓名匹配 system_users.nickname 后写入）
+     */
+    private Long discovererId;
+
+    /**
+     * 期望完成日期（#8 新增）
+     */
+    private LocalDate dueDate;
+
 }
+

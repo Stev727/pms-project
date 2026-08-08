@@ -14,6 +14,10 @@
             <el-tag :style="getStatusStyle(task?.completeStatus)" size="small" effect="light">
               {{ getStatusLabel(task?.completeStatus) }}
             </el-tag>
+            <!-- #3 派发审核：审核状态 -->
+            <el-tag :style="getReviewStatusStyle(task?.reviewStatus)" size="small" effect="light">
+              {{ getReviewStatusLabel(task?.reviewStatus) }}
+            </el-tag>
             <span class="progress-text">进度 {{ task?.progress || 0 }}%</span>
             <el-progress :percentage="task?.progress || 0" :stroke-width="4" :show-text="false" style="width: 100px" />
           </div>
@@ -25,6 +29,16 @@
             <el-button v-if="!isEditMode && canSimulateDingtalk"
               type="success" plain size="small" @click="simulateDingtalkConfirm">
               <Icon icon="ep:chat-dot-round" class="mr-4px" />模拟钉钉确认
+            </el-button>
+            <!-- #3 派发审核：审核流程快捷按钮 -->
+            <el-button v-if="!isEditMode && canSubmitReview" type="warning" plain size="small" @click="handleSubmitReviewBtn">
+              <Icon icon="ep:upload" class="mr-4px" />提交审核
+            </el-button>
+            <el-button v-if="!isEditMode && canApproveReview" type="success" plain size="small" @click="handleApproveReviewBtn">
+              <Icon icon="ep:select" class="mr-4px" />通过
+            </el-button>
+            <el-button v-if="!isEditMode && canRejectReview" type="danger" plain size="small" @click="handleRejectReviewBtn">
+              <Icon icon="ep:close" class="mr-4px" />驳回
             </el-button>
             <el-button v-if="isEditMode" type="primary" size="small" :loading="savingEdit" @click="saveEdit">保存</el-button>
             <el-button v-if="isEditMode" size="small" @click="cancelEdit">取消</el-button>
@@ -101,6 +115,14 @@
               </el-descriptions-item>
               <el-descriptions-item label="负责人">{{ getOwnerName(task) }}</el-descriptions-item>
               <el-descriptions-item label="参与人">{{ getHelperNames(task) }}</el-descriptions-item>
+              <!-- #1 子任务层级 / #3 派发审核 新字段 -->
+              <el-descriptions-item label="层级">{{ (task?.level || 1) }} 级（{{ (task?.level || 1) >= 3 ? '已是最深层' : '可继续拆分' }}）</el-descriptions-item>
+              <el-descriptions-item label="审核人">{{ getUserName(task?.reviewerId) || '未指定' }}</el-descriptions-item>
+              <el-descriptions-item label="派发人">{{ task?.assignerId != null ? getUserName(task?.assignerId) : '未派发' }}</el-descriptions-item>
+              <el-descriptions-item label="审核策略">{{ getReviewPolicyLabel(task?.reviewPolicy) }}</el-descriptions-item>
+              <el-descriptions-item v-if="task?.reviewStatus === 'rejected'" label="驳回原因" :span="2">
+                <span style="color: #F53F3F">{{ task?.reviewComment || '未填写' }}</span>
+              </el-descriptions-item>
               <el-descriptions-item label="计划开始">{{ formatDate(task?.planStartDate) }}</el-descriptions-item>
               <el-descriptions-item label="计划结束">
                 <span :style="{ color: isDelayed ? '#F53F3F' : '' }">
@@ -188,6 +210,41 @@
               <el-table-column label="变更说明" prop="changeReason" show-overflow-tooltip />
             </el-table>
             <el-empty v-if="changeList.length === 0" description="暂无变更记录" :image-size="60" />
+          </el-tab-pane>
+
+          <!-- 子任务（#1 子任务层级） -->
+          <el-tab-pane label="子任务" name="subtasks">
+            <div style="margin-bottom: 12px">
+              <el-button type="primary" size="small" @click="openCreateSubtask" v-if="canCreateSubtask">
+                <Icon icon="ep:plus" class="mr-4px" />添加子任务
+              </el-button>
+            </div>
+            <el-table :data="subTaskList" stripe size="small" style="width: 100%">
+              <el-table-column label="任务名称" prop="taskName" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <el-button link type="primary" size="small" @click="openSubtask(row)">{{ row.taskName }}</el-button>
+                </template>
+              </el-table-column>
+              <el-table-column label="负责人" width="100">
+                <template #default="{ row }">{{ getUserName(row.mainOwnerId) }}</template>
+              </el-table-column>
+              <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag :style="getStatusStyle(row.completeStatus)" size="small" effect="light">{{ getStatusLabel(row.completeStatus) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="审核" width="90">
+                <template #default="{ row }">
+                  <el-tag :style="getReviewStatusStyle(row.reviewStatus)" size="small" effect="light">{{ getReviewStatusLabel(row.reviewStatus) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="进度" width="120">
+                <template #default="{ row }">
+                  <el-progress :percentage="row.progress || 0" :stroke-width="6" />
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-empty v-if="subTaskList.length === 0" description="暂无子任务" :image-size="60" />
           </el-tab-pane>
 
           <!-- 审核 -->
@@ -321,17 +378,21 @@
 </template>
 
 <script setup lang="ts">
-import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, submitTaskCompletion, reviewTaskCompletion } from '@/api/pms/task'
+import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, submitTaskCompletion, submitReview, approveReview, rejectReview, getSubTaskList } from '@/api/pms/task'
 import { getProjectMemberList } from '@/api/pms/member'
 import { getDocumentList, createDocument } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
 import {
   taskStatusMap, priorityMap, taskTypeOptions, priorityOptions,
-  formatDate, calcDelayDays, calcDuration
+  formatDate, calcDelayDays, calcDuration,
+  getReviewStatusLabel, getReviewStatusStyle, getReviewPolicyLabel
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { getAccessToken, getTenantId } from '@/utils/auth'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useProjectPerm, PERM } from '@/hooks/pms/useProjectPerm'
+import { ElMessageBox } from 'element-plus'
+import { useUserStore } from '@/store/modules/user'
 
 defineOptions({ name: 'TaskDetailDrawer' })
 
@@ -340,6 +401,7 @@ const emit = defineEmits<{
   (e: 'edit', task: TaskVO): void
   (e: 'upload', task: TaskVO): void
   (e: 'create-change', task: TaskVO): void
+  (e: 'create-subtask', task: TaskVO): void
 }>()
 const message = useMessage()
 const { getUserName, getUserNamesFromStr } = useUserNames()
@@ -357,6 +419,81 @@ const showEditOwnerDialog = ref(false)
 const newOwnerId = ref('')
 const changingOwner = ref(false)
 const projectMembers = ref<any[]>([])
+
+// 项目级权限（降级放行）：矩阵未初始化或尚未加载完成 → 放行，避免存量项目误隐藏按钮
+const { loadPerm: loadPermP, can: canProjectPerm, permLoaded: permLoadedP, permKeys: permKeysP } = useProjectPerm()
+const canProject = (permKey: string): boolean => {
+  if (!permLoadedP.value) return true
+  if (permKeysP.value.size === 0) return true
+  return canProjectPerm(permKey)
+}
+
+// ==================== #1 子任务层级：子任务列表 ====================
+const subTaskList = ref<any[]>([])
+const loadSubTasks = async () => {
+  if (!task.value?.taskId) {
+    subTaskList.value = []
+    return
+  }
+  try {
+    const res = await getSubTaskList(String(task.value.taskId))
+    subTaskList.value = (res as any[]) || []
+  } catch {
+    subTaskList.value = []
+  }
+}
+// 点击子任务：在当前抽屉内打开该子任务详情（重新拉取最新数据）
+const openSubtask = (row: TaskVO) => {
+  open(row)
+}
+// 添加子任务：通知父组件打开新建弹窗并预填父任务
+const openCreateSubtask = () => {
+  if (task.value) emit('create-subtask', task.value)
+}
+
+// 当前登录用户身份
+const currentUserId = computed(() => String(useUserStore().getUser?.id || ''))
+const isPM = computed(() => {
+  if (!props.project?.projectManagerId) return false
+  if (String(props.project.projectManagerId) === currentUserId.value) return true
+  const roles = useUserStore().getUser?.roles || []
+  return Array.isArray(roles) && roles.includes('super_admin')
+})
+
+// ==================== #3 派发审核：权限与动作 ====================
+// 是否为该任务的审核人（或项目经理/超管）
+const canReviewTask = computed(() => {
+  if (!task.value) return false
+  const reviewerId = task.value.reviewerId
+  const isReviewer = reviewerId != null && String(reviewerId) === currentUserId.value
+  return isReviewer || isPM.value
+})
+// 提交审核：任务处于进行中/延期/已驳回，且当前用户是负责人或 PM，且审核状态非进行中/已完成
+const canSubmitReview = computed(() => {
+  if (!task.value || isEditMode.value) return false
+  if (!checkPermi(['pms:task:update'])) return false
+  if (!canProject(PERM.TASK_REVIEW)) return false
+  const statusOk = ['in_progress', 'delayed', 'rejected'].includes(task.value.completeStatus || '')
+  if (!statusOk) return false
+  const rs = task.value.reviewStatus || 'none'
+  if (rs === 'submitted' || rs === 'completed') return false
+  const isOwner = String(task.value.mainOwnerId) === currentUserId.value
+  return isOwner || isPM.value
+})
+const canApproveReview = computed(() => {
+  if (!task.value || isEditMode.value) return false
+  if (task.value.reviewStatus !== 'submitted') return false
+  return canReviewTask.value
+})
+const canRejectReview = computed(() => canApproveReview.value)
+// 添加子任务：层级未满 3 级且拥有任务创建菜单权限
+const canCreateSubtask = computed(() => {
+  if (!task.value) return false
+  if (!checkPermi(['pms:task:create'])) return false
+  if (!canProject(PERM.TASK_CREATE)) return false
+  return (task.value.level || 1) < 3
+})
+
 // 编辑模式状态
 const isEditMode = ref(false)
 const savingEdit = ref(false)
@@ -389,7 +526,8 @@ const reviewForm = reactive({
 
 // ==================== 权限 ====================
 const canReportProgress = computed(() => checkPermi(['pms:task:update']))
-const canReview = computed(() => checkPermi(['pms:task:update']))
+// 审核表单仅对审核人 / 项目经理 / 超管开放
+const canReview = computed(() => canReviewTask.value)
 
 // ==================== 计算属性 ====================
 const isDelayed = computed(() => {
@@ -423,15 +561,21 @@ const open = async (taskData: TaskVO) => {
   // 加载项目成员列表（用于修改责任人）
   await loadProjectMembers()
 
+  // 加载项目级权限矩阵（未初始化时降级放行，不影响功能）
+  if (props.project?.projectId) {
+    try { await loadPermP(props.project.projectId) } catch { /* 权限模块未部署则忽略 */ }
+  }
+
   // 优先从 task 数据加载
   progressList.value = task.value?.progressHistory || []
   outputList.value = task.value?.outputList || []
   changeList.value = task.value?.changeList || []
 
-  // 加载进度记录、输出物、变更记录
+  // 加载进度记录、输出物、变更记录、子任务
   await loadProgressList()
   await loadOutputList()
   await loadChangeList()
+  await loadSubTasks()
 }
 
 const loadProgressList = async () => {
@@ -770,6 +914,7 @@ const handleFileSelect = async (event: Event) => {
   target.value = ''
 }
 
+// #3 派发审核：审核 Tab 内提交（通过/驳回），走新的 review 接口
 const handleSubmitReview = async () => {
   if (!reviewForm.result) {
     message.warning('请选择审核结果')
@@ -781,18 +926,76 @@ const handleSubmitReview = async () => {
       message.warning('驳回必须填写审核意见')
       return
     }
-    await reviewTaskCompletion(
-      task.value.taskId,
-      reviewForm.result === 'approved',
-      reviewForm.opinion || undefined
-    )
-    message.success(`审核已${reviewForm.result === 'approved' ? '通过' : '驳回'}`)
+    if (reviewForm.result === 'approved') {
+      await approveReview(task.value.taskId, reviewForm.opinion || undefined)
+      message.success('审核已通过')
+    } else {
+      await rejectReview(task.value.taskId, reviewForm.opinion)
+      message.success('已驳回')
+    }
     reviewForm.result = ''
     reviewForm.opinion = ''
+    // 重新拉取最新任务数据并刷新子任务列表
+    try {
+      const fresh = await getTask(String(task.value.taskId))
+      if (fresh) task.value = fresh
+    } catch { /* ignore */ }
+    await loadSubTasks()
     emit('refresh')
   } catch (e) {
     console.error('审核提交失败', e)
     message.error('审核提交失败')
+  }
+}
+
+// #3 派发审核：头部快捷按钮 —— 提交审核
+const handleSubmitReviewBtn = async () => {
+  if (!task.value) return
+  try {
+    await submitReview(task.value.taskId)
+    message.success('已提交审核，等待审核人处理')
+    const fresh = await getTask(String(task.value.taskId))
+    if (fresh) task.value = fresh
+    emit('refresh')
+  } catch (e: any) {
+    message.error(e?.message || '提交失败')
+  }
+}
+
+// #3 派发审核：头部快捷按钮 —— 审核通过
+const handleApproveReviewBtn = async () => {
+  if (!task.value) return
+  try {
+    await approveReview(task.value.taskId)
+    message.success('审核已通过')
+    const fresh = await getTask(String(task.value.taskId))
+    if (fresh) task.value = fresh
+    await loadSubTasks()
+    emit('refresh')
+  } catch (e: any) {
+    message.error(e?.message || '审核失败')
+  }
+}
+
+// #3 派发审核：头部快捷按钮 —— 审核驳回（原因必填）
+const handleRejectReviewBtn = async () => {
+  if (!task.value) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入驳回原因', '驳回审核', {
+      confirmButtonText: '确认驳回',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValidator: (v: string) => (v && v.trim()) ? true : '驳回原因必填'
+    })
+    await rejectReview(task.value.taskId, value.trim())
+    message.success('已驳回')
+    const fresh = await getTask(String(task.value.taskId))
+    if (fresh) task.value = fresh
+    await loadSubTasks()
+    emit('refresh')
+  } catch (e: any) {
+    if (e === 'cancel' || e?.action === 'cancel') return
+    message.error(e?.message || '驳回失败')
   }
 }
 
@@ -915,3 +1118,4 @@ const disabledTaskEndDate = (date: Date) => {
   padding: 16px 0;
 }
 </style>
+

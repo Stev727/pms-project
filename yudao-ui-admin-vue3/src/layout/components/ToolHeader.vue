@@ -1,4 +1,20 @@
 <script lang="tsx">
+/**
+ * 顶栏工具条（含 PMS 消息铃铛改造点）
+ *
+ * ============================ 改造说明（v2）============================
+ * 版本：v2（#4 站内消息中心：在原有「系统站内信」Message 后追加 PMS 业务消息铃铛）
+ *
+ * 改造点：
+ *   - 新增 import PmsMessageBell from '@/components/pms/MessageBell/index.vue'
+ *   - 在原有 `<Message />` 之后追加 `<PmsMessageBell />`，
+ *     v-if 由 checkPermi(['pms:message:list']) 控制
+ *
+ * 兼容性：原系统站内信 Message 组件、IM 入口、UserInfo 等保持不变；
+ * 两套铃铛并存：系统站内信走 /system/notify/* 接口，
+ * PMS 业务消息走 /pms/message/* 接口，互不影响。
+ * =====================================================================
+ */
 import { defineComponent, computed } from 'vue'
 import router from '@/router'
 import { Message } from '@/layout/components/Message'
@@ -16,6 +32,8 @@ import { useDesign } from '@/hooks/web/useDesign'
 import { Icon } from '@/components/Icon'
 import { checkPermi } from '@/utils/permission'
 import { isHorizontalMenuLayout, isMixedNavLayout, isTwoColumnLayout } from '@/utils/layout'
+// #4 PMS 业务消息铃铛
+import PmsMessageBell from '@/components/pms/MessageBell/index.vue'
 
 const { getPrefixCls, variables } = useDesign()
 
@@ -49,6 +67,9 @@ const message = computed(() => appStore.getMessage)
 
 // IM即时通讯图标
 const im = computed(() => appStore.getIm)
+
+// #4 是否显示 PMS 业务消息铃铛（菜单权限点 pms:message:list）
+const showPmsMessage = computed(() => checkPermi(['pms:message:list']))
 
 // 租户切换权限
 const hasTenantVisitPermission = computed(
@@ -119,6 +140,10 @@ export default defineComponent({
           {message.value ? (
             <Message class="custom-hover" color="var(--top-header-text-color)"></Message>
           ) : undefined}
+          {/* #4 PMS 业务消息铃铛：与系统站内信并存，菜单权限点控制显示 */}
+          {showPmsMessage.value ? (
+            <PmsMessageBell class="custom-hover" color="var(--top-header-text-color)" />
+          ) : undefined}
           {/* IM 聊天入口 */}
           {im.value ? (
             <div class="custom-hover" onClick={goToChat}>
@@ -140,3 +165,4 @@ $prefix-cls: #{$namespace}-tool-header;
   transition: left var(--transition-time-02);
 }
 </style>
+

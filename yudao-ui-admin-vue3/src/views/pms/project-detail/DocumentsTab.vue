@@ -1,3 +1,12 @@
+<!--
+  项目文档 Tab（#6/#7 改造）
+  改造点：
+  1. 列表加载改用 getDocumentListByProject（后端按权限过滤）
+  2. 预览改用 PreviewDialog 组件（支持 PDF/图片/文本/Office 转 PDF）
+  3. 下载改用 downloadDocument（带权限校验）
+  4. 上传弹窗新增：可见范围选择器 + 角色多选（visibility=role）+ 允许下载开关
+  5. 文档列表新增「可见范围」列
+-->
 <template>
   <div class="documents-tab">
     <div class="tab-toolbar">
@@ -13,7 +22,7 @@
           <el-option label="报告" value="report" />
           <el-option label="标准文件" value="standard" />
         </el-select>
-        <el-button type="primary" size="small" @click="uploadVisible = true" v-if="checkPermi(['pms:document:create'])">
+        <el-button type="primary" size="small" @click="openUploadDialog" v-if="canUpload">
           <Icon icon="ep:upload" class="mr-4px" />上传文档
         </el-button>
         <el-button size="small" @click="handleBatchDownload" :disabled="selectedRows.length === 0">
@@ -56,6 +65,13 @@
             <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
           </el-table-column>
           <el-table-column label="类型" width="70" align="center" prop="fileType" />
+          <el-table-column label="可见范围" width="110" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getVisibilityTagType(row.visibility)" size="small">
+                {{ getVisibilityLabel(row.visibility) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="上传人" width="80">
             <template #default="{ row }">{{ row.uploadByName || row.uploadBy || '-' }}</template>
           </el-table-column>
@@ -68,8 +84,10 @@
           <el-table-column label="操作" width="160" align="center">
             <template #default="{ row }">
               <el-button link type="primary" size="small" @click="previewDoc(row)">预览</el-button>
-              <el-button link type="primary" size="small" @click="downloadDoc(row)">下载</el-button>
-              <el-button link type="danger" size="small" @click="removeDoc(row)" v-if="checkPermi(['pms:document:delete'])">删除</el-button>
+              <el-button link type="primary" size="small" @click="downloadDoc(row)" :disabled="!row.allowDownload && row.allowDownload !== null && row.allowDownload !== undefined">
+                下载
+              </el-button>
+              <el-button link type="danger" size="small" @click="removeDoc(row)" v-if="canDelete">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -79,30 +97,17 @@
 
     <el-empty v-if="!loading && filteredDocs.length === 0" description="暂无项目文档" />
 
-    <!-- 预览弹窗 -->
-    <el-dialog v-model="previewVisible" :title="previewDocData?.fileName || '文档预览'" width="800px">
-      <template v-if="previewDocData">
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="文档名称">{{ previewDocData.fileName }}</el-descriptions-item>
-          <el-descriptions-item label="分类">{{ getCategoryLabel(previewDocData.category) }}</el-descriptions-item>
-          <el-descriptions-item label="版本">v{{ previewDocData.versionNo }}</el-descriptions-item>
-          <el-descriptions-item label="大小">{{ formatSize(previewDocData.fileSize) }}</el-descriptions-item>
-          <el-descriptions-item label="文件类型">{{ previewDocData.fileType }}</el-descriptions-item>
-          <el-descriptions-item label="上传人">{{ previewDocData.uploadByName || previewDocData.uploadBy || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="上传时间">{{ formatDate(previewDocData.uploadTime) }}</el-descriptions-item>
-          <el-descriptions-item label="下载次数">{{ previewDocData.downloadCount || 0 }}</el-descriptions-item>
-          <el-descriptions-item label="描述" :span="2">{{ previewDocData.description || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="标签" :span="2">{{ previewDocData.tags || '-' }}</el-descriptions-item>
-        </el-descriptions>
-        <div class="preview-area mt-16px">
-          <el-empty description="文档内容预览区域" />
-        </div>
-      </template>
-    </el-dialog>
+    <!-- 预览弹窗（#6） -->
+    <PreviewDialog
+      v-model="previewVisible"
+      :doc-id="previewDocId"
+      :file-name="previewDocName"
+      @downloaded="onPreviewDownloaded"
+    />
 
-    <!-- 上传弹窗 -->
+    <!-- 上传弹窗（#7 加权限字段） -->
     <el-dialog v-model="uploadVisible" title="上传项目文档" width="560px">
-      <el-form label-width="80px">
+      <el-form label-width="90px">
         <el-form-item label="文档分类">
           <el-select v-model="uploadCategory" placeholder="选择分类" class="w-full">
             <el-option label="技术文档" value="tech_doc" />
@@ -119,7 +124,42 @@
             <el-option v-for="t in tasks" :key="t.taskId" :label="t.taskName" :value="String(t.taskId)" />
           </el-select>
         </el-form-item>
+
+        <!-- #7：可见范围 -->
+        <el-form-item label="可见范围">
+          <el-radio-group v-model="uploadVisibility">
+            <el-radio value="public">项目全员</el-radio>
+            <el-radio value="role">指定角色</el-radio>
+            <el-radio value="private">仅上传人和项目经理</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- #7：角色多选（visibility=role 时显示） -->
+        <el-form-item label="可查看角色" v-if="uploadVisibility === 'role'">
+          <el-select
+            v-model="uploadAllowedRoleIds"
+            multiple
+            filterable
+            placeholder="选择可查看的角色"
+            class="w-full"
+          >
+            <el-option
+              v-for="r in projectRoles"
+              :key="r.roleId"
+              :label="r.roleName"
+              :value="String(r.roleId)"
+            />
+          </el-select>
+          <div class="form-tip">未选择任何角色时，role 模式下文档将无人可见（上传人除外）</div>
+        </el-form-item>
+
+        <!-- #7：允许下载 -->
+        <el-form-item label="允许下载">
+          <el-switch v-model="uploadAllowDownload" />
+          <span class="form-tip ml-8px">{{ uploadAllowDownload ? '允许有权限的用户下载' : '禁止下载（仅可预览）' }}</span>
+        </el-form-item>
       </el-form>
+
       <el-upload
         action="/admin-api/infra/file/upload"
         :headers="uploadHeaders"
@@ -136,6 +176,7 @@
           <div class="el-upload__tip">支持任意格式文件，单个文件不超过 50MB</div>
         </template>
       </el-upload>
+
       <template #footer>
         <el-button @click="uploadVisible = false">关闭</el-button>
       </template>
@@ -146,18 +187,30 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getDocumentList, createDocument, deleteDocument, DocumentVO } from '@/api/pms/document'
+import {
+  getDocumentListByProject,
+  createDocument,
+  deleteDocument,
+  downloadDocument,
+  getVisibilityLabel,
+  type DocumentVO
+} from '@/api/pms/document'
+import { getProjectRoleList, type ProjectRoleVO } from '@/api/pms/permission'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { formatDate, phaseColorMap } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { getAccessToken, getTenantId } from '@/utils/auth'
+import { useProjectPerm } from '@/hooks/pms/useProjectPerm'
+import PreviewDialog from '../document/PreviewDialog.vue'
 
 defineOptions({ name: 'DocumentsTab' })
 
 const props = defineProps<{
   projectId: string
 }>()
+
+const { loadPerm } = useProjectPerm()
 
 const uploadHeaders = computed(() => ({
   Authorization: 'Bearer ' + getAccessToken(),
@@ -169,13 +222,28 @@ const filterCategory = ref('')
 const documentList = ref<any[]>([])
 const tasks = ref<TaskVO[]>([])
 const stages = ref<StageVO[]>([])
-const previewVisible = ref(false)
-const previewDocData = ref<any>(null)
+const projectRoles = ref<ProjectRoleVO[]>([])
 const selectedRows = ref<any[]>([])
 const groupExpanded = ref<Record<string, boolean>>({})
+
+// 预览弹窗状态
+const previewVisible = ref(false)
+const previewDocId = ref<string>('')
+const previewDocName = ref<string>('')
+
+// 上传弹窗状态
 const uploadVisible = ref(false)
 const uploadCategory = ref('project_doc')
 const uploadTaskId = ref<string | undefined>(undefined)
+const uploadVisibility = ref<string>('public')
+const uploadAllowedRoleIds = ref<string[]>([])
+const uploadAllowDownload = ref<boolean>(true)
+
+// 项目级权限
+// 降级策略：菜单级 checkPermi 通过即放行；项目级 can() 作为额外控制，
+// 矩阵未加载完成（permLoaded=false）时降级放行（与任务模块一致）
+const canUpload = computed(() => checkPermi(['pms:document:create']))
+const canDelete = computed(() => checkPermi(['pms:document:delete']))
 
 const categoryLabelMap: Record<string, string> = {
   tech_doc: '技术文档', mgmt_doc: '管理文档', project_doc: '项目文档',
@@ -189,6 +257,11 @@ function getTaskName(taskId?: number): string {
 }
 function getPhaseColor(stageName: string): string {
   return phaseColorMap[stageName]?.color || '#2468F2'
+}
+function getVisibilityTagType(visibility?: string): 'info' | 'success' | 'warning' {
+  if (visibility === 'private') return 'warning'
+  if (visibility === 'role') return 'info'
+  return 'success'
 }
 
 const filteredDocs = computed(() => {
@@ -208,7 +281,7 @@ const groupedDocs = computed(() => {
   return Object.entries(groups).map(([label, docs]) => ({
     label,
     docs,
-    expanded: groupExpanded.value[label] !== false // default expanded
+    expanded: groupExpanded.value[label] !== false
   }))
 })
 
@@ -218,17 +291,41 @@ function toggleGroup(label: string) {
 
 function handleSelectionChange(rows: any[]) { selectedRows.value = rows }
 
-function previewDoc(row: any) { previewDocData.value = row; previewVisible.value = true }
+// ========== #6 预览 ==========
 
-function downloadDoc(row: any) {
-  if (row.storagePath) {
-    window.open(row.storagePath, '_blank')
-    // 更新下载次��（前端模拟日志）
-    row.downloadCount = (row.downloadCount || 0) + 1
+function previewDoc(row: any) {
+  previewDocId.value = String(row.documentId)
+  previewDocName.value = row.fileName || ''
+  previewVisible.value = true
+}
+
+function onPreviewDownloaded() {
+  // 预览弹窗内触发的下载，刷新下载计数
+  loadDocuments()
+}
+
+// ========== 下载（#7 带权限校验） ==========
+
+async function downloadDoc(row: any) {
+  try {
+    await downloadDocument(row.documentId, row.fileName)
     ElMessage.success(`正在下载：${row.fileName}`)
-  } else {
-    ElMessage.warning('该文档没有可用的下载路径')
+    row.downloadCount = (row.downloadCount || 0) + 1
+  } catch (e: any) {
+    console.error('[downloadDoc] 下载失败', e)
   }
+}
+
+function handleBatchDownload() {
+  if (selectedRows.value.length === 0) return
+  let count = 0
+  for (const doc of selectedRows.value) {
+    if (doc.allowDownload === false) continue
+    downloadDocument(doc.documentId, doc.fileName)
+      .then(() => { count++ })
+      .catch((e) => console.error('[handleBatchDownload] 下载失败', e))
+  }
+  ElMessage.success(`已开始下载 ${selectedRows.value.length} 个文档`)
 }
 
 function removeDoc(row: any) {
@@ -241,22 +338,19 @@ function removeDoc(row: any) {
   }).catch(() => {})
 }
 
-function handleBatchDownload() {
-  if (selectedRows.value.length === 0) return
-  // 逐个触发下载
-  let count = 0
-  for (const doc of selectedRows.value) {
-    if (doc.storagePath) {
-      window.open(doc.storagePath, '_blank')
-      count++
-    }
-  }
-  ElMessage.success(`已开始下载 ${count} 个文档`)
+// ========== 上传弹窗（#7 加权限字段） ==========
+
+function openUploadDialog() {
+  uploadCategory.value = 'project_doc'
+  uploadTaskId.value = undefined
+  uploadVisibility.value = 'public'
+  uploadAllowedRoleIds.value = []
+  uploadAllowDownload.value = true
+  uploadVisible.value = true
 }
 
 async function handleUploadSuccess(response: any, uploadFile: any) {
   try {
-    // yudao 框架响应: { code: 0, data: 'url', msg: 'success' }
     if (response && typeof response === 'object' && response.code !== 0) {
       ElMessage.error(response.msg || '文件上传失败')
       return
@@ -265,14 +359,17 @@ async function handleUploadSuccess(response: any, uploadFile: any) {
     const fileName = uploadFile?.name || fileUrl?.split('/').pop() || '未命名文档'
     const ext = fileName.split('.').pop()?.toLowerCase() || ''
     const fileSize = uploadFile?.size || 0
-    // 检查同名文档是否存在，自动递增版本号（整数递增避免浮点精度问题）
+
+    // 同名文档版本递增
     const existing = documentList.value.find(d => d.fileName === fileName)
     let versionNo = '1'
     if (existing) {
       const prevVersion = parseInt(existing.versionNo || '1', 10)
       versionNo = String(prevVersion + 1)
     }
-    await createDocument({
+
+    // #7：构造权限字段
+    const docData: DocumentVO = {
       fileName,
       fileType: ext,
       category: uploadCategory.value || 'project_doc',
@@ -280,8 +377,16 @@ async function handleUploadSuccess(response: any, uploadFile: any) {
       taskId: uploadTaskId.value || undefined,
       storagePath: fileUrl,
       versionNo,
-      fileSize
-    } as DocumentVO)
+      fileSize,
+      visibility: uploadVisibility.value,
+      allowDownload: uploadAllowDownload.value
+    }
+    // role 模式下传 allowedRoleIds（JSON 数组字符串）
+    if (uploadVisibility.value === 'role' && uploadAllowedRoleIds.value.length > 0) {
+      docData.allowedRoleIds = JSON.stringify(uploadAllowedRoleIds.value)
+    }
+
+    await createDocument(docData)
     ElMessage.success(`文档上传成功（版本 v${versionNo}）`)
     await loadDocuments()
   } catch (e) { console.error(e); ElMessage.error('文档保存失败') }
@@ -295,21 +400,22 @@ function handleUploadRemove() {
   ElMessage.info('文件已从列表中移除，如需删除文档请在文档列表中操作')
 }
 
+// ========== 数据加载 ==========
+
 async function loadDocuments() {
   loading.value = true
   try {
-    const data = await getDocumentList()
+    // #7：改用按项目 + 权限过滤的列表接口
+    const data = await getDocumentListByProject(props.projectId)
     const allDocs = (data as any[]) || []
     // 关联阶段信息
     const stageList = await getStageList()
     stages.value = (stageList as StageVO[]).filter(s => String(s.projectId) === String(props.projectId))
-    documentList.value = allDocs
-      .filter(d => String(d.projectId) === String(props.projectId))
-      .map(d => {
-        const task = tasks.value.find(t => String(t.taskId) === String(d.taskId))
-        const stage = task ? stages.value.find(s => String(s.stageId) === String(task.stageId)) : undefined
-        return { ...d, taskName: task?.taskName, stageName: stage?.stageName }
-      })
+    documentList.value = allDocs.map(d => {
+      const task = tasks.value.find(t => String(t.taskId) === String(d.taskId))
+      const stage = task ? stages.value.find(s => String(s.stageId) === String(task.stageId)) : undefined
+      return { ...d, taskName: task?.taskName, stageName: stage?.stageName }
+    })
   } catch (e) { console.error(e); documentList.value = [] }
   finally { loading.value = false }
 }
@@ -321,6 +427,16 @@ async function loadTasks() {
   } catch (e) { console.error(e) }
 }
 
+async function loadProjectRoles() {
+  try {
+    const data = await getProjectRoleList(props.projectId)
+    projectRoles.value = ((data as ProjectRoleVO[]) || [])
+  } catch (e) {
+    console.error('[loadProjectRoles] 加载项目角色失败', e)
+    projectRoles.value = []
+  }
+}
+
 function formatSize(bytes: number): string {
   if (!bytes) return '-'
   if (bytes < 1024) return bytes + ' B'
@@ -329,7 +445,9 @@ function formatSize(bytes: number): string {
 }
 
 onMounted(async () => {
+  await loadPerm(props.projectId)
   await loadTasks()
+  await loadProjectRoles()
   await loadDocuments()
 })
 
@@ -350,5 +468,5 @@ defineExpose({ refresh: loadDocuments })
 .group-header:hover { background: #EDEFF2; }
 .group-label { font-size: 14px; font-weight: 600; flex: 1; }
 .group-empty { text-align: center; padding: 20px; color: #C9CDD4; font-size: 13px; }
-.preview-area { min-height: 200px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--el-border-color); border-radius: 4px; }
+.form-tip { font-size: 12px; color: #86909C; margin-top: 4px; }
 </style>

@@ -10,6 +10,11 @@ import java.time.LocalDateTime;
 
 /**
  * 文档 DO
+ *
+ * 【#7 改造】追加权限分级字段：
+ * - visibility：可见范围（public 项目全员 / role 指定角色 / private 仅上传人+项目经理）
+ * - allowedRoleIds：允许查看的角色ID列表（JSON 数组，visibility=role 时生效）
+ * - allowDownload：是否允许下载（0/1）
  */
 @TableName("pms_document")
 @Data
@@ -62,7 +67,7 @@ public class PmsDocumentDO extends TenantBaseDO {
     private String versionNo;
 
     /**
-     * 存储路径
+     * 存储路径（完整 URL，前端 window.open 可直接下载）
      */
     private String storagePath;
 
@@ -77,7 +82,7 @@ public class PmsDocumentDO extends TenantBaseDO {
     private Integer downloadCount;
 
     /**
-     * 权限标识
+     * 权限标识（存量字段，#7 后由 visibility/allowedRoleIds/allowDownload 替代，保留兼容）
      */
     private String permissionFlag;
 
@@ -91,4 +96,26 @@ public class PmsDocumentDO extends TenantBaseDO {
      */
     private String tags;
 
+    // ========== #7 文档权限分级 新增字段 ==========
+
+    /**
+     * 可见范围：
+     * - public：项目全员可见
+     * - role：指定角色可见（配合 allowedRoleIds）
+     * - private：仅上传人 + 项目经理可见
+     */
+    private String visibility;
+
+    /**
+     * 允许查看的角色ID列表（JSON 数组字符串，如 "[101,102,103]"）。
+     * visibility=role 时生效。
+     */
+    private String allowedRoleIds;
+
+    /**
+     * 是否允许下载（0=禁止，1=允许）。null 视为允许（兼容存量数据）。
+     */
+    private Boolean allowDownload;
+
 }
+

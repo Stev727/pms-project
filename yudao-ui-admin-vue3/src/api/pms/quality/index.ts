@@ -43,3 +43,22 @@ export const getQualityIssue = (id: string | number) => {
 export const getQualityIssueList = () => {
   return request.get({ url: '/pms/quality-issue/list' })
 }
+
+export const getQualityIssueImportTemplate = (projectId?: string | number) => {
+  return request.download({
+    url: '/pms/quality-issue/get-import-template',
+    params: projectId ? { projectId } : undefined
+  })
+}
+
+export const importQualityIssues = (projectId: string | number, file: File) => {
+  const data = new FormData()
+  data.append('file', file)
+  return request.postOriginal({
+    url: '/pms/quality-issue/import',
+    params: { projectId },
+    data,
+    headersType: 'multipart/form-data',
+    responseType: 'blob'
+  })
+}
