@@ -109,12 +109,10 @@ public class DingTalkTodoServiceImpl implements DingTalkTodoService {
         // 调用新版 API 创建待办
         String url = properties.getNewApiBaseUrl() + StrUtil.format(CREATE_TODO_PATH, unionId);
         JSONObject body = new JSONObject();
-        body.set("summary", title);
+        // 钉钉新版待办 API(v1.0/todo) 创建接口的必填参数为 subject（非旧版的 summary）；
+        // 该接口仅接受官方文档字段：subject/description/creatorId 等，没有 priority/sourceName。
+        body.set("subject", title);
         body.set("description", StrUtil.isBlank(content) ? "" : content);
-        // sourceName 用于在钉钉待办里显示来源
-        body.set("sourceName", "PMS");
-        // priority: L / M / H（低/中/高），PMS 任务派发默认中等
-        body.set("priority", "M");
         // creatorId：钉钉要求 unionId，这里用接收人自己的（自派自待办场景），
         // 跨用户派发场景下用任务派发人的 unionId 更合适，但当前 sendNotifyDirect 调用方
         // 传入的 receiverUserIds 即为接收人，无法区分派发人。简化处理：用接收人自己。
@@ -147,6 +145,10 @@ public class DingTalkTodoServiceImpl implements DingTalkTodoService {
             if (StrUtil.isBlank(dingTodoId)) {
                 // 钉钉某些版本字段名可能是 task_id
                 dingTodoId = result.getStr("task_id");
+            }
+            if (StrUtil.isBlank(dingTodoId)) {
+                // 钉钉新版待办 API(v1.0/todo) 返回的待办 ID 字段名为 id
+                dingTodoId = result.getStr("id");
             }
             if (StrUtil.isBlank(dingTodoId)) {
                 log.warn("[DingTalkTodo] 创建待办响应缺少 taskId: bizTaskId={}, userId={}, result={}",
@@ -300,7 +302,9 @@ public class DingTalkTodoServiceImpl implements DingTalkTodoService {
             record.setStatus(STATUS_FAILED);
             record.setTitle(title);
             record.setContent(content);
-            record.setFailReason(failReason);
+            // fail_reason 列为 varchar(512)，避免超长响应 JSON 导致落库失败
+            record.setFailReason(failReason != null && failReason.length() > 500
+                    ? failReason.substring(0, 500) : failReason);
             if (existing == null) {
                 dingTalkTodoMapper.insert(record);
             } else {
