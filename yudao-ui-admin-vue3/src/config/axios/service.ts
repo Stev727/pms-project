@@ -255,8 +255,13 @@ service.interceptors.response.use(
 )
 
 const refreshToken = async () => {
-  axios.defaults.headers.common['tenant-id'] = getTenantId()
-  return await axios.post(base_url + '/system/auth/refresh-token?refreshToken=' + getRefreshToken())
+  // 续期请求绕过 service 实例拦截器（拦截器在 line 78 才注入 tenant-id），
+  // 这里用裸 axios.post，需显式带 tenant-id 头；缓存缺失时回退默认租户 1，避免续期 400「未传递租户编号」
+  return await axios.post(
+    base_url + '/system/auth/refresh-token?refreshToken=' + getRefreshToken(),
+    null,
+    { headers: { 'tenant-id': getTenantId() || 1 } }
+  )
 }
 const handleAuthorized = () => {
   const { t } = useI18n()
