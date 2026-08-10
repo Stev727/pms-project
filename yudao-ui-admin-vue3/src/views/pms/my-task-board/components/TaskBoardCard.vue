@@ -1,36 +1,46 @@
 <template>
-  <el-card class="task-board-card" shadow="hover" @click="emit('detail', task)">
-    <div class="card-top">
-      <span class="card-name" :title="task.taskName">{{ task.taskName }}</span>
+  <div class="task-row" @click="emit('detail', task)">
+    <!-- 名称 + 标签 -->
+    <div class="row-name" :title="task.taskName">
+      <span class="name-text">{{ task.taskName }}</span>
       <el-tag v-if="isDaily" type="warning" size="small" effect="plain">日常</el-tag>
       <el-tag v-else-if="projectName" type="primary" size="small" effect="plain">{{ projectName }}</el-tag>
+      <el-tag v-if="task.taskType" size="small" effect="plain" type="info">{{ typeName }}</el-tag>
     </div>
 
-    <div class="card-meta">
-      <span>👤 {{ ownerName }}</span>
-      <span v-if="task.taskType">· {{ typeName }}</span>
-    </div>
+    <!-- 责任人 -->
+    <div class="row-cell cell-owner">👤 {{ ownerName }}</div>
 
-    <div class="card-dates">
-      <span>📅 {{ formatDate(task.planStartDate) }} ~ {{ formatDate(task.planEndDate) }}</span>
+    <!-- 计划日期 -->
+    <div class="row-cell cell-date">📅 {{ formatDate(task.planStartDate) }} ~ {{ formatDate(task.planEndDate) }}</div>
+
+    <!-- 延期 -->
+    <div class="row-cell cell-delay">
       <el-tag v-if="delayDays > 0" type="danger" size="small" effect="dark" class="delay-tag">延期 {{ delayDays }} 天</el-tag>
+      <span v-else class="cell-empty">—</span>
     </div>
 
-    <div class="card-bottom">
+    <!-- 状态 -->
+    <div class="row-cell cell-status">
       <el-tag :style="statusStyle" size="small" effect="light">{{ statusLabel }}</el-tag>
-      <el-tag v-if="reviewBadge" :type="reviewBadge.type" size="small" effect="plain">{{ reviewBadge.label }}</el-tag>
-      <el-progress
-        :percentage="task.progress || 0"
-        :stroke-width="6"
-        :color="progressColor"
-        style="flex: 1; margin-left: 8px"
-      />
     </div>
 
-    <div v-if="canSubmitReview" class="card-action" @click.stop>
+    <!-- 审核 -->
+    <div class="row-cell cell-review">
+      <el-tag v-if="reviewBadge" :type="reviewBadge.type" size="small" effect="plain">{{ reviewBadge.label }}</el-tag>
+      <span v-else class="cell-empty">—</span>
+    </div>
+
+    <!-- 进度 -->
+    <div class="row-cell cell-progress">
+      <el-progress :percentage="task.progress || 0" :stroke-width="6" :color="progressColor" />
+    </div>
+
+    <!-- 操作 -->
+    <div v-if="canSubmitReview" class="row-action" @click.stop>
       <el-button size="small" type="success" @click="emit('submit-review', task)">提交审核</el-button>
     </div>
-  </el-card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -91,42 +101,60 @@ const canSubmitReview = computed(() => {
 </script>
 
 <style scoped>
-.task-board-card {
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.task-board-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-.card-top {
+.task-row {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  min-height: 48px;
 }
-.card-name {
+.task-row:hover {
+  background: #f7f8fa;
+  border-color: #c9cdd4;
+}
+/* 名称区：弹性占据主要空间 */
+.row-name {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   color: #1d2129;
   overflow: hidden;
+}
+.name-text {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
 }
-.card-meta {
-  font-size: 12px;
-  color: #4e5969;
-  margin-bottom: 4px;
-}
-.card-dates {
+/* 通用单元格 */
+.row-cell {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   font-size: 12px;
-  color: #86909c;
-  margin-bottom: 8px;
+  color: #4e5969;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
+.cell-empty {
+  color: #c9cdd4;
+}
+.cell-owner { width: 96px; }
+.cell-date { width: 180px; }
+.cell-delay { width: 90px; justify-content: flex-start; }
+.cell-status { width: 80px; justify-content: flex-start; }
+.cell-review { width: 70px; justify-content: flex-start; }
+.cell-progress { width: 120px; }
+.row-action { flex-shrink: 0; margin-left: auto; }
 .delay-tag {
   font-weight: 600;
   animation: pulse 1.8s ease-in-out infinite;
@@ -134,14 +162,5 @@ const canSubmitReview = computed(() => {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.65; }
-}
-.card-bottom {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.card-action {
-  margin-top: 10px;
-  text-align: right;
 }
 </style>

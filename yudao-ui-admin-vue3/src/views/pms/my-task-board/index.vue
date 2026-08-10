@@ -75,7 +75,7 @@
           </div>
         </template>
         <el-empty v-if="board.legacyTasks.length === 0" description="无历史遗留任务" :image-size="60" />
-        <div v-else class="task-grid">
+        <div v-else class="task-list">
           <task-board-card
             v-for="t in board.legacyTasks"
             :key="t.taskId"
@@ -103,7 +103,7 @@
             {{ group.projectName }}
             <el-tag size="small" effect="plain" class="ml-8px">{{ group.tasks.length }}</el-tag>
           </div>
-          <div class="task-grid">
+          <div class="task-list">
             <task-board-card
               v-for="t in group.tasks"
               :key="t.taskId"
@@ -126,7 +126,7 @@
           </div>
         </template>
         <el-empty v-if="board.dailyTasks.length === 0" description="该范围内无日常任务" :image-size="60" />
-        <div v-else class="task-grid">
+        <div v-else class="task-list">
           <task-board-card
             v-for="t in board.dailyTasks"
             :key="t.taskId"
@@ -552,10 +552,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
 }
-.task-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .ml-8px {
   margin-left: 8px;
