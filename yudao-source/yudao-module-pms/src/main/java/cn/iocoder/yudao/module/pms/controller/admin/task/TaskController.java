@@ -103,6 +103,15 @@ public class TaskController {
         return success(true);
     }
 
+    @PostMapping("/accept")
+    @Operation(summary = "接收任务（待接收→进行中）")
+    @Parameter(name = "taskId", description = "任务编号", required = true)
+    @PreAuthorize("@ss.hasPermission('pms:task:accept')")
+    public CommonResult<Boolean> accept(@RequestParam("taskId") Long taskId) {
+        taskService.acceptTask(taskId);
+        return success(true);
+    }
+
     @DeleteMapping("/delete")
     @Operation(summary = "删除任务")
     @Parameter(name = "id", description = "编号", required = true)

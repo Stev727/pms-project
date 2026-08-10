@@ -32,9 +32,26 @@ public interface DingTalkApiService {
      * @param userIdList   接收人钉钉 userid 列表（逗号分隔）
      * @param title        消息标题
      * @param content      消息内容
+     * @param detailUrl    可选：详情跳转 URL；非空时使用 link 卡片样式，整卡片可点击跳转到该地址
      * @return 任务 ID
      */
-    String sendWorkNotification(String userIdList, String title, String content);
+    String sendWorkNotification(String userIdList, String title, String content, String detailUrl);
+
+    /**
+     * 以机器人身份发送单聊消息（批量）
+     *
+     * <p>当 pms_dingtalk_config.robot_code 非空时，通知以独立机器人身份发送，
+     * 用户在钉钉中看到的是机器人对话（如「项目管理」），而非「工作通知:xxx」。
+     *
+     * <p>API: POST https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend
+     *
+     * @param userIds      接收人钉钉 userid 列表（每次最多 20 个）
+     * @param title        消息标题
+     * @param content      消息内容
+     * @param detailUrl    可选：详情跳转 URL；非空时使用 sampleLink 卡片，否则用 sampleText
+     * @return processQueryKey（消息 ID），失败返回 null
+     */
+    String sendRobotMessage(List<String> userIds, String title, String content, String detailUrl);
 
     /**
      * 发送 Markdown 工作通知

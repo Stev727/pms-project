@@ -32,9 +32,10 @@ public interface DingTalkTodoService {
      * @param userId    接收人系统用户ID
      * @param title     待办标题
      * @param content   待办内容
+     * @param detailUrl 可选：详情跳转 URL（在钉钉待办 APP 中点击直接跳转到该地址）
      * @return true 创建成功（含"已存在跳过"视为成功）；false 失败（已落 failed 记录）
      */
-    boolean createTodoForTask(Long bizTaskId, Long userId, String title, String content);
+    boolean createTodoForTask(Long bizTaskId, Long userId, String title, String content, String detailUrl);
 
     /**
      * 把某 PMS 任务关联的全部钉钉待办标记为完成。

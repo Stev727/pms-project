@@ -392,7 +392,8 @@ public class QualityIssueServiceImpl implements QualityIssueService {
                         java.util.Collections.singletonList(receiverId),
                         NOTIFY_TRIGGER_EVENT,
                         NOTIFY_BUSINESS_TYPE,
-                        issue.getIssueId());
+                        issue.getIssueId(),
+                        null);
                 if (!ok) {
                     log.warn("[notifyQualityIssueCreated][issueId={} 钉钉通知发送失败]", issue.getIssueId());
                 }

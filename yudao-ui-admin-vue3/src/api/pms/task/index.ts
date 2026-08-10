@@ -94,6 +94,10 @@ export const simulateDingtalkConfirm = (taskId: string | number) => {
   return request.post({ url: '/pms/task/simulate-dingtalk-confirm', params: { taskId } })
 }
 
+export const acceptTask = (taskId: string | number) => {
+  return request.post({ url: '/pms/task/accept', params: { taskId } })
+}
+
 export const submitTaskCompletion = (taskId: string | number, actualCompleteDate?: string, completionNote?: string) => {
   return request.post({ url: '/pms/task/submit-completion', params: { taskId, actualCompleteDate, completionNote } })
 }

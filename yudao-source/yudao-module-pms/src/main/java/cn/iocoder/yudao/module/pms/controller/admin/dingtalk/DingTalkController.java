@@ -78,7 +78,7 @@ public class DingTalkController {
             @RequestParam("content") String content,
             @RequestParam("userId") Long userId) {
         boolean result = dingTalkNotifyService.sendNotifyDirect(
-                title, content, List.of(userId), "manual_test", "test", null);
+                title, content, List.of(userId), "manual_test", "test", null, null);
         return success(result);
     }
 

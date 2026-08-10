@@ -30,6 +30,10 @@
               type="success" plain size="small" @click="simulateDingtalkConfirm">
               <Icon icon="ep:chat-dot-round" class="mr-4px" />模拟钉钉确认
             </el-button>
+            <el-button v-if="!isEditMode && canAccept"
+              type="primary" size="small" :loading="accepting" @click="handleAccept">
+              <Icon icon="ep:check" class="mr-4px" />确认接收任务
+            </el-button>
             <!-- #3 派发审核：审核流程快捷按钮 -->
             <el-button v-if="!isEditMode && canSubmitReview" type="warning" plain size="small" @click="handleSubmitReviewBtn">
               <Icon icon="ep:upload" class="mr-4px" />提交审核
@@ -378,7 +382,7 @@
 </template>
 
 <script setup lang="ts">
-import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, submitTaskCompletion, submitReview, approveReview, rejectReview, getSubTaskList } from '@/api/pms/task'
+import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, acceptTask as acceptTaskApi, submitTaskCompletion, submitReview, approveReview, rejectReview, getSubTaskList } from '@/api/pms/task'
 import { getProjectMemberList } from '@/api/pms/member'
 import { getDocumentList, createDocument } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
@@ -543,6 +547,10 @@ const delayDays = computed(() => {
 // 模拟钉钉确认：仅在未开始状态可用
 const canSimulateDingtalk = computed(() =>
   task.value?.completeStatus === 'not_started'
+)
+// 确认接收：仅「待接收」状态可用（员工/PM 一键接收派发的任务）
+const canAccept = computed(() =>
+  task.value?.completeStatus === 'pending_accept'
 )
 
 // ==================== 方法 ====================
@@ -718,6 +726,36 @@ const simulateDingtalkConfirm = async () => {
       message.error('模拟钉钉确认失败')
     }
   }).catch(() => {})
+}
+
+// ==================== 确认接收任务 ====================
+const accepting = ref(false)
+const handleAccept = async () => {
+  if (!task.value) return
+  message.confirm(
+    '确认接收该任务？接收后将开始处理。'
+  ).then(async () => {
+    try {
+      accepting.value = true
+      await acceptTaskApi(task.value.taskId)
+      message.success('已接收任务，开始处理')
+      const fresh = await getTask(String(task.value.taskId))
+      if (fresh) task.value = fresh
+      emit('refresh')
+    } catch (e) {
+      console.error('接收任务失败', e)
+      message.error('接收任务失败')
+    } finally {
+      accepting.value = false
+    }
+  }).catch(() => {})
+}
+
+// 供外部（钉钉深链 &action=accept）自动触发接收确认
+const triggerAccept = () => {
+  if (canAccept.value) {
+    handleAccept()
+  }
 }
 
 const handleEdit = () => {
@@ -1051,7 +1089,7 @@ const changeOwner = async () => {
   }
 }
 
-defineExpose({ open })
+defineExpose({ open, triggerAccept })
 
 // 限制任务开始日期必须在项目周期内
 const disabledTaskStartDate = (date: Date) => {
@@ -1118,4 +1156,3 @@ const disabledTaskEndDate = (date: Date) => {
   padding: 16px 0;
 }
 </style>
-

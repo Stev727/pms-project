@@ -21,6 +21,7 @@ import cn.iocoder.yudao.module.pms.service.message.PmsMessageService;
 import cn.iocoder.yudao.module.pms.service.notification.TaskNotificationPolicy;
 import javax.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -76,6 +77,13 @@ import java.util.stream.Collectors;
 public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    /**
+     * 前端基础 URL（用于拼接任务详情跳转地址）
+     * 配置项：pms.notify.frontend-base-url，默认 https://pms.topsun.com
+     */
+    @Value("${pms.notify.frontend-base-url:https://pms.topsun.com}")
+    private String frontendBaseUrl;
 
     @Resource
     private DingTalkApiService dingTalkApiService;
@@ -157,8 +165,14 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             return false;
         }
 
-        // 5. 发送工作通知
-        String taskId = dingTalkApiService.sendWorkNotification(userIdList, title, content);
+        // 5. 发送通知（规则触发暂不支持详情跳转 URL；有 robotCode 时走机器人通道）
+        String taskId;
+        if (StrUtil.isNotBlank(config.getRobotCode())) {
+            List<String> userIdArr = Arrays.asList(userIdList.split(","));
+            taskId = dingTalkApiService.sendRobotMessage(userIdArr, title, content, null);
+        } else {
+            taskId = dingTalkApiService.sendWorkNotification(userIdList, title, content, null);
+        }
 
         // 6. 记录通知日志
         String sendStatus = taskId != null ? "success" : "failed";
@@ -168,22 +182,23 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         // 7. #4 站内消息（同步落库，失败仅记日志）
         sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, rule.getTriggerEvent());
 
-        // 8. #4 钉钉待办（按 triggerEvent 决定创建/完成）
+        // 8. #4 钉钉待办（按 triggerEvent 决定创建/完成，规则触发路径暂不支持详情 URL）
         handleDingTalkTodoSafely(rule.getTriggerEvent(), businessType, businessId,
-                receiverUserIds, title, content);
+                receiverUserIds, title, content, null);
 
         return taskId != null;
     }
 
     @Override
     public boolean sendNotifyDirect(String title, String content, List<Long> receiverUserIds,
-                                     String triggerEvent, String businessType, Long businessId) {
+                                     String triggerEvent, String businessType, Long businessId,
+                                     String detailUrl) {
         PmsDingTalkConfigDO config = dingTalkApiService.getConfig();
         if (config.getNotifyEnabled() == null || !config.getNotifyEnabled()) {
             // #4：钉钉通知未启用，仍要落站内消息
             sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
             handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
-                    receiverUserIds, title, content);
+                    receiverUserIds, title, content, detailUrl);
             return false;
         }
 
@@ -197,7 +212,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             // #4：钉钉发不出，仍要落站内消息 + 待办
             sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
             handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
-                    receiverUserIds, title, content);
+                    receiverUserIds, title, content, detailUrl);
             return false;
         }
         String userIdList = dingTalkUsers.stream()
@@ -211,11 +226,20 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
                     "接收人缺少有效钉钉用户映射", businessType, businessId);
             sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
             handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
-                    receiverUserIds, title, content);
+                    receiverUserIds, title, content, detailUrl);
             return false;
         }
 
-        String taskId = dingTalkApiService.sendWorkNotification(userIdList, title, content);
+        // #机器人通道：有 robotCode 时以独立机器人身份发送（显示为「项目管理」对话）
+        // 否则降级为传统工作通知（显示为「工作通知:浙江中坚科技股份有限公司」）
+        String taskId;
+        if (StrUtil.isNotBlank(config.getRobotCode())) {
+            List<String> userIdArr = Arrays.asList(userIdList.split(","));
+            taskId = dingTalkApiService.sendRobotMessage(userIdArr, title, content, detailUrl);
+            log.info("[DingTalkNotify] 使用机器人通道发送 robotCode={} users={}", config.getRobotCode(), userIdArr.size());
+        } else {
+            taskId = dingTalkApiService.sendWorkNotification(userIdList, title, content, detailUrl);
+        }
         String sendStatus = taskId != null ? "success" : "failed";
         saveNotifyLog(null, title, content, receiverUserIds, sendStatus,
                 taskId != null ? "task_id=" + taskId : "发送失败", businessType, businessId);
@@ -223,7 +247,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         // #4：同步落站内消息 + 待办管理（不论钉钉工作通知成功与否，都要做）
         sendInAppMessageSafely(receiverUserIds, title, content, businessType, businessId, triggerEvent);
         handleDingTalkTodoSafely(triggerEvent, businessType, businessId,
-                receiverUserIds, title, content);
+                receiverUserIds, title, content, detailUrl);
 
         return taskId != null;
     }
@@ -528,7 +552,8 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
      * 用作 dingTalkTodoService 的 bizTaskId 参数。
      */
     private void handleDingTalkTodoSafely(String triggerEvent, String businessType, Long businessId,
-                                         List<Long> receiverUserIds, String title, String content) {
+                                         List<Long> receiverUserIds, String title, String content,
+                                         String detailUrl) {
         if (!"task".equals(businessType) || businessId == null) {
             return;
         }
@@ -540,7 +565,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
                 }
                 for (Long receiverId : receiverUserIds) {
                     try {
-                        dingTalkTodoService.createTodoForTask(businessId, receiverId, title, content);
+                        dingTalkTodoService.createTodoForTask(businessId, receiverId, title, content, detailUrl);
                     } catch (Exception e) {
                         log.error("[DingTalkNotify] 创建钉钉待办失败: bizTaskId={}, userId={}",
                                 businessId, receiverId, e);

@@ -77,7 +77,7 @@ public class DingTalkTodoServiceImpl implements DingTalkTodoService {
     // ==================================================================
 
     @Override
-    public boolean createTodoForTask(Long bizTaskId, Long userId, String title, String content) {
+    public boolean createTodoForTask(Long bizTaskId, Long userId, String title, String content, String detailUrl) {
         if (bizTaskId == null || userId == null || StrUtil.isBlank(title)) {
             log.warn("[DingTalkTodo] 参数缺失，跳过创建待办: bizTaskId={}, userId={}, title={}", bizTaskId, userId, title);
             return false;
@@ -117,6 +117,10 @@ public class DingTalkTodoServiceImpl implements DingTalkTodoService {
         // 跨用户派发场景下用任务派发人的 unionId 更合适，但当前 sendNotifyDirect 调用方
         // 传入的 receiverUserIds 即为接收人，无法区分派发人。简化处理：用接收人自己。
         body.set("creatorId", unionId);
+        // #4 增强：详情跳转 URL（在钉钉待办 APP 中点击待办直接跳转到 PMS 任务详情）
+        if (StrUtil.isNotBlank(detailUrl)) {
+            body.set("detailUrl", detailUrl);
+        }
 
         try {
             HttpResponse response = HttpRequest.post(url)

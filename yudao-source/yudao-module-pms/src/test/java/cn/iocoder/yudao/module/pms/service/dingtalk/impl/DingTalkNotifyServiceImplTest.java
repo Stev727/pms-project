@@ -66,7 +66,7 @@ class DingTalkNotifyServiceImplTest {
         PmsDingTalkUserDO user = new PmsDingTalkUserDO();
         user.setDingtalkUserId("1353");
         when(userMapper.selectListByUserIds(List.of(1353L))).thenReturn(List.of(user));
-        when(apiService.sendWorkNotification(any(), any(), any())).thenReturn("ding-task-1");
+        when(apiService.sendWorkNotification(any(), any(), any(), any())).thenReturn("ding-task-1");
 
         service.sendNotifyByRule(1L, Map.of(), List.of(1353L), "task", 20L);
 

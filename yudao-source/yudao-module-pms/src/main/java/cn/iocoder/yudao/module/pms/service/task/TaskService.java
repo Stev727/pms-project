@@ -29,6 +29,14 @@ public interface TaskService {
 
     void simulateDingtalkConfirm(Long taskId);
 
+    /**
+     * 接收任务（待接收 → 进行中）
+     * 任务负责人确认接收派发的任务；具备项目任务编辑权限者也可代接收。
+     *
+     * @param taskId 任务编号
+     */
+    void acceptTask(Long taskId);
+
     void dispatchTask(Long taskId);
 
     void submitCompletion(Long taskId, String actualCompleteDate, String completionNote);

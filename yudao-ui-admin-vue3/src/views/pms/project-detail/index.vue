@@ -796,6 +796,18 @@ onMounted(async () => {
     deptList.value = (depts as any[]) || []
   } catch { /* ignore */ }
   loadProjectData()
+  // 钉钉通知跳转：自动打开指定任务抽屉（open 内部会按 taskId 重新拉取最新任务数据）
+  const notifyTaskId = route.query.taskId as string | undefined
+  const notifyAction = route.query.action as string | undefined
+  if (notifyTaskId) {
+    await nextTick()
+    // open 为异步，await 确保抽屉已拉取最新任务数据，再决定是否自动弹出接收确认
+    await (taskDrawerRef.value?.open({ taskId: String(notifyTaskId) } as any) ?? Promise.resolve())
+    if (notifyAction === 'accept') {
+      await nextTick()
+      ;(taskDrawerRef.value as any)?.triggerAccept?.()
+    }
+  }
 })
 </script>
 

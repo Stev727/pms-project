@@ -28,10 +28,12 @@ public interface DingTalkNotifyService {
      * @param triggerEvent 触发事件
      * @param businessType 业务类型
      * @param businessId   业务ID
+     * @param detailUrl    可选：详情跳转 URL（OA 卡片样式，点击直接跳转到该地址）
      * @return 发送结果
      */
     boolean sendNotifyDirect(String title, String content, List<Long> receiverUserIds,
-                             String triggerEvent, String businessType, Long businessId);
+                             String triggerEvent, String businessType, Long businessId,
+                             String detailUrl);
 
     /**
      * 执行每日通知检查

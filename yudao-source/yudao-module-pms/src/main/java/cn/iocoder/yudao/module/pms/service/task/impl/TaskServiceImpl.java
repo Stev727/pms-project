@@ -68,6 +68,13 @@ import java.util.stream.Collectors;
 public class TaskServiceImpl implements TaskService {
 
     /**
+     * 前端基础 URL（用于拼接任务详情跳转地址，与钉钉通知卡片/待办配合实现"点击直达"）
+     * 配置项：pms.notify.frontend-base-url，默认 https://pms.topsun.com
+     */
+    @org.springframework.beans.factory.annotation.Value("${pms.notify.frontend-base-url:https://pms.topsun.com}")
+    private String frontendBaseUrl;
+
+    /**
      * 子任务最大层级（1 顶层 + 2 级子任务）
      */
     private static final int MAX_TASK_LEVEL = 3;
@@ -152,8 +159,10 @@ public class TaskServiceImpl implements TaskService {
         writeTaskLog(taskId, "dispatch", "派发任务给用户[" + task.getMainOwnerId() + "]");
         String title = "【PMS】任务派发通知";
         String content = "项目「" + projectName + "」向您派发任务「" + task.getTaskName() + "」，请及时接收并处理。";
+        // #4 增强：详情跳转 URL（钉钉卡片/待办点击直达 PMS 任务抽屉）
+        String detailUrl = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + task.getTaskId();
         boolean sent = dingTalkNotifyService.sendNotifyDirect(title, content, List.of(task.getMainOwnerId()),
-                "task_dispatched", "task", taskId);
+                "task_dispatched", "task", taskId, detailUrl);
         if (!sent) {
             throw new ServiceException(ErrorCodeConstants.DINGTALK_NOTIFY_FAILED);
         }
@@ -173,6 +182,27 @@ public class TaskServiceImpl implements TaskService {
 
         // 记录任务日志
         writeTaskLog(taskId, "dingtalk_confirm", "钉钉确认模拟：任务状态变更为进行中");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void acceptTask(Long taskId) {
+        PmsTaskDO task = requireTask(taskId);
+        // 仅「待接收」状态可接收
+        if (!"pending_accept".equals(task.getCompleteStatus())) {
+            throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
+        }
+        Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
+        boolean isOwner = loginUserId != null && loginUserId.equals(task.getMainOwnerId());
+        boolean canManage = hasProjectPerm(task.getProjectId(), PmsPermKeyEnum.TASK_EDIT.getKey());
+        if (!isOwner && !canManage) {
+            throw new ServiceException(ErrorCodeConstants.TASK_ACCEPT_PERMISSION_DENIED);
+        }
+        PmsTaskDO update = new PmsTaskDO();
+        update.setTaskId(taskId);
+        update.setCompleteStatus("in_progress");
+        taskMapper.updateById(update);
+        writeTaskLog(taskId, "task_accept", "任务负责人确认接收，状态变更为进行中");
     }
 
     @Override
@@ -231,13 +261,15 @@ public class TaskServiceImpl implements TaskService {
         }
         if (!receiverIds.isEmpty()) {
             String result = approved ? "通过" : "驳回";
+            // #4 增强：详情跳转 URL（钉钉卡片点击直达 PMS 任务抽屉）
+            String detailUrl = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + task.getTaskId();
             dingTalkNotifyService.sendNotifyDirect(
                     "【PMS】任务完成审核" + result,
                     "项目「" + (project.getProjectName() == null ? "" : project.getProjectName())
                             + "」任务「" + task.getTaskName() + "」完成审核已" + result
                             + (reviewOpinion == null || reviewOpinion.isBlank() ? "" : "，意见：" + reviewOpinion),
                     new ArrayList<>(receiverIds),
-                    approved ? "completion_approved" : "completion_rejected", "task", taskId);
+                    approved ? "completion_approved" : "completion_rejected", "task", taskId, detailUrl);
         }
     }
 
@@ -677,9 +709,10 @@ public class TaskServiceImpl implements TaskService {
             taskMapper.updateById(update);
             refreshProgressUpward(task.getParentTaskId());
             writeTaskLog(taskId, "submit_review", "提交审核，策略[" + policyLabel(policy) + "]自动通过");
+            String detailUrl689 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
             sendNotifyQuietly("【PMS】任务已完成",
                     "项目「" + projectName + "」任务「" + task.getTaskName() + "」已按" + policyLabel(policy) + "策略直接完成。",
-                    buildReviewReceivers(task, project), "task_review_auto_passed", taskId);
+                    buildReviewReceivers(task, project), "task_review_auto_passed", taskId, detailUrl689);
             return;
         }
 
@@ -700,9 +733,10 @@ public class TaskServiceImpl implements TaskService {
         taskMapper.updateById(update);
 
         writeTaskLog(taskId, "submit_review", "提交审核，审核人[" + reviewerId + "]");
+        String detailUrl714 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
         sendNotifyQuietly("【PMS】任务待您审核",
                 "项目「" + projectName + "」任务「" + task.getTaskName() + "」已提交完成，请及时审核。",
-                List.of(reviewerId), "task_review_submitted", taskId);
+                List.of(reviewerId), "task_review_submitted", taskId, detailUrl714);
     }
 
     @Override
@@ -733,10 +767,11 @@ public class TaskServiceImpl implements TaskService {
 
         writeTaskLog(taskId, "approve_review", "审核通过" + (reviewComment == null || reviewComment.isBlank() ? "" : "：" + reviewComment));
         String projectName = project == null || project.getProjectName() == null ? "" : project.getProjectName();
+        String detailUrl747 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
         sendNotifyQuietly("【PMS】任务审核通过",
                 "项目「" + projectName + "」任务「" + task.getTaskName() + "」审核已通过。"
                         + (reviewComment == null || reviewComment.isBlank() ? "" : "意见：" + reviewComment),
-                buildReviewReceivers(task, project), "task_review_approved", taskId);
+                buildReviewReceivers(task, project), "task_review_approved", taskId, detailUrl747);
     }
 
     @Override
@@ -763,9 +798,10 @@ public class TaskServiceImpl implements TaskService {
 
         writeTaskLog(taskId, "reject_review", "审核驳回：" + reviewComment);
         String projectName = project == null || project.getProjectName() == null ? "" : project.getProjectName();
+        String detailUrl778 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
         sendNotifyQuietly("【PMS】任务审核被驳回",
                 "项目「" + projectName + "」任务「" + task.getTaskName() + "」审核被驳回，原因：" + reviewComment,
-                buildReviewReceivers(task, project), "task_review_rejected", taskId);
+                buildReviewReceivers(task, project), "task_review_rejected", taskId, detailUrl778);
     }
 
     @Override
@@ -939,13 +975,13 @@ public class TaskServiceImpl implements TaskService {
      * 注意：与 dispatchTask 不同 —— 派发通知失败必须回滚，审核通知失败不回滚。
      */
     private void sendNotifyQuietly(String title, String content, Collection<Long> receiverIds,
-                                   String triggerEvent, Long taskId) {
+                                   String triggerEvent, Long taskId, String detailUrl) {
         if (receiverIds == null || receiverIds.isEmpty()) {
             return;
         }
         try {
             dingTalkNotifyService.sendNotifyDirect(title, content, new ArrayList<>(receiverIds),
-                    triggerEvent, "task", taskId);
+                    triggerEvent, "task", taskId, detailUrl);
         } catch (Exception e) {
             // 通知失败不影响审核结果落库
         }

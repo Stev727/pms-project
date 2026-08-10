@@ -111,7 +111,7 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
     }
 
     @Override
-    public String sendWorkNotification(String userIdList, String title, String content) {
+    public String sendWorkNotification(String userIdList, String title, String content, String detailUrl) {
         String token = getAccessToken();
         if (token == null) {
             log.warn("[DingTalk] access_token 为空，跳过发送工作通知");
@@ -122,10 +122,28 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
         String url = properties.getBaseUrl() + StrUtil.format(SEND_WORK_MSG_URL, token);
 
         JSONObject msg = new JSONObject();
-        msg.set("msgtype", "text");
-        JSONObject textContent = new JSONObject();
-        textContent.set("content", title + "\n\n" + content);
-        msg.set("text", textContent);
+        // #4 增强：有 detailUrl 时用 link 卡片样式（OA 风格，整卡片可点击跳转），否则降级为 text
+        if (StrUtil.isNotBlank(detailUrl)) {
+            msg.set("msgtype", "link");
+            JSONObject link = new JSONObject();
+            link.set("title", title);
+            link.set("text", content);
+            link.set("messageUrl", detailUrl);
+            // 从 detailUrl 提取前端基址拼接 logo 作为卡片缩略图（钉钉要求 picUrl 非空）
+            String picBase = detailUrl;
+            int pmsIdx = detailUrl.indexOf("/pms/");
+            if (pmsIdx > 0) {
+                picBase = detailUrl.substring(0, pmsIdx);
+            }
+            link.set("picUrl", picBase + "/logo.gif");
+            msg.set("link", link);
+            log.info("[DingTalk] 发送 link 工作通知 messageURL={}", detailUrl);
+        } else {
+            msg.set("msgtype", "text");
+            JSONObject textContent = new JSONObject();
+            textContent.set("content", title + "\n\n" + content);
+            msg.set("text", textContent);
+        }
 
         JSONObject body = new JSONObject();
         body.set("agent_id", config.getAgentId());
@@ -140,7 +158,8 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
             JSONObject result = JSONUtil.parseObj(response.body());
             if (result.getInt("errcode") == 0) {
                 String taskId = result.getStr("task_id");
-                log.info("[DingTalk] 工作通知发送成功: task_id={}, receivers={}", taskId, userIdList);
+                log.info("[DingTalk] 工作通知发送成功: task_id={}, receivers={}, hasDetailUrl={}",
+                        taskId, userIdList, StrUtil.isNotBlank(detailUrl));
                 return taskId;
             } else {
                 log.error("[DingTalk] 工作通知发送失败: {}", result);
@@ -150,6 +169,103 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
             log.error("[DingTalk] 工作通知发送异常", e);
             return null;
         }
+    }
+
+    // ==================== 机器人单聊消息（独立机器人身份） ====================
+
+    private static final String ROBOT_BATCH_SEND_URL = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend";
+
+    @Override
+    public String sendRobotMessage(List<String> userIds, String title, String content, String detailUrl) {
+        String token = getAccessToken();
+        if (token == null) {
+            log.warn("[DingTalk] access_token 为空，跳过发送机器人消息");
+            return null;
+        }
+
+        PmsDingTalkConfigDO config = getConfig();
+        if (StrUtil.isBlank(config.getRobotCode())) {
+            log.warn("[DingTalk] robotCode 未配置，无法发送机器人消息");
+            return null;
+        }
+
+        // 钉钉批量单聊 API 每次最多 20 个用户
+        List<List<String>> batches = splitList(userIds, 20);
+        String lastQueryKey = null;
+
+        for (int i = 0; i < batches.size(); i++) {
+            List<String> batch = batches.get(i);
+            JSONObject body = new JSONObject();
+            body.set("robotCode", config.getRobotCode());
+            body.set("userIds", batch);
+
+            if (StrUtil.isNotBlank(detailUrl)) {
+                // 交互式卡片：两个独立跳转按钮「一键接收」+「查看详情」，减少员工操作
+                body.set("msgKey", "sampleActionCard");
+                JSONObject cardParam = new JSONObject();
+                cardParam.set("title", title);
+                cardParam.set("markdown", content);
+                // 一键接收深链：在详情 URL 后追加 action=accept，前端自动弹出接收确认
+                String acceptUrl = detailUrl.contains("?")
+                        ? detailUrl + "&action=accept"
+                        : detailUrl + "?action=accept";
+                JSONObject btnAccept = new JSONObject();
+                btnAccept.set("title", "一键接收");
+                btnAccept.set("actionURL", acceptUrl);
+                JSONObject btnView = new JSONObject();
+                btnView.set("title", "查看详情");
+                btnView.set("actionURL", detailUrl);
+                JSONArray btns = new JSONArray();
+                btns.add(btnAccept);
+                btns.add(btnView);
+                cardParam.set("btnOrientation", "1");
+                cardParam.set("btns", btns);
+                body.set("msgParam", cardParam.toString());
+                log.info("[DingTalk] 发送机器人交互卡片(含一键接收) robotCode={} users={} acceptUrl={}",
+                        config.getRobotCode(), batch.size(), acceptUrl);
+            } else {
+                // 纯文本（无详情链接时降级）
+                body.set("msgKey", "sampleText");
+                JSONObject textParam = new JSONObject();
+                textParam.set("content", title + "\n\n" + content);
+                body.set("msgParam", textParam.toString());
+            }
+            try {
+                HttpRequest request = HttpRequest.post(ROBOT_BATCH_SEND_URL)
+                        .header("x-acs-dingtalk-access-token", token)
+                        .body(body.toString())
+                        .timeout(10000);
+                HttpResponse response = request.execute();
+                JSONObject result = JSONUtil.parseObj(response.body());
+
+                if (result.getInt("errcode") == null || result.getInt("errcode") == 0) {
+                    String queryKey = result.getStr("processQueryKey");
+                    log.info("[DingTalk] 机器人消息批次 {}/{} 发送成功: queryKey={}, users={}",
+                            i + 1, batches.size(), queryKey, batch.size());
+                    lastQueryKey = queryKey;
+                } else {
+                    log.error("[DingTalk] 机器人消息批次 {}/{} 发送失败: {}", i + 1, batches.size(), result);
+                    // 某个批次失败不中断后续批次，但返回 null 表示部分失败
+                    lastQueryKey = null;
+                }
+            } catch (Exception e) {
+                log.error("[DingTalk] 机器人消息批次 {}/{} 发送异常", i + 1, batches.size(), e);
+                lastQueryKey = null;
+            }
+        }
+
+        return lastQueryKey;
+    }
+
+    /**
+     * 将列表按指定大小分批
+     */
+    private <T> List<List<T>> splitList(List<T> list, int batchSize) {
+        List<List<T>> result = new ArrayList<>();
+        for (int i = 0; i < list.size(); i += batchSize) {
+            result.add(list.subList(i, Math.min(i + batchSize, list.size())));
+        }
+        return result;
     }
 
     @Override

@@ -34,6 +34,12 @@ public class PmsDingTalkConfigDO extends TenantBaseDO {
     private Long agentId;
 
     /**
+     * 机器人编码（机器人单聊消息用，从钉钉开发者后台→应用→机器人配置页复制）
+     * 非空时通知优先以机器人身份发送（显示为独立对话），否则降级为工作通知
+     */
+    private String robotCode;
+
+    /**
      * 企业 CorpId
      */
     private String corpId;

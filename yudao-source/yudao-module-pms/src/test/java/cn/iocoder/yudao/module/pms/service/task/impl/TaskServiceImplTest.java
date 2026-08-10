@@ -51,7 +51,7 @@ class TaskServiceImplTest {
         when(mapper.selectById(20L)).thenReturn(task);
         when(projectMapper.selectById(10L)).thenReturn(project);
         when(notifyService.sendNotifyDirect(anyString(), anyString(), eq(List.of(1353L)),
-                eq("task_dispatched"), eq("task"), eq(20L))).thenReturn(true);
+                eq("task_dispatched"), eq("task"), eq(20L), any())).thenReturn(true);
 
         service.dispatchTask(20L);
 
@@ -59,7 +59,7 @@ class TaskServiceImplTest {
         assertTrue(task.getIsDispatched());
         assertNotNull(task.getDispatchTime());
         verify(notifyService).sendNotifyDirect(contains("任务派发"), contains("孙文远派发测试"),
-                eq(List.of(1353L)), eq("task_dispatched"), eq("task"), eq(20L));
+                eq(List.of(1353L)), eq("task_dispatched"), eq("task"), eq(20L), any());
     }
 
     @Test
@@ -137,7 +137,7 @@ class TaskServiceImplTest {
         assertEquals("in_progress", task.getCompleteStatus());
         assertEquals("输出物不完整", task.getReviewOpinion());
         verify(notifyService).sendNotifyDirect(contains("驳回"), contains("输出物不完整"),
-                eq(List.of(1354L, 1353L)), eq("completion_rejected"), eq("task"), eq(20L));
+                eq(List.of(1354L, 1353L)), eq("completion_rejected"), eq("task"), eq(20L), any());
     }
 
     private static TaskServiceImpl serviceWithProjectManager(Long managerId) {
