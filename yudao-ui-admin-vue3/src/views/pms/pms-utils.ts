@@ -2,6 +2,8 @@
  * PMS 前端公共工具函数
  * 阶段色板、状态映射、格式化等
  */
+import { getDictOptions as getYudaoDictOptions } from '@/utils/dict'
+import { useDictStoreWithOut } from '@/store/modules/dict'
 
 // ==================== 阶段色板 ====================
 export const phaseColorMap: Record<string, { color: string; bg: string; border: string; label: string }> = {
@@ -158,8 +160,8 @@ export function calcDuration(startDate?: any, endDate?: any): number {
 }
 
 // ==================== 字典选项 ====================
-// 注意：这些硬编码选项是 fallback，优先从字典管理页面维护的数据加载。
-// 字典数据存储在 localStorage `pms_dict_data` 中，通过 PmsDict 页面维护。
+// 优先级：yudao 系统字典（后端 system_dict_data，通过 dictStore 实时加载）> localStorage 维护数据 > 硬编码 fallback。
+// 这样用户在「系统管理 → 字典管理」新增的字典项可即时生效（页面挂载时调 refreshPmsDicts() 强制刷新缓存）。
 export function loadDictOptions(dictKey: string): { value: string; label: string; color?: string }[] {
   try {
     const saved = localStorage.getItem('pms_dict_data')
@@ -176,10 +178,35 @@ export function loadDictOptions(dictKey: string): { value: string; label: string
   return []
 }
 
-// 获取字典选项（优先从维护数据，fallback 到硬编码）
+// 从 yudao 系统字典（dictStore）读取选项；dictStore 在首次访问时自动从后端加载全量字典并缓存于 sessionStorage（60s）。
+function loadYudaoDictOptions(dictKey: string): { value: string; label: string; color?: string }[] {
+  try {
+    const opts = getYudaoDictOptions(dictKey)
+    if (opts && opts.length > 0) {
+      return opts.map((o: any) => ({
+        value: String(o.value),
+        label: o.label,
+        color: o.colorType || o.cssClass || ''
+      }))
+    }
+  } catch { /* dictStore 未就绪时降级 */ }
+  return []
+}
+
+// 获取字典选项（优先 yudao 系统字典 → localStorage 维护数据 → 硬编码 fallback）
 export function getDictOptions(dictKey: string, fallback: { value: string; label: string; color?: string }[]): { value: string; label: string; color?: string }[] {
+  const yudao = loadYudaoDictOptions(dictKey)
+  if (yudao.length > 0) return yudao
   const dynamic = loadDictOptions(dictKey)
   return dynamic.length > 0 ? dynamic : fallback
+}
+
+// 强制刷新 yudao 字典缓存（清除 sessionStorage 缓存并重新拉取后端全量字典）。
+// 在需要确保字典最新的页面 onMounted 调用一次，使「系统字典管理」新增项即时可见。
+export async function refreshPmsDicts() {
+  try {
+    await useDictStoreWithOut().resetDict()
+  } catch { /* ignore */ }
 }
 
 export const projectTypeOptions = [

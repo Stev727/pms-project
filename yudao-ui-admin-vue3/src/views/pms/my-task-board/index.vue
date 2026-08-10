@@ -41,6 +41,30 @@
     </ContentWrap>
 
     <div v-loading="loading">
+      <!-- 统计概览 -->
+      <el-row :gutter="16" class="mb-16px">
+        <el-col :xs="12" :sm="6" v-for="(s, i) in statSummary" :key="i">
+          <div class="stat-mini" :style="{ borderTop: `3px solid ${s.color}` }">
+            <div class="stat-mini-label">{{ s.label }}</div>
+            <div class="stat-mini-value" :style="{ color: s.color }">{{ s.value }}</div>
+          </div>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16" class="mb-16px">
+        <el-col :xs="24" :lg="10">
+          <el-card shadow="never" class="chart-card">
+            <template #header><span class="chart-title">📊 任务状态分布</span></template>
+            <div ref="statusChartRef" class="chart-box"></div>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :lg="14">
+          <el-card shadow="never" class="chart-card">
+            <template #header><span class="chart-title">⚠️ 延期任务分布（按项目/日常）</span></template>
+            <div ref="delayChartRef" class="chart-box"></div>
+          </el-card>
+        </el-col>
+      </el-row>
+
       <!-- 历史遗留区 -->
       <el-card class="board-section" shadow="never">
         <template #header>
@@ -126,7 +150,7 @@
         </el-form-item>
         <el-form-item label="任务类型" prop="taskType">
           <el-select v-model="dailyForm.taskType" placeholder="请选择" class="w-full">
-            <el-option v-for="opt in dailyTaskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            <el-option v-for="opt in dailyTypeOpts" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="负责人" prop="mainOwnerId">
@@ -170,8 +194,10 @@ import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import TaskBoardCard from './components/TaskBoardCard.vue'
 import {
-  taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions, formatDate
+  taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions, calcDelayDays, refreshPmsDicts, formatDate
 } from '../pms-utils'
+import * as echarts from 'echarts'
+import { nextTick, onUnmounted } from 'vue'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -204,6 +230,138 @@ const board = reactive<{
 const projectTaskCount = computed(() =>
   board.projectGroups.reduce((sum, g) => sum + g.tasks.length, 0)
 )
+
+// 日常任务类型下拉（动态字典，fallback 到硬编码）
+const dailyTypeOpts = computed(() => {
+  const opts = getDailyTaskTypeOptions()
+  return opts.length ? opts : dailyTaskTypeOptions
+})
+
+// 全部任务汇总（用于统计概览与图表）
+const allTasks = computed<TaskVO[]>(() => {
+  const list: TaskVO[] = [...board.legacyTasks, ...board.dailyTasks]
+  board.projectGroups.forEach(g => list.push(...g.tasks))
+  return list
+})
+
+// 统计概览卡片
+const statSummary = computed(() => {
+  const all = allTasks.value
+  const delayed = all.filter(t => calcDelayDays(t.planEndDate, t.completeStatus) > 0).length
+  const inProgress = all.filter(t => t.completeStatus === 'in_progress').length
+  const pendingReview = all.filter(t =>
+    t.reviewStatus === 'submitted' ||
+    t.completeStatus === 'pending_review' ||
+    t.completeStatus === 'completion_pending_review'
+  ).length
+  return [
+    { label: '任务总数', value: all.length, color: '#2468F2' },
+    { label: '进行中', value: inProgress, color: '#1A56DB' },
+    { label: '已延期', value: delayed, color: '#F53F3F' },
+    { label: '待审核', value: pendingReview, color: '#722ED1' }
+  ]
+})
+
+// ==================== 图表（echarts） ====================
+const chartInstances: echarts.ECharts[] = []
+const statusChartRef = ref<HTMLElement>()
+const delayChartRef = ref<HTMLElement>()
+
+const getOrCreateChart = (el: HTMLElement | undefined): echarts.ECharts | null => {
+  if (!el) return null
+  const existing = chartInstances.find(c => c.getDom() === el)
+  if (existing) { existing.clear(); return existing }
+  const chart = echarts.init(el)
+  chartInstances.push(chart)
+  return chart
+}
+
+const renderStatusChart = () => {
+  const chart = getOrCreateChart(statusChartRef.value)
+  if (!chart) return
+  const count: Record<string, number> = {}
+  allTasks.value.forEach(t => {
+    const s = t.completeStatus || 'not_started'
+    count[s] = (count[s] || 0) + 1
+  })
+  const data = Object.entries(count).map(([k, v]) => ({
+    name: taskStatusMap[k]?.label || k,
+    value: v,
+    itemStyle: { color: taskStatusMap[k]?.borderColor || '#86909C' }
+  }))
+  chart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, icon: 'circle', type: 'scroll' },
+    series: [{
+      type: 'pie', radius: ['38%', '66%'], center: ['50%', '44%'],
+      label: { show: true, formatter: '{b}\n{c}个', fontSize: 12 },
+      data
+    }]
+  })
+}
+
+const renderDelayChart = () => {
+  const chart = getOrCreateChart(delayChartRef.value)
+  if (!chart) return
+  // 按项目/日常/历史遗留汇总延期任务数
+  const groupDelay: Record<string, number> = {}
+  board.projectGroups.forEach(g => {
+    const c = g.tasks.filter(t => calcDelayDays(t.planEndDate, t.completeStatus) > 0).length
+    if (c > 0) groupDelay[g.projectName || `项目${g.projectId}`] = c
+  })
+  const dailyDelay = board.dailyTasks.filter(t => calcDelayDays(t.planEndDate, t.completeStatus) > 0).length
+  if (dailyDelay > 0) groupDelay['日常任务'] = dailyDelay
+  const legacyDelay = board.legacyTasks.filter(t => calcDelayDays(t.planEndDate, t.completeStatus) > 0).length
+  if (legacyDelay > 0) groupDelay['历史遗留'] = legacyDelay
+
+  let sorted = Object.entries(groupDelay).sort((a, b) => b[1] - a[1]).slice(0, 10)
+  let fallback = false
+  // 若无延期数据，降级展示「各项目任务数」，避免空白
+  if (sorted.length === 0) {
+    fallback = true
+    const cnt: Record<string, number> = {}
+    board.projectGroups.forEach(g => { cnt[g.projectName || `项目${g.projectId}`] = g.tasks.length })
+    if (board.dailyTasks.length) cnt['日常任务'] = board.dailyTasks.length
+    sorted = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 10)
+  }
+  chart.setOption({
+    title: fallback ? {
+      text: '当前无延期任务，已展示各项目任务数',
+      left: 'center', top: 4,
+      textStyle: { fontSize: 12, color: '#86909C' }
+    } : undefined,
+    tooltip: { trigger: 'axis' },
+    grid: { left: '3%', right: '10%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'value', minInterval: 1 },
+    yAxis: {
+      type: 'category',
+      data: sorted.map(e => e[0]).reverse(),
+      axisLabel: { fontSize: 12, width: 120, overflow: 'truncate' }
+    },
+    series: [{
+      type: 'bar', barWidth: 16,
+      data: sorted.map(e => e[1]).reverse(),
+      itemStyle: {
+        color: fallback
+          ? new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0, color: '#2468F2' }, { offset: 1, color: '#0FC6C2' }
+            ])
+          : new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0, color: '#FF7D00' }, { offset: 1, color: '#F53F3F' }
+            ]),
+        borderRadius: [0, 4, 4, 0]
+      },
+      label: { show: true, position: 'right', formatter: '{c}' }
+    }]
+  })
+}
+
+const renderCharts = () => {
+  renderStatusChart()
+  renderDelayChart()
+}
+
+const handleResize = () => chartInstances.forEach(c => c.resize())
 
 const rangeShortcuts = [
   { text: '最近一周', value: () => [formatDate(new Date(Date.now() - 6 * 86400000), 'YYYY-MM-DD'), formatDate(new Date(), 'YYYY-MM-DD')] },
@@ -252,6 +410,7 @@ const loadBoard = async () => {
     board.legacyTasks = data.legacyTasks || []
     board.projectGroups = data.projectGroups || []
     board.dailyTasks = data.dailyTasks || []
+    nextTick(() => renderCharts())
   } catch (e) {
     console.error('加载看板失败', e)
   } finally {
@@ -316,6 +475,9 @@ const submitDaily = async () => {
 }
 
 onMounted(async () => {
+  // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项即时可见
+  refreshPmsDicts()
+  window.addEventListener('resize', handleResize)
   // 默认范围：本月
   const n = new Date()
   dateRange.value = [
@@ -325,9 +487,43 @@ onMounted(async () => {
   await ensureUsersLoaded()
   await loadBoard()
 })
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  chartInstances.forEach(c => c.dispose())
+  chartInstances.length = 0
+})
 </script>
 
 <style scoped>
+.stat-mini {
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.stat-mini-label {
+  font-size: 13px;
+  color: #86909c;
+  margin-bottom: 6px;
+}
+.stat-mini-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.chart-card {
+  margin-bottom: 16px;
+}
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2129;
+}
+.chart-box {
+  width: 100%;
+  height: 280px;
+}
 .board-section {
   margin-bottom: 16px;
 }

@@ -242,7 +242,7 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import {
-  taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions, formatDate, calcDelayDays
+  taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions, formatDate, calcDelayDays, refreshPmsDicts
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -564,6 +564,8 @@ const submitTask = async () => {
 }
 
 onMounted(() => {
+  // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项在本页下拉即时可见
+  refreshPmsDicts()
   loadList()
 })
 </script>

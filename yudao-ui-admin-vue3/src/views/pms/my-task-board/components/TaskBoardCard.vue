@@ -12,7 +12,8 @@
     </div>
 
     <div class="card-dates">
-      📅 {{ formatDate(task.planStartDate) }} ~ {{ formatDate(task.planEndDate) }}
+      <span>📅 {{ formatDate(task.planStartDate) }} ~ {{ formatDate(task.planEndDate) }}</span>
+      <el-tag v-if="delayDays > 0" type="danger" size="small" effect="dark" class="delay-tag">延期 {{ delayDays }} 天</el-tag>
     </div>
 
     <div class="card-bottom">
@@ -35,7 +36,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { taskStatusMap, dailyTaskTypeOptions, priorityMap, formatDate } from '../../pms-utils'
+import { taskStatusMap, dailyTaskTypeOptions, getDailyTaskTypeOptions, calcDelayDays, priorityMap, formatDate } from '../../pms-utils'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 const props = defineProps<{
@@ -56,10 +57,14 @@ const isDaily = computed(() =>
 const ownerName = computed(() => getUserName(props.task.mainOwnerId))
 const typeName = computed(() => {
   if (isDaily.value) {
-    return dailyTaskTypeOptions.find(o => o.value === props.task.taskType)?.label || '其他'
+    return getDailyTaskTypeOptions().find(o => o.value === props.task.taskType)?.label
+      || dailyTaskTypeOptions.find(o => o.value === props.task.taskType)?.label
+      || '其他'
   }
   return props.task.taskType || '-'
 })
+// 延期天数：未完成且计划结束日期早于今天
+const delayDays = computed(() => calcDelayDays(props.task.planEndDate, props.task.completeStatus))
 const statusLabel = computed(() => taskStatusMap[props.task.completeStatus || '']?.label || '-')
 const statusStyle = computed(() => {
   const s = taskStatusMap[props.task.completeStatus || '']
@@ -114,9 +119,21 @@ const canSubmitReview = computed(() => {
   margin-bottom: 4px;
 }
 .card-dates {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 12px;
   color: #86909c;
   margin-bottom: 8px;
+}
+.delay-tag {
+  font-weight: 600;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
 }
 .card-bottom {
   display: flex;
