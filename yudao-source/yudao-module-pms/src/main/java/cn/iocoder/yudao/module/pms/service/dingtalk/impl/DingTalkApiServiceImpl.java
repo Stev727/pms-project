@@ -200,26 +200,20 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
             body.set("userIds", batch);
 
             if (StrUtil.isNotBlank(detailUrl)) {
-                // 交互式卡片：两个独立跳转按钮「一键接收」+「查看详情」，减少员工操作
-                body.set("msgKey", "sampleActionCard");
+                // 竖向双按钮交互卡片(sampleActionCard2)：「一键接收」+「查看详情」
+                // 钉钉官方参数格式：title + text + actionTitle1/URL1 + actionTitle2/URL2
+                body.set("msgKey", "sampleActionCard2");
                 JSONObject cardParam = new JSONObject();
                 cardParam.set("title", title);
-                cardParam.set("markdown", content);
+                cardParam.set("text", content);
                 // 一键接收深链：在详情 URL 后追加 action=accept，前端自动弹出接收确认
                 String acceptUrl = detailUrl.contains("?")
                         ? detailUrl + "&action=accept"
                         : detailUrl + "?action=accept";
-                JSONObject btnAccept = new JSONObject();
-                btnAccept.set("title", "一键接收");
-                btnAccept.set("actionURL", acceptUrl);
-                JSONObject btnView = new JSONObject();
-                btnView.set("title", "查看详情");
-                btnView.set("actionURL", detailUrl);
-                JSONArray btns = new JSONArray();
-                btns.add(btnAccept);
-                btns.add(btnView);
-                cardParam.set("btnOrientation", "1");
-                cardParam.set("btns", btns);
+                cardParam.set("actionTitle1", "\u4e00\u952e\u63a5\u6536");   // 一键接收
+                cardParam.set("actionURL1", acceptUrl);
+                cardParam.set("actionTitle2", "\u67e5\u770b\u8be6\u60c5");   // 查看详情
+                cardParam.set("actionURL2", detailUrl);
                 body.set("msgParam", cardParam.toString());
                 log.info("[DingTalk] 发送机器人交互卡片(含一键接收) robotCode={} users={} acceptUrl={}",
                         config.getRobotCode(), batch.size(), acceptUrl);
