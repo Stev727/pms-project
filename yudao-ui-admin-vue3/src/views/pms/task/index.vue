@@ -241,10 +241,10 @@ import { getTaskList, createTask, updateTask, deleteTask, TaskVO } from '@/api/p
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
+import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
 import {
   taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions,
-  getDailyTaskTypeOptions, getDynamicTaskTypeOptions, getDynamicPriorityOptions,
-  formatDate, calcDelayDays, refreshPmsDicts
+  formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -279,6 +279,18 @@ const myTasks = ref(false)
 
 // 日常任务（无项目）：以固定哨兵值标识，提交时置 projectId = null 走部门审核流程
 const DAILY_PROJECT_VALUE = 0
+const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
+// 字典下拉选项：先设为 hardcoded fallback，onMounted 中直接调 API 覆盖为真实字典数据
+const currentTaskTypeOptions = ref<{ value: string; label: string }[]>([])
+const currentPriorityOptions = ref<{ value: string; label: string }[]>(priorityOptions)
+
+/** 从后端全量字典响应中提取指定 dictType 的选项列表 */
+function extractDictOptions(allData: any[], dictType: string): { value: string; label: string }[] {
+  return allData
+    .filter((d: any) => d.dictType === dictType && (d.status == null || d.status === 0))
+    .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+    .map((d: any) => ({ value: String(d.value), label: d.label }))
+}
 
 const filteredList = computed(() => {
   let list = taskList.value
@@ -415,16 +427,6 @@ const taskForm = reactive<TaskVO & { projectId?: string | number; helperIds?: nu
   completeStatus: 'not_started',
   progress: 0
 })
-
-const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
-// 字典下拉选项（ref 而非 computed，避免 setup 阶段 dictStore 未加载导致走 hardcoded fallback）
-// refreshPmsDicts() 完成后会主动更新这些 ref，确保字典管理新增项即时可见
-const currentTaskTypeOptions = ref(
-  isDailyTask.value ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
-)
-// 优先级下拉：动态字典（fallback 硬编码）
-const _rawPriorityOpts = getDynamicPriorityOptions()
-const currentPriorityOptions = ref(_rawPriorityOpts.length ? _rawPriorityOpts : priorityOptions)
 
 const taskFormRules = reactive<FormRules>({
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
@@ -572,18 +574,41 @@ const submitTask = async () => {
 }
 
 onMounted(async () => {
-  // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项在本页下拉即时可见
-  await refreshPmsDicts()
-  // dictStore 已就绪，重新读取字典选项（覆盖 setup 阶段的 fallback 值）
-  currentTaskTypeOptions.value = isDailyTask.value ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
-  const _pOpts = getDynamicPriorityOptions()
-  currentPriorityOptions.value = _pOpts.length ? _pOpts : priorityOptions
+  // 直接调后端字典 API 获取全量字典数据（绕开 dictStore 异步竞态问题）
+  try {
+    const res: any = await getSimpleDictDataList()
+    const dictData = Array.isArray(res) ? res : (res?.data || [])
+    // 提取日常任务类型
+    const dailyOpts = extractDictOptions(dictData, 'pms_daily_task_type')
+    // 提取项目任务类型
+    const projectOpts = extractDictOptions(dictData, 'pms_task_type')
+    // 提取优先级
+    const priOpts = extractDictOptions(dictData, 'pms_priority')
+    // 根据当前模式设置任务类型
+    currentTaskTypeOptions.value = isDailyTask.value
+      ? (dailyOpts.length > 0 ? dailyOpts : dailyTaskTypeOptions)
+      : (projectOpts.length > 0 ? projectOpts : taskTypeOptions)
+    currentPriorityOptions.value = priOpts.length > 0 ? priOpts : priorityOptions
+    // 缓存到模块变量供 watch 使用
+    _cachedDailyTypeOpts = dailyOpts
+    _cachedProjectTypeOpts = projectOpts
+  } catch (e) {
+    console.warn('[PMS] 字典API加载失败，使用fallback', e)
+  }
   loadList()
 })
 
+// 缓存：供 isDailyTask watch 切换时使用
+let _cachedDailyTypeOpts: { value: string; label: string }[] = []
+let _cachedProjectTypeOpts: { value: string; label: string }[] = []
+
 // 切换「日常任务/项目任务」时同步更新任务类型下拉选项
 watch(isDailyTask, (val) => {
-  currentTaskTypeOptions.value = val ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
+  if (val) {
+    currentTaskTypeOptions.value = _cachedDailyTypeOpts.length > 0 ? _cachedDailyTypeOpts : dailyTaskTypeOptions
+  } else {
+    currentTaskTypeOptions.value = _cachedProjectTypeOpts.length > 0 ? _cachedProjectTypeOpts : taskTypeOptions
+  }
 })
 </script>
 

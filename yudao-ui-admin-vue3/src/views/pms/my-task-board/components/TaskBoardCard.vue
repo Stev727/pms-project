@@ -1,5 +1,16 @@
 <template>
-  <div class="task-row" @click="emit('detail', task)">
+  <!-- 表头模式 -->
+  <div v-if="showHeader" class="task-row task-header">
+    <div class="row-name"><span class="header-text">任务名称</span></div>
+    <div class="row-cell cell-owner"><span class="header-text">责任人</span></div>
+    <div class="row-cell cell-date"><span class="header-text">计划日期</span></div>
+    <div class="row-cell cell-delay"><span class="header-text">延期</span></div>
+    <div class="row-cell cell-status"><span class="header-text">状态</span></div>
+    <div class="row-cell cell-review"><span class="header-text">审核</span></div>
+    <div class="row-cell cell-progress"><span class="header-text">进度</span></div>
+  </div>
+  <!-- 数据行 -->
+  <div v-else class="task-row" @click="emit('detail', task)">
     <!-- 名称 + 标签 -->
     <div class="row-name" :title="task.taskName">
       <span class="name-text">{{ task.taskName }}</span>
@@ -50,9 +61,11 @@ import { taskStatusMap, dailyTaskTypeOptions, getDailyTaskTypeOptions, calcDelay
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 const props = defineProps<{
-  task: TaskVO
+  task?: TaskVO
   currentUserId?: string | number
   projectName?: string
+  /** 是否渲染为表头行（显示列标题而非数据） */
+  showHeader?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -116,6 +129,21 @@ const canSubmitReview = computed(() => {
 .task-row:hover {
   background: #f7f8fa;
   border-color: #c9cdd4;
+}
+/* 表头行 */
+.task-header {
+  background: #f2f3f5;
+  cursor: default;
+  font-weight: 600;
+  border-bottom: 2px solid #e5e6eb;
+}
+.task-header:hover {
+  background: #f2f3f5;
+}
+.header-text {
+  color: #1d2129;
+  font-size: 13px;
+  font-weight: 600;
 }
 /* 名称区：弹性宽度，充分利用可用空间 */
 .row-name {

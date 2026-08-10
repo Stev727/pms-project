@@ -83,6 +83,7 @@
               <el-tag size="small" effect="plain" type="info" class="ml-8px">{{ group.tasks.length }}</el-tag>
             </div>
             <div class="task-list">
+              <task-board-card :show-header="true" />
               <task-board-card
                 v-for="t in group.tasks"
                 :key="t.taskId"
@@ -113,6 +114,7 @@
           <el-tag size="small" effect="plain" class="ml-8px">{{ group.tasks.length }}</el-tag>
         </div>
         <div v-show="!isProjectCollapsed(group.projectId)" class="task-list">
+            <task-board-card :show-header="true" />
             <task-board-card
               v-for="t in group.tasks"
               :key="t.taskId"
@@ -136,6 +138,7 @@
         </template>
         <el-empty v-if="board.dailyTasks.length === 0" description="该范围内无日常任务" :image-size="60" />
         <div v-else class="task-list">
+          <task-board-card :show-header="true" />
           <task-board-card
             v-for="t in board.dailyTasks"
             :key="t.taskId"
@@ -205,9 +208,10 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import TaskBoardCard from './components/TaskBoardCard.vue'
+import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
 import {
-  taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions,
-  getDynamicPriorityOptions, calcDelayDays, refreshPmsDicts, formatDate
+  taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions,
+  calcDelayDays, formatDate
 } from '../pms-utils'
 import * as echarts from 'echarts'
 import { nextTick, onUnmounted } from 'vue'
@@ -247,11 +251,17 @@ const projectTaskCount = computed(() =>
 )
 
 // 日常任务类型下拉（动态字典，fallback 到硬编码）
-const _rawDailyTypeOpts = getDailyTaskTypeOptions()
-const dailyTypeOpts = ref(_rawDailyTypeOpts.length ? _rawDailyTypeOpts : dailyTaskTypeOptions)
-// 优先级下拉（ref 而非 computed，refreshPmsDicts 后更新）
-const _rawDailyPriorityOpts = getDynamicPriorityOptions()
-const dailyPriorityOpts = ref(_rawDailyPriorityOpts.length ? _rawDailyPriorityOpts : priorityOptions)
+// 日常任务类型下拉 + 优先级下拉：先设 fallback，onMounted 直接调 API 覆盖
+const dailyTypeOpts = ref<{ value: string; label: string }[]>(dailyTaskTypeOptions)
+const dailyPriorityOpts = ref<{ value: string; label: string }[]>(priorityOptions)
+
+/** 从后端全量字典响应中提取指定 dictType 的选项列表 */
+function extractDictOpts(allData: any[], dictType: string): { value: string; label: string }[] {
+  return allData
+    .filter((d: any) => d.dictType === dictType && (d.status == null || d.status === 0))
+    .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+    .map((d: any) => ({ value: String(d.value), label: d.label }))
+}
 
 // 项目分组折叠/展开状态（reactive 对象属性触发响应式）
 const collapsedFlag = reactive<Record<number, boolean>>({})
@@ -530,13 +540,17 @@ const submitDaily = async () => {
 }
 
 onMounted(async () => {
-  // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项即时可见
-  await refreshPmsDicts()
-  // dictStore 已就绪，重新读取字典选项（覆盖 setup 阶段的 fallback 值）
-  const _dt = getDailyTaskTypeOptions()
-  dailyTypeOpts.value = _dt.length ? _dt : dailyTaskTypeOptions
-  const _dp = getDynamicPriorityOptions()
-  dailyPriorityOpts.value = _dp.length ? _dp : priorityOptions
+  // 直接调后端字典 API 获取全量字典数据（绕开 dictStore 异步竞态问题）
+  try {
+    const res: any = await getSimpleDictDataList()
+    const dictData = Array.isArray(res) ? res : (res?.data || [])
+    const dtOpts = extractDictOpts(dictData, 'pms_daily_task_type')
+    const dpOpts = extractDictOpts(dictData, 'pms_priority')
+    dailyTypeOpts.value = dtOpts.length > 0 ? dtOpts : dailyTaskTypeOptions
+    dailyPriorityOpts.value = dpOpts.length > 0 ? dpOpts : priorityOptions
+  } catch (e) {
+    console.warn('[PMS] 字典API加载失败，使用fallback', e)
+  }
   window.addEventListener('resize', handleResize)
   // 默认范围：本月
   const n = new Date()
