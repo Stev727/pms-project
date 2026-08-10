@@ -146,3 +146,19 @@ export const getMyReviewTaskList = (projectId?: string | number, reviewStatus?: 
   })
 }
 
+// ==================== 日常任务 / 我的任务看板（新增） ====================
+/** 我的任务看板聚合查询：历史遗留 + 项目任务分组 + 日常任务 */
+export const getTaskBoard = (params: {
+  userIds?: (string | number)[]
+  dateFrom: string
+  dateTo: string
+  includeSubordinates?: boolean
+}) => {
+  return request.get({ url: '/pms/task/board', params })
+}
+
+/** 部门审核中心：待我（直属领导）审核的日常任务列表 */
+export const getDeptReviewList = () => {
+  return request.get({ url: '/pms/task/dept-review-list' })
+}
+

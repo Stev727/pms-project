@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.pms.controller.admin.task;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.service.task.TaskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -11,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
+import java.time.LocalDate;
 import java.util.List;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -213,6 +215,30 @@ public class TaskController {
             @RequestParam(value = "projectId", required = false) Long projectId,
             @RequestParam(value = "reviewStatus", required = false) String reviewStatus) {
         return success(taskService.getMyReviewTaskList(projectId, reviewStatus));
+    }
+
+    // ==================== 日常任务 / 我的任务看板（新增） ====================
+
+    @GetMapping("/board")
+    @Operation(summary = "我的任务看板聚合查询（历史遗留/项目任务/日常任务）")
+    @Parameter(name = "userIds", description = "人员ID列表，不传默认本人")
+    @Parameter(name = "dateFrom", description = "范围起点 yyyy-MM-dd", required = true)
+    @Parameter(name = "dateTo", description = "范围终点 yyyy-MM-dd", required = true)
+    @Parameter(name = "includeSubordinates", description = "是否递归包含下属，默认 true")
+    @PreAuthorize("@ss.hasPermission('pms:board:query')")
+    public CommonResult<TaskBoardVO> board(
+            @RequestParam(value = "userIds", required = false) List<Long> userIds,
+            @RequestParam("dateFrom") String dateFrom,
+            @RequestParam("dateTo") String dateTo,
+            @RequestParam(value = "includeSubordinates", defaultValue = "true") boolean includeSubordinates) {
+        return success(taskService.boardQuery(userIds, LocalDate.parse(dateFrom), LocalDate.parse(dateTo), includeSubordinates));
+    }
+
+    @GetMapping("/dept-review-list")
+    @Operation(summary = "部门审核中心：待我审核的日常任务列表")
+    @PreAuthorize("@ss.hasPermission('pms:daily-task:review')")
+    public CommonResult<List<PmsTaskDO>> deptReviewList() {
+        return success(taskService.getDeptReviewTaskList());
     }
 
 }

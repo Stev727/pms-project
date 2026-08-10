@@ -150,6 +150,7 @@
           <el-col :span="12">
             <el-form-item label="所属项目" prop="projectId">
               <el-select v-model="taskForm.projectId" placeholder="请选择项目" filterable class="w-full" @change="onProjectChange">
+                <el-option :value="DAILY_PROJECT_VALUE" label="日常任务（无项目）" />
                 <el-option v-for="p in availableProjects" :key="p.projectId" :label="p.projectName" :value="p.projectId" />
               </el-select>
             </el-form-item>
@@ -158,7 +159,7 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="所属阶段" prop="stageId">
-              <el-select v-model="taskForm.stageId" placeholder="请先选择项目" filterable class="w-full" :disabled="!taskForm.projectId">
+              <el-select v-model="taskForm.stageId" placeholder="请先选择项目" filterable class="w-full" :disabled="!taskForm.projectId || isDailyTask">
                 <el-option v-for="s in stagesForSelectedProject" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
               </el-select>
             </el-form-item>
@@ -166,7 +167,7 @@
           <el-col :span="12">
             <el-form-item label="任务类型" prop="taskType">
               <el-select v-model="taskForm.taskType" placeholder="请选择" class="w-full">
-                <el-option v-for="opt in taskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in currentTaskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -241,7 +242,7 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import {
-  taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, formatDate, calcDelayDays
+  taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions, formatDate, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -274,6 +275,13 @@ const queryParams = reactive({
 
 const myTasks = ref(false)
 
+// 日常任务（无项目）：以固定哨兵值标识，提交时置 projectId = null 走部门审核流程
+const DAILY_PROJECT_VALUE = 0
+const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
+const currentTaskTypeOptions = computed(() =>
+  isDailyTask.value ? getDailyTaskTypeOptions() : taskTypeOptions
+)
+
 const filteredList = computed(() => {
   let list = taskList.value
   if (queryParams.projectId) {
@@ -301,8 +309,9 @@ const filteredList = computed(() => {
       return false
     })
   }
-  // 排除模板项目的任务
+  // 排除模板项目的任务；日常任务（无项目）直接保留
   return list.filter(t => {
+    if (t.projectId === null || t.projectId === undefined || t.projectId === 0) return true
     const proj = projectList.value.find(p => String(p.projectId) === String(t.projectId))
     return proj && proj.projectType !== 'standard_template'
   })
@@ -344,6 +353,8 @@ const loadList = async () => {
 
 // ==================== 辅助函数 ====================
 const getProjectName = (projectId?: string | number) => {
+  // 日常任务（无项目）单独标识
+  if (projectId === null || projectId === undefined || projectId === 0) return '日常任务'
   const p = projectList.value.find(p => String(p.projectId) === String(projectId))
   return p?.projectName || '-'
 }
@@ -409,7 +420,17 @@ const taskForm = reactive<TaskVO & { projectId?: string | number; helperIds?: nu
 
 const taskFormRules = reactive<FormRules>({
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-  projectId: [{ required: true, message: '请选择项目', trigger: 'change' }],
+  projectId: [{
+    validator: (_rule: any, _value: any, callback: any) => {
+      // 日常任务（无项目）合法；项目任务必须选择具体项目
+      if (taskForm.projectId === DAILY_PROJECT_VALUE) return callback()
+      if (taskForm.projectId === undefined || taskForm.projectId === null || taskForm.projectId === '') {
+        return callback(new Error('请选择项目'))
+      }
+      callback()
+    },
+    trigger: 'change'
+  }],
   stageId: [{ required: false }],
   taskType: [{ required: false }],
   priority: [{ required: false }],
@@ -441,6 +462,12 @@ const resetTaskForm = () => {
 
 const onProjectChange = () => {
   taskForm.stageId = undefined
+  // 切换为日常任务时，任务类型切换到日常字典；切回项目任务时回到默认项目类型
+  if (taskForm.projectId === DAILY_PROJECT_VALUE) {
+    taskForm.taskType = dailyTaskTypeOptions[0].value
+  } else if (!taskForm.taskType || dailyTaskTypeOptions.some(o => o.value === taskForm.taskType)) {
+    taskForm.taskType = 'design'
+  }
 }
 
 const handleCreate = () => {
@@ -505,11 +532,24 @@ const submitTask = async () => {
       await updateTask(data)
       message.success('任务更新成功')
     } else {
-      // 生成任务编号: TASK-阶段缩写-3位序号
-      const stageCode = stageList.value.find(s => s.stageId === data.stageId)?.stageCode || 'GEN'
-      const existingTasks = taskList.value.filter(t => String(t.stageId) === String(data.stageId))
-      const seq = String(existingTasks.length + 1).padStart(3, '0')
-      data.taskCode = `TASK-${stageCode}-${seq}`
+      // 日常任务：无项目、无阶段，提交时 projectId 置 NULL，走部门审核流程
+      if (isDailyTask.value) {
+        data.projectId = null
+        data.stageId = null
+        // 兜底：无计划的日常任务无法在看板按日期归类，默认填入今天，保证可见
+        const today = formatDate(new Date(), 'YYYY-MM-DD')
+        if (!data.planStartDate) data.planStartDate = today
+        if (!data.planEndDate) data.planEndDate = data.planStartDate
+        const existingDaily = taskList.value.filter(t => t.projectId == null)
+        const seq = String(existingDaily.length + 1).padStart(3, '0')
+        data.taskCode = `DAILY-${seq}`
+      } else {
+        // 生成任务编号: TASK-阶段缩写-3位序号
+        const stageCode = stageList.value.find(s => s.stageId === data.stageId)?.stageCode || 'GEN'
+        const existingTasks = taskList.value.filter(t => String(t.stageId) === String(data.stageId))
+        const seq = String(existingTasks.length + 1).padStart(3, '0')
+        data.taskCode = `TASK-${stageCode}-${seq}`
+      }
       await createTask(data)
       message.success('任务创建成功')
     }

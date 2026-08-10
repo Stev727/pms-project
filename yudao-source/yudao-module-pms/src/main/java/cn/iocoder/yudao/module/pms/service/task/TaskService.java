@@ -1,7 +1,9 @@
 package cn.iocoder.yudao.module.pms.service.task;
 
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -136,6 +138,24 @@ public interface TaskService {
      * @param reviewStatus 审核状态，可为空默认 submitted
      */
     List<PmsTaskDO> getMyReviewTaskList(Long projectId, String reviewStatus);
+
+    // ==================== 日常任务 / 我的任务看板 ====================
+
+    /**
+     * 我的任务看板聚合查询。
+     * 返回三块数据：历史遗留（范围起点之前未完成）、时间段内项目任务（按项目分组）、时间段内日常任务。
+     *
+     * @param userIds            人员ID列表，为空默认本人
+     * @param dateFrom           范围起点 yyyy-MM-dd（含）
+     * @param dateTo             范围终点 yyyy-MM-dd（含）
+     * @param includeSubordinates 是否递归包含下属，默认 true
+     */
+    TaskBoardVO boardQuery(List<Long> userIds, LocalDate dateFrom, LocalDate dateTo, boolean includeSubordinates);
+
+    /**
+     * 部门审核中心：查询待当前用户（责任人直属领导）审核的日常任务列表
+     */
+    List<PmsTaskDO> getDeptReviewTaskList();
 
 }
 

@@ -16,7 +16,12 @@ import cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants;
 import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
 import cn.iocoder.yudao.module.pms.enums.PmsReviewPolicyEnum;
 import cn.iocoder.yudao.module.pms.enums.PmsTaskReviewStatusEnum;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
+import cn.iocoder.yudao.module.system.api.dept.DeptApi;
+import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
+import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
+import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 import cn.iocoder.yudao.module.pms.service.projectpermission.ProjectPermissionService;
 import cn.iocoder.yudao.module.pms.service.task.TaskService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +39,7 @@ import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -105,6 +111,18 @@ public class TaskServiceImpl implements TaskService {
     private AdminUserMapper adminUserMapper;
 
     /**
+     * 部门 API（#日常任务）：解析责任人直属部门领导，作为日常任务的审核人
+     */
+    @Resource
+    private DeptApi deptApi;
+
+    /**
+     * 用户 API（#日常任务）：读取责任人的部门，用于解析直属领导
+     */
+    @Resource
+    private AdminUserApi adminUserApi;
+
+    /**
      * 项目级权限服务（#2 权限分级）。
      * 用 @Autowired(required = false) 而非 @Resource，是为了让 #1/#3 可以在 #2 尚未部署时独立启动，
      * 此时项目级权限判定整体降级，由 超管 / 项目经理 / 审核人 / 主责任人 兜底。
@@ -128,6 +146,16 @@ public class TaskServiceImpl implements TaskService {
         }
         if (entity.getProgress() == null) {
             entity.setProgress(0);
+        }
+        // 【日常任务】project_id 为 NULL 表示非项目任务：自动置为进行中，并解析直属领导为审核人
+        if (entity.getProjectId() == null) {
+            if (entity.getCompleteStatus() == null || entity.getCompleteStatus().isEmpty()
+                    || "not_started".equals(entity.getCompleteStatus())) {
+                entity.setCompleteStatus("in_progress");
+            }
+            if (entity.getReviewerId() == null && entity.getMainOwnerId() != null) {
+                entity.setReviewerId(resolveDailyTaskReviewer(entity.getMainOwnerId()));
+            }
         }
         taskMapper.insert(entity);
 
@@ -776,7 +804,10 @@ public class TaskServiceImpl implements TaskService {
         // 策略为 need_review：必须有审核人
         Long reviewerId = task.getReviewerId();
         if (reviewerId == null) {
-            reviewerId = resolveDefaultReviewer(loadParent(task), task.getProjectId());
+            // 日常任务（无项目）：审核人 = 责任人直属部门领导
+            reviewerId = task.getProjectId() == null
+                    ? resolveDailyTaskReviewer(task.getMainOwnerId())
+                    : resolveDefaultReviewer(loadParent(task), task.getProjectId());
         }
         if (reviewerId == null) {
             throw new ServiceException(ErrorCodeConstants.TASK_REVIEWER_REQUIRED);
@@ -929,6 +960,120 @@ public class TaskServiceImpl implements TaskService {
             }
         }
         return new ArrayList<>(merged.values());
+    }
+
+    // ==================================================================
+    // 日常任务 / 我的任务看板
+    // ==================================================================
+
+    @Override
+    public TaskBoardVO boardQuery(List<Long> userIds, LocalDate dateFrom, LocalDate dateTo,
+                                  boolean includeSubordinates) {
+        Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
+        List<Long> owners = resolveBoardOwners(userIds, loginUserId, includeSubordinates);
+        if (owners.isEmpty()) {
+            owners = List.of(loginUserId);
+        }
+        // 未完成状态集合（看板只关心未完结的任务）
+        List<String> unfinished = List.of("not_started", "pending_accept", "in_progress",
+                "completion_pending_review", "delayed", "rejected", "paused");
+
+        // 1) 历史遗留：计划开始早于查询范围起点且未完成（含项目 + 日常）
+        List<PmsTaskDO> legacy = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                .in(PmsTaskDO::getMainOwnerId, owners)
+                .lt(PmsTaskDO::getPlanStartDate, dateFrom)
+                .in(PmsTaskDO::getCompleteStatus, unfinished)
+                .orderByAsc(PmsTaskDO::getPlanStartDate));
+
+        // 2) 时间段内任务（不含已完成），按是否关联项目拆分
+        List<PmsTaskDO> inRange = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                .in(PmsTaskDO::getMainOwnerId, owners)
+                .between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo)
+                .in(PmsTaskDO::getCompleteStatus, unfinished)
+                .orderByAsc(PmsTaskDO::getPlanStartDate));
+
+        List<PmsTaskDO> dailyTasks = new ArrayList<>();
+        Map<Long, List<PmsTaskDO>> projectMap = new LinkedHashMap<>();
+        for (PmsTaskDO t : inRange) {
+            if (t.getProjectId() == null) {
+                dailyTasks.add(t);
+            } else {
+                projectMap.computeIfAbsent(t.getProjectId(), k -> new ArrayList<>()).add(t);
+            }
+        }
+
+        // 组装项目分组（带项目名称）
+        List<TaskBoardVO.ProjectTaskGroup> projectGroups = new ArrayList<>();
+        for (Map.Entry<Long, List<PmsTaskDO>> entry : projectMap.entrySet()) {
+            PmsProjectDO proj = projectMapper.selectById(entry.getKey());
+            TaskBoardVO.ProjectTaskGroup group = new TaskBoardVO.ProjectTaskGroup();
+            group.setProjectId(entry.getKey());
+            group.setProjectName(proj != null && proj.getProjectName() != null ? proj.getProjectName() : "未知项目");
+            group.setTasks(entry.getValue());
+            projectGroups.add(group);
+        }
+
+        TaskBoardVO vo = new TaskBoardVO();
+        vo.setLegacyTasks(legacy);
+        vo.setProjectGroups(projectGroups);
+        vo.setDailyTasks(dailyTasks);
+        return vo;
+    }
+
+    @Override
+    public List<PmsTaskDO> getDeptReviewTaskList() {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        String status = PmsTaskReviewStatusEnum.SUBMITTED.getStatus();
+        // 直属领导（审核人）查看待审日常任务；超管可见全部日常待审任务
+        Long reviewerId = securityFrameworkService.hasAnyRoles("super_admin") ? null : userId;
+        return taskMapper.selectDeptReviewTasks(reviewerId, status);
+    }
+
+    /**
+     * 解析看板查询的有效人员集合：
+     * - 未传 userIds → 默认本人
+     * - includeSubordinates=true → 每个种子用户递归展开其下属
+     */
+    private List<Long> resolveBoardOwners(List<Long> userIds, Long loginUserId, boolean includeSubordinates) {
+        Set<Long> result = new LinkedHashSet<>();
+        List<Long> seeds = (userIds == null || userIds.isEmpty()) ? List.of(loginUserId) : userIds;
+        for (Long uid : seeds) {
+            if (uid == null) continue;
+            result.add(uid);
+            if (includeSubordinates) {
+                try {
+                    List<AdminUserRespDTO> subs = adminUserApi.getUserListBySubordinate(uid);
+                    if (subs != null) {
+                        for (AdminUserRespDTO sub : subs) {
+                            if (sub.getId() != null) result.add(sub.getId());
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // 下属解析失败不影响主流程
+                }
+            }
+        }
+        return new ArrayList<>(result);
+    }
+
+    /**
+     * 解析日常任务（无项目）的审核人：责任人的直属部门领导。
+     * 若责任人无部门或部门无领导，则回退为责任人本人（自检）。
+     */
+    private Long resolveDailyTaskReviewer(Long mainOwnerId) {
+        if (mainOwnerId == null) return null;
+        try {
+            AdminUserRespDTO user = adminUserApi.getUser(mainOwnerId);
+            if (user != null && user.getDeptId() != null) {
+                DeptRespDTO dept = deptApi.getDept(user.getDeptId());
+                if (dept != null && dept.getLeaderUserId() != null) {
+                    return dept.getLeaderUserId();
+                }
+            }
+        } catch (Exception e) {
+            // 降级：解析失败不影响创建，回退为责任人本人
+        }
+        return mainOwnerId;
     }
 
     /**

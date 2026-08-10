@@ -221,6 +221,21 @@ export function getDynamicPriorityOptions() {
   return getDictOptions('pms_priority', priorityOptions)
 }
 
+// ==================== 日常任务类型（非项目任务） ====================
+// 字典类型 pms_daily_task_type，与项目任务类型 task_type 区分
+export const dailyTaskTypeOptions = [
+  { value: 'personal_growth', label: '个人提升' },
+  { value: 'training', label: '培训学习' },
+  { value: 'meeting', label: '会议组织' },
+  { value: 'customer_followup', label: '客户跟进' },
+  { value: 'admin_affairs', label: '行政事务' },
+  { value: 'other', label: '其他' },
+]
+
+export function getDailyTaskTypeOptions() {
+  return getDictOptions('pms_daily_task_type', dailyTaskTypeOptions)
+}
+
 
 // ==================== 通知内容生成 ====================
 // 根据通知模板和任务/项目数据生成通知内容

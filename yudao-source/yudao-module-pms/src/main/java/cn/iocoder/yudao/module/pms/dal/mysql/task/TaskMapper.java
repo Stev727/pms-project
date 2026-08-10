@@ -91,5 +91,21 @@ public interface TaskMapper extends BaseMapperX<PmsTaskDO> {
                 .orderByAsc(PmsTaskDO::getTaskId));
     }
 
+    /**
+     * 部门审核中心：查询待审核的日常任务（project_id 为 NULL 表示非项目任务）。
+     * reviewerId 为 NULL 时查询全部日常待审任务（超管视角）；否则仅返回指定审核人的任务。
+     */
+    default List<PmsTaskDO> selectDeptReviewTasks(Long reviewerId, String reviewStatus) {
+        LambdaQueryWrapperX<PmsTaskDO> wrapper = new LambdaQueryWrapperX<>();
+        wrapper.isNull(PmsTaskDO::getProjectId)
+                .eq(PmsTaskDO::getReviewStatus, reviewStatus)
+                .orderByAsc(PmsTaskDO::getPlanStartDate)
+                .orderByAsc(PmsTaskDO::getSortOrder);
+        if (reviewerId != null) {
+            wrapper.eq(PmsTaskDO::getReviewerId, reviewerId);
+        }
+        return selectList(wrapper);
+    }
+
 }
 
