@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.pms.service.task;
 
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -154,12 +155,22 @@ public interface TaskService {
      * 我的任务看板聚合查询。
      * 返回三块数据：历史遗留（范围起点之前未完成）、时间段内项目任务（按项目分组）、时间段内日常任务。
      *
-     * @param userIds            人员ID列表，为空默认本人
+     * 权限模型（三级，安全兜底在方法内）：
+     *   - 管理员（拥有 pms:board:admin 权限点）：可查看所有人任务
+     *   - 领导（有下属）：可查看本人 + 其递归下属
+     *   - 非领导（无下属且非管理员）：仅可查看本人
+     *
+     * @param userIds            人员ID列表（逗号分隔字符串），为空按当前用户权限范围默认（管理员=全部 / 其他=本人）
      * @param dateFrom           范围起点 yyyy-MM-dd（含）
      * @param dateTo             范围终点 yyyy-MM-dd（含）
      * @param includeSubordinates 是否递归包含下属，默认 true
      */
-    TaskBoardVO boardQuery(List<Long> userIds, LocalDate dateFrom, LocalDate dateTo, boolean includeSubordinates);
+    TaskBoardVO boardQuery(String userIds, LocalDate dateFrom, LocalDate dateTo, boolean includeSubordinates);
+
+    /**
+     * 我的任务看板：返回当前登录用户可查看的人员范围（权限判定结果），供前端限制下拉可选范围与默认视图。
+     */
+    TaskBoardScopeVO getBoardScope();
 
     /**
      * 部门审核中心：查询待当前用户（责任人直属领导）审核的日常任务列表

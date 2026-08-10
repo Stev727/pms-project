@@ -147,14 +147,21 @@ export const getMyReviewTaskList = (projectId?: string | number, reviewStatus?: 
 }
 
 // ==================== 日常任务 / 我的任务看板（新增） ====================
-/** 我的任务看板聚合查询：历史遗留 + 项目任务分组 + 日常任务 */
+/** 我的任务看板聚合查询：历史遗留 + 项目任务分组 + 日常任务
+ *  userIds 改为逗号分隔字符串（避免 qs 对数组使用 indices 序列化导致后端 List<Long> 绑定失败）
+ */
 export const getTaskBoard = (params: {
-  userIds?: (string | number)[]
+  userIds?: string
   dateFrom: string
   dateTo: string
   includeSubordinates?: boolean
 }) => {
   return request.get({ url: '/pms/task/board', params })
+}
+
+/** 我的任务看板：获取当前用户可查看的人员范围（权限判定），用于限制人员下拉可选范围与默认视图 */
+export const getBoardScope = () => {
+  return request.get({ url: '/pms/task/board-scope' })
 }
 
 /** 部门审核中心：待我（直属领导）审核的日常任务列表 */

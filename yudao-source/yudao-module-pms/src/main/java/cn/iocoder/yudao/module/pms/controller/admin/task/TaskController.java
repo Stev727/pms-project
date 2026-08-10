@@ -4,6 +4,7 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
 import cn.iocoder.yudao.module.pms.service.task.TaskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -228,17 +229,24 @@ public class TaskController {
 
     @GetMapping("/board")
     @Operation(summary = "我的任务看板聚合查询（历史遗留/项目任务/日常任务）")
-    @Parameter(name = "userIds", description = "人员ID列表，不传默认本人")
+    @Parameter(name = "userIds", description = "人员ID列表（逗号分隔字符串），不传按当前用户权限范围默认（管理员=全部 / 其他=本人）")
     @Parameter(name = "dateFrom", description = "范围起点 yyyy-MM-dd", required = true)
     @Parameter(name = "dateTo", description = "范围终点 yyyy-MM-dd", required = true)
     @Parameter(name = "includeSubordinates", description = "是否递归包含下属，默认 true")
     @PreAuthorize("@ss.hasPermission('pms:board:query')")
     public CommonResult<TaskBoardVO> board(
-            @RequestParam(value = "userIds", required = false) List<Long> userIds,
+            @RequestParam(value = "userIds", required = false) String userIds,
             @RequestParam("dateFrom") String dateFrom,
             @RequestParam("dateTo") String dateTo,
             @RequestParam(value = "includeSubordinates", defaultValue = "true") boolean includeSubordinates) {
         return success(taskService.boardQuery(userIds, LocalDate.parse(dateFrom), LocalDate.parse(dateTo), includeSubordinates));
+    }
+
+    @GetMapping("/board-scope")
+    @Operation(summary = "我的任务看板：当前用户可查看的人员范围（权限判定）")
+    @PreAuthorize("@ss.hasPermission('pms:board:query')")
+    public CommonResult<TaskBoardScopeVO> boardScope() {
+        return success(taskService.getBoardScope());
     }
 
     @GetMapping("/dept-review-list")

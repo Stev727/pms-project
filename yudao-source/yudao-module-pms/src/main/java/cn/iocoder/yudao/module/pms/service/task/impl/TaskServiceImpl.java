@@ -17,6 +17,7 @@ import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
 import cn.iocoder.yudao.module.pms.enums.PmsReviewPolicyEnum;
 import cn.iocoder.yudao.module.pms.enums.PmsTaskReviewStatusEnum;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
 import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
@@ -1011,30 +1012,79 @@ public class TaskServiceImpl implements TaskService {
     // ==================================================================
 
     @Override
-    public TaskBoardVO boardQuery(List<Long> userIds, LocalDate dateFrom, LocalDate dateTo,
+    public TaskBoardVO boardQuery(String userIds, LocalDate dateFrom, LocalDate dateTo,
                                   boolean includeSubordinates) {
         Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
-        List<Long> owners = resolveBoardOwners(userIds, loginUserId, includeSubordinates);
-        if (owners.isEmpty()) {
-            owners = List.of(loginUserId);
+
+        // 1) 计算当前用户可查看的人员范围（安全兜底）
+        BoardScope scope = resolveBoardScope(loginUserId);
+        boolean isAdmin = scope.allowedUserIds == null;
+
+        // 2) 解析前端传入的人员种子（逗号分隔）；未传则按角色默认范围
+        Set<Long> owners = new LinkedHashSet<>();
+        boolean queryAll = false;
+        if (userIds == null || userIds.trim().isEmpty()) {
+            if (isAdmin) {
+                queryAll = true; // 管理员未选人 → 查看全部
+            } else {
+                owners.add(loginUserId);
+            }
+        } else {
+            List<Long> seeds = parseUserIds(userIds);
+            // 安全门禁：种子必须在允许范围内（管理员 allowedUserIds=null 表示全部放行）
+            if (scope.allowedUserIds != null) {
+                List<Long> filtered = new ArrayList<>();
+                for (Long id : seeds) {
+                    if (scope.allowedUserIds.contains(id)) filtered.add(id);
+                }
+                seeds = filtered;
+                if (seeds.isEmpty()) seeds.add(loginUserId);
+            }
+            owners.addAll(seeds);
+            // 3) 含下属开关：递归展开每个种子用户的下属
+            if (includeSubordinates) {
+                for (Long uid : seeds) {
+                    expandSubordinates(uid, owners);
+                }
+            }
+            // 4) 最终门禁：展开后的集合仍须落在允许范围内
+            if (scope.allowedUserIds != null) {
+                owners.retainAll(scope.allowedUserIds);
+            }
         }
+        if (!queryAll && owners.isEmpty()) {
+            owners.add(loginUserId);
+        }
+
         // 未完成状态集合（看板只关心未完结的任务）
         List<String> unfinished = List.of("not_started", "pending_accept", "in_progress",
                 "completion_pending_review", "delayed", "rejected", "paused");
 
-        // 1) 历史遗留：计划开始早于查询范围起点且未完成（含项目 + 日常）
-        List<PmsTaskDO> legacy = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
-                .in(PmsTaskDO::getMainOwnerId, owners)
-                .lt(PmsTaskDO::getPlanStartDate, dateFrom)
-                .in(PmsTaskDO::getCompleteStatus, unfinished)
-                .orderByAsc(PmsTaskDO::getPlanStartDate));
-
-        // 2) 时间段内任务（不含已完成），按是否关联项目拆分
-        List<PmsTaskDO> inRange = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
-                .in(PmsTaskDO::getMainOwnerId, owners)
-                .between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo)
-                .in(PmsTaskDO::getCompleteStatus, unfinished)
-                .orderByAsc(PmsTaskDO::getPlanStartDate));
+        List<PmsTaskDO> legacy;
+        List<PmsTaskDO> inRange;
+        if (queryAll) {
+            // 管理员查看全部：不加 main_owner_id 过滤
+            legacy = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    .lt(PmsTaskDO::getPlanStartDate, dateFrom)
+                    .in(PmsTaskDO::getCompleteStatus, unfinished)
+                    .orderByAsc(PmsTaskDO::getPlanStartDate));
+            inRange = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    .between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo)
+                    .in(PmsTaskDO::getCompleteStatus, unfinished)
+                    .orderByAsc(PmsTaskDO::getPlanStartDate));
+        } else {
+            List<Long> ownerList = new ArrayList<>(owners);
+            legacy = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    .in(PmsTaskDO::getMainOwnerId, ownerList)
+                    .lt(PmsTaskDO::getPlanStartDate, dateFrom)
+                    .in(PmsTaskDO::getCompleteStatus, unfinished)
+                    .orderByAsc(PmsTaskDO::getPlanStartDate));
+            inRange = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    .in(PmsTaskDO::getMainOwnerId, ownerList)
+                    .between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo)
+                    .in(PmsTaskDO::getCompleteStatus, unfinished)
+                    .orderByAsc(PmsTaskDO::getPlanStartDate));
+        }
 
         List<PmsTaskDO> dailyTasks = new ArrayList<>();
         Map<Long, List<PmsTaskDO>> projectMap = new LinkedHashMap<>();
@@ -1065,39 +1115,105 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    public TaskBoardScopeVO getBoardScope() {
+        Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
+        BoardScope scope = resolveBoardScope(loginUserId);
+        TaskBoardScopeVO vo = new TaskBoardScopeVO();
+        vo.setIsAdmin(scope.isAdmin);
+        vo.setIsLeader(scope.isLeader);
+        vo.setLoginUserId(loginUserId);
+        vo.setAllowedUserIds(scope.allowedUserIds);
+        return vo;
+    }
+
+    /**
+     * 看板人员范围判定（三级权限模型，安全兜底的唯一来源）：
+     *   - 管理员（拥有 pms:board:admin 权限点）：allowedUserIds=null 表示全部
+     *   - 领导（有下属）：allowedUserIds=[本人, 下属...]
+     *   - 非领导：allowedUserIds=[本人]
+     */
+    private BoardScope resolveBoardScope(Long loginUserId) {
+        BoardScope scope = new BoardScope();
+        scope.isAdmin = securityFrameworkService.hasAnyPermissions("pms:board:admin");
+        if (scope.isAdmin) {
+            scope.allowedUserIds = null; // 全部
+            scope.isLeader = false;
+            return scope;
+        }
+        List<AdminUserRespDTO> subs = safeGetSubordinates(loginUserId);
+        scope.isLeader = subs != null && !subs.isEmpty();
+        Set<Long> allowed = new LinkedHashSet<>();
+        allowed.add(loginUserId);
+        if (subs != null) {
+            for (AdminUserRespDTO sub : subs) {
+                if (sub.getId() != null) allowed.add(sub.getId());
+            }
+        }
+        scope.allowedUserIds = new ArrayList<>(allowed);
+        return scope;
+    }
+
+    /**
+     * 解析逗号分隔的人员ID字符串为 Long 列表（非法值跳过）
+     */
+    private List<Long> parseUserIds(String userIds) {
+        List<Long> result = new ArrayList<>();
+        if (userIds == null || userIds.trim().isEmpty()) return result;
+        for (String s : userIds.split(",")) {
+            s = s.trim();
+            if (s.isEmpty()) continue;
+            try {
+                result.add(Long.parseLong(s));
+            } catch (NumberFormatException ignored) {
+                // 跳过非法ID
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 递归展开某用户的下属，并入 owners 集合
+     */
+    private void expandSubordinates(Long uid, Set<Long> owners) {
+        try {
+            List<AdminUserRespDTO> subs = adminUserApi.getUserListBySubordinate(uid);
+            if (subs != null) {
+                for (AdminUserRespDTO sub : subs) {
+                    if (sub.getId() != null) owners.add(sub.getId());
+                }
+            }
+        } catch (Exception ignored) {
+            // 下属解析失败不影响主流程
+        }
+    }
+
+    /**
+     * 安全获取某用户的下属（异常降级为 null）
+     */
+    private List<AdminUserRespDTO> safeGetSubordinates(Long uid) {
+        try {
+            return adminUserApi.getUserListBySubordinate(uid);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 看板范围判定中间结构
+     */
+    private static class BoardScope {
+        boolean isAdmin;
+        boolean isLeader;
+        List<Long> allowedUserIds; // null = 全部
+    }
+
+    @Override
     public List<PmsTaskDO> getDeptReviewTaskList() {
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         String status = PmsTaskReviewStatusEnum.SUBMITTED.getStatus();
         // 直属领导（审核人）查看待审日常任务；超管可见全部日常待审任务
         Long reviewerId = securityFrameworkService.hasAnyRoles("super_admin") ? null : userId;
         return taskMapper.selectDeptReviewTasks(reviewerId, status);
-    }
-
-    /**
-     * 解析看板查询的有效人员集合：
-     * - 未传 userIds → 默认本人
-     * - includeSubordinates=true → 每个种子用户递归展开其下属
-     */
-    private List<Long> resolveBoardOwners(List<Long> userIds, Long loginUserId, boolean includeSubordinates) {
-        Set<Long> result = new LinkedHashSet<>();
-        List<Long> seeds = (userIds == null || userIds.isEmpty()) ? List.of(loginUserId) : userIds;
-        for (Long uid : seeds) {
-            if (uid == null) continue;
-            result.add(uid);
-            if (includeSubordinates) {
-                try {
-                    List<AdminUserRespDTO> subs = adminUserApi.getUserListBySubordinate(uid);
-                    if (subs != null) {
-                        for (AdminUserRespDTO sub : subs) {
-                            if (sub.getId() != null) result.add(sub.getId());
-                        }
-                    }
-                } catch (Exception ignored) {
-                    // 下属解析失败不影响主流程
-                }
-            }
-        }
-        return new ArrayList<>(result);
     }
 
     /**

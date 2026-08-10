@@ -20,10 +20,11 @@
             filterable
             collapse-tags
             collapse-tags-tooltip
-            placeholder="默认本人"
-            style="width: 260px"
+            :placeholder="boardScope.isAdmin ? '默认本人 / 选「全公司」看全部' : '默认本人'"
+            style="width: 280px"
           >
-            <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+            <el-option v-if="boardScope.isAdmin" :key="ALL_SENTINEL" label="🌐 全公司（全部人员）" :value="ALL_SENTINEL" />
+            <el-option v-for="u in selectableUsers" :key="u.id" :label="u.nickname" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -203,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { getTaskBoard, createTask, submitReview, getReviewerOf, TaskVO } from '@/api/pms/task'
+import { getTaskBoard, getBoardScope, createTask, submitReview, getReviewerOf, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
@@ -235,6 +236,25 @@ const selectedUsers = ref<(string | number)[]>([])
 const includeSubordinates = ref(true)
 const projectList = ref<ProjectVO[]>([])
 const stageList = ref<StageVO[]>([])
+
+// 看板人员范围（权限判定）：管理员允许全部、领导=本人+下属、非领导=本人
+const boardScope = ref<{
+  isAdmin?: boolean
+  isLeader?: boolean
+  loginUserId?: number
+  allowedUserIds?: number[] | null
+}>({})
+
+// 人员下拉可选范围：管理员=全部；其他=范围限定集合
+const selectableUsers = computed(() => {
+  const al = boardScope.value.allowedUserIds
+  if (al == null) return userList.value
+  const set = new Set(al.map((id) => String(id)))
+  return userList.value.filter((u: any) => set.has(String(u.id)))
+})
+
+// 全公司（管理员查看全部）选项的哨兵值
+const ALL_SENTINEL = '__ALL__'
 
 const board = reactive<{
   legacyTasks: TaskVO[]
@@ -465,12 +485,23 @@ const loadBoard = async () => {
     projectList.value = projects || []
     stageList.value = stages || []
     await ensureUsersLoaded()
-    const data = await getTaskBoard({
-      userIds: selectedUsers.value.length ? selectedUsers.value : undefined,
+    // userIds 改为逗号分隔字符串，避免 qs 对数组使用 indices 序列化导致后端 List<Long> 绑定失败
+    const sel = selectedUsers.value
+    const params: {
+      userIds?: string
+      dateFrom: string
+      dateTo: string
+      includeSubordinates: boolean
+    } = {
       dateFrom: dateRange.value[0],
       dateTo: dateRange.value[1],
       includeSubordinates: includeSubordinates.value
-    })
+    }
+    const wantAll = sel.includes(ALL_SENTINEL) || (boardScope.value.isAdmin && sel.length === 0)
+    if (!wantAll && sel.length) {
+      params.userIds = sel.join(',')
+    }
+    const data = await getTaskBoard(params)
     board.legacyTasks = data.legacyTasks || []
     board.projectGroups = data.projectGroups || []
     board.dailyTasks = data.dailyTasks || []
@@ -561,6 +592,17 @@ onMounted(async () => {
     formatDate(n, 'YYYY-MM-DD')
   ]
   await ensureUsersLoaded()
+  // 获取看板人员范围（权限判定）：管理员=全部 / 领导=本人+下属 / 非领导=本人
+  try {
+    const scopeRes: any = await getBoardScope()
+    boardScope.value = scopeRes?.data || {}
+  } catch (e) {
+    console.warn('[PMS-Board] 获取人员范围失败，按本人视图兜底', e)
+    boardScope.value = {}
+  }
+  // 默认选中本人（管理员可清空或选「全公司」查看全部）
+  const defaultUid = boardScope.value.loginUserId ?? currentUserId.value
+  if (defaultUid != null) selectedUsers.value = [defaultUid]
   await loadBoard()
 
   // 处理深链 taskId（钉钉驳回跳转场景）：自动定位并打开任务详情
