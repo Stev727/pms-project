@@ -250,6 +250,7 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void submitCompletion(Long taskId, String actualCompleteDate, String completionNote) {
         PmsTaskDO task = requireTask(taskId);
         if (!"in_progress".equals(task.getCompleteStatus())) {
@@ -269,6 +270,18 @@ public class TaskServiceImpl implements TaskService {
             task.setReviewerId(resolveDefaultReviewer(loadParent(task), task.getProjectId()));
         }
         taskMapper.updateById(task);
+
+        // 通知审核人（与 submitReview 保持一致的通知逻辑）
+        PmsProjectDO project727 = projectMapper.selectById(task.getProjectId());
+        String projectName727 = project727 == null || project727.getProjectName() == null ? "" : project727.getProjectName();
+        Long reviewerId727 = task.getReviewerId();
+        if (reviewerId727 != null) {
+            String detailUrl727 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
+            sendNotifyQuietly("【PMS】任务待您审核",
+                    "项目「" + projectName727 + "」任务「" + task.getTaskName() + "」已提交完成，请及时审核。",
+                    List.of(reviewerId727), "task_review_submitted", taskId, detailUrl727);
+        }
+        writeTaskLog(taskId, "submit_completion", "提交完成，审核人[" + reviewerId727 + "]");
     }
 
     @Override
