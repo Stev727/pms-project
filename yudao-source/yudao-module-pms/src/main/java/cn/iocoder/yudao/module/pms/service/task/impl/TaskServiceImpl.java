@@ -10,6 +10,8 @@ import cn.iocoder.yudao.module.pms.dal.dataobject.tasklog.PmsTaskLogDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.tasklog.TaskLogMapper;
+import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
+import cn.iocoder.yudao.module.system.dal.mysql.user.AdminUserMapper;
 import cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants;
 import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
 import cn.iocoder.yudao.module.pms.enums.PmsReviewPolicyEnum;
@@ -35,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import cn.hutool.core.util.StrUtil;
 
 /**
  * 任务 Service 实现
@@ -98,6 +101,9 @@ public class TaskServiceImpl implements TaskService {
     @Resource
     private SecurityFrameworkService securityFrameworkService;
 
+    @Resource
+    private AdminUserMapper adminUserMapper;
+
     /**
      * 项目级权限服务（#2 权限分级）。
      * 用 @Autowired(required = false) 而非 @Resource，是为了让 #1/#3 可以在 #2 尚未部署时独立启动，
@@ -158,7 +164,30 @@ public class TaskServiceImpl implements TaskService {
         taskMapper.updateById(task);
         writeTaskLog(taskId, "dispatch", "派发任务给用户[" + task.getMainOwnerId() + "]");
         String title = "【PMS】任务派发通知";
-        String content = "项目「" + projectName + "」向您派发任务「" + task.getTaskName() + "」，请及时接收并处理。";
+        // 构建富文本通知内容（项目名、任务名、计划周期、协助人）
+        StringBuilder sb = new StringBuilder();
+        sb.append("项目「").append(projectName).append("」向您派发任务「").append(task.getTaskName()).append("」，请及时接收并处理。");
+        // 计划周期
+        if (task.getPlanStartDate() != null || task.getPlanEndDate() != null) {
+            String start = task.getPlanStartDate() != null ? task.getPlanStartDate().toString() : "待定";
+            String end = task.getPlanEndDate() != null ? task.getPlanEndDate().toString() : "待定";
+            sb.append("\n\n📅 计划周期: ").append(start).append(" ~ ").append(end);
+        }
+        // 协助人
+        if (StrUtil.isNotBlank(task.getHelperIds())) {
+            List<Long> hIds = java.util.Arrays.stream(task.getHelperIds().split(","))
+                    .map(String::trim).filter(StrUtil::isNotBlank)
+                    .map(Long::parseLong).collect(java.util.stream.Collectors.toList());
+            if (!hIds.isEmpty()) {
+                List<AdminUserDO> helpers = adminUserMapper.selectBatchIds(hIds);
+                String hNames = helpers.stream().map(AdminUserDO::getNickname)
+                        .collect(java.util.stream.Collectors.joining(", "));
+                if (StrUtil.isNotBlank(hNames)) {
+                    sb.append("\n👥 协助人: ").append(hNames);
+                }
+            }
+        }
+        String content = sb.toString();
         // #4 增强：详情跳转 URL（钉钉卡片/待办点击直达 PMS 任务抽屉）
         String detailUrl = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + task.getTaskId();
         boolean sent = dingTalkNotifyService.sendNotifyDirect(title, content, List.of(task.getMainOwnerId()),

@@ -860,6 +860,12 @@ const remainingRouter: AppRouteRecordRaw[] = [
         component: () => import('@/views/pms/dict/index.vue'),
         name: 'PmsDict',
         meta: { title: '字典管理', noCache: true, hidden: true, canTo: true, activeMenu: '/pms/project' }
+      },
+      {
+        path: 'quick-accept',
+        component: () => import('@/views/pms/quick-accept/index.vue'),
+        name: 'PmsQuickAccept',
+        meta: { title: '快速接收', noCache: true, hidden: true, canTo: true }
       }
     ]
   }

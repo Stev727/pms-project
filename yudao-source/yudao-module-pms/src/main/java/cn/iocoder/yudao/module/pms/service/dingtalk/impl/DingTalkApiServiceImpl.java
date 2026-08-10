@@ -206,10 +206,17 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
                 JSONObject cardParam = new JSONObject();
                 cardParam.set("title", title);
                 cardParam.set("text", content);
-                // 一键接收深链：在详情 URL 后追加 action=accept，前端自动弹出接收确认
-                String acceptUrl = detailUrl.contains("?")
-                        ? detailUrl + "&action=accept"
-                        : detailUrl + "?action=accept";
+                // 一键接收：指向独立快速接收页面（直接调 API，不进系统不弹确认框）
+                // 从 detailUrl 提取 baseUrl 和 taskId 构造 quick-accept 链接
+                // detailUrl 格式: {baseUrl}/pms/project-detail/{projectId}?taskId={taskId}
+                String qaBaseUrl = detailUrl.contains("/pms/") ? detailUrl.substring(0, detailUrl.indexOf("/pms/")) : detailUrl;
+                String qaTaskId = "";
+                int tiIdx = detailUrl.indexOf("taskId=");
+                if (tiIdx > 0) {
+                    int tiEnd = detailUrl.indexOf("&", tiIdx);
+                    qaTaskId = tiEnd > 0 ? detailUrl.substring(tiIdx + 7, tiEnd) : detailUrl.substring(tiIdx + 7);
+                }
+                String acceptUrl = qaBaseUrl + "/pms/quick-accept?taskId=" + qaTaskId;
                 cardParam.set("actionTitle1", "\u4e00\u952e\u63a5\u6536");   // 一键接收
                 cardParam.set("actionURL1", acceptUrl);
                 cardParam.set("actionTitle2", "\u67e5\u770b\u8be6\u60c5");   // 查看详情
