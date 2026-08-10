@@ -227,7 +227,7 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
                 // 纯文本（无详情链接时降级）
                 body.set("msgKey", "sampleText");
                 JSONObject textParam = new JSONObject();
-                textParam.set("content", title + "\n\n" + content);
+                textParam.set("text", title + "\n\n" + content);
                 body.set("msgParam", textParam.toString());
             }
             try {
