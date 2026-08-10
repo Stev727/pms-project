@@ -159,33 +159,6 @@ public class TaskServiceImpl implements TaskService {
         }
         taskMapper.insert(entity);
 
-        // 【日常任务】创建即触发「领导审批」通知：triggerEvent 用 task_review_submitted，
-        // 让钉钉机器人走「审核型」卡片（按钮=审核通过/审核驳回），而非「派发型」（一键接收/查看详情）。
-        if (entity.getProjectId() == null) {
-            Long taskId = entity.getTaskId();
-            String dailyDetailUrl = frontendBaseUrl + "/pms/my-task-board";
-            // 通知责任人
-            if (entity.getMainOwnerId() != null) {
-                sendNotifyQuietly("【PMS】您有新日常任务待领导审批",
-                        "您有新的日常任务「" + entity.getTaskName() + "」，已通知您的直属领导审批。",
-                        List.of(entity.getMainOwnerId()), "task_review_submitted", taskId, dailyDetailUrl);
-            }
-            // 通知直属领导（审核人），避免与责任人重复
-            Long reviewerId = entity.getReviewerId();
-            if (reviewerId != null && !reviewerId.equals(entity.getMainOwnerId())) {
-                String ownerName = "";
-                if (entity.getMainOwnerId() != null) {
-                    AdminUserDO owner = adminUserMapper.selectById(entity.getMainOwnerId());
-                    if (owner != null && owner.getNickname() != null) {
-                        ownerName = owner.getNickname();
-                    }
-                }
-                sendNotifyQuietly("【PMS】下属日常任务待您审批",
-                        "您的下属「" + ownerName + "」有新日常任务「" + entity.getTaskName() + "」，请审批（通过/驳回）。",
-                        List.of(reviewerId), "task_review_submitted", taskId, dailyDetailUrl);
-            }
-        }
-
         // #1：新增子任务后，父任务进度需要重算
         if (entity.getParentTaskId() != null) {
             refreshProgressUpward(entity.getParentTaskId());
@@ -336,6 +309,26 @@ public class TaskServiceImpl implements TaskService {
                     "项目「" + projectName727 + "」任务「" + task.getTaskName() + "」已提交完成，请及时审核。",
                     List.of(reviewerId727), "task_review_submitted", taskId, detailUrl727);
         }
+
+        // 【日常任务】提交完成时才触发领导审核通知（不在创建时通知）
+        // 日常任务流程：创建 → 责任人执行 → 提交完成 → 领导审核
+        if (task.getProjectId() == null) {
+            String dailyDetailUrl = frontendBaseUrl + "/pms/my-task-board?taskId=" + taskId;
+            Long dailyReviewerId = task.getReviewerId();
+            if (dailyReviewerId != null) {
+                String ownerName = "";
+                if (task.getMainOwnerId() != null) {
+                    AdminUserDO owner = adminUserMapper.selectById(task.getMainOwnerId());
+                    if (owner != null && owner.getNickname() != null) {
+                        ownerName = owner.getNickname();
+                    }
+                }
+                sendNotifyQuietly("【PMS】日常任务待您审核",
+                        "您的下属「" + ownerName + "」的日常任务「" + task.getTaskName() + "」已提交完成，请审批（通过/驳回）。",
+                        List.of(dailyReviewerId), "task_review_submitted", taskId, dailyDetailUrl);
+            }
+        }
+
         writeTaskLog(taskId, "submit_completion", "提交完成，审核人[" + reviewerId727 + "]");
     }
 

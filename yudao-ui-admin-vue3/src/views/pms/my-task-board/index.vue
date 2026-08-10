@@ -71,19 +71,28 @@
           <div class="section-header">
             <span class="section-title">📌 历史遗留任务</span>
             <el-tag type="danger" effect="plain">{{ board.legacyTasks.length }}</el-tag>
-            <span class="section-hint">计划开始早于 {{ dateRange?.[0] }} 且未完成的任务（含项目与日常）</span>
+            <span class="section-hint">计划开始早于 {{ dateRange?.[0] }} 且未完成的任务（按项目/日常分组）</span>
           </div>
         </template>
         <el-empty v-if="board.legacyTasks.length === 0" description="无历史遗留任务" :image-size="60" />
-        <div v-else class="task-list">
-          <task-board-card
-            v-for="t in board.legacyTasks"
-            :key="t.taskId"
-            :task="t"
-            :current-user-id="currentUserId"
-            @detail="openDetail"
-            @submit-review="handleSubmitReview"
-          />
+        <div v-else class="legacy-groups">
+          <div v-for="group in legacyGroups" :key="group.projectId ?? 'daily'" class="legacy-group">
+            <div v-if="legacyGroups.length > 1" class="legacy-group-title">
+              <Icon icon="ep:folder" class="mr-5px" />
+              {{ group.projectName }}
+              <el-tag size="small" effect="plain" type="info" class="ml-8px">{{ group.tasks.length }}</el-tag>
+            </div>
+            <div class="task-list">
+              <task-board-card
+                v-for="t in group.tasks"
+                :key="t.taskId"
+                :task="t"
+                :current-user-id="currentUserId"
+                @detail="openDetail"
+                @submit-review="handleSubmitReview"
+              />
+            </div>
+          </div>
         </div>
       </el-card>
 
@@ -202,6 +211,7 @@ import {
 } from '../pms-utils'
 import * as echarts from 'echarts'
 import { nextTick, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -213,6 +223,7 @@ const message = useMessage()
 const { userList, ensureLoaded: ensureUsersLoaded, getUserName } = useUserNames()
 const userStore = useUserStore()
 const currentUserId = computed(() => userStore.getUser?.id)
+const route = useRoute()
 
 const loading = ref(false)
 const dateRange = ref<[string, string]>([])
@@ -236,15 +247,11 @@ const projectTaskCount = computed(() =>
 )
 
 // 日常任务类型下拉（动态字典，fallback 到硬编码）
-const dailyTypeOpts = computed(() => {
-  const opts = getDailyTaskTypeOptions()
-  return opts.length ? opts : dailyTaskTypeOptions
-})
-// 优先级下拉（动态字典，fallback 到硬编码）
-const dailyPriorityOpts = computed(() => {
-  const opts = getDynamicPriorityOptions()
-  return opts.length ? opts : priorityOptions
-})
+const _rawDailyTypeOpts = getDailyTaskTypeOptions()
+const dailyTypeOpts = ref(_rawDailyTypeOpts.length ? _rawDailyTypeOpts : dailyTaskTypeOptions)
+// 优先级下拉（ref 而非 computed，refreshPmsDicts 后更新）
+const _rawDailyPriorityOpts = getDynamicPriorityOptions()
+const dailyPriorityOpts = ref(_rawDailyPriorityOpts.length ? _rawDailyPriorityOpts : priorityOptions)
 
 // 项目分组折叠/展开状态（reactive 对象属性触发响应式）
 const collapsedFlag = reactive<Record<number, boolean>>({})
@@ -266,6 +273,29 @@ const allTasks = computed<TaskVO[]>(() => {
   const list: TaskVO[] = [...board.legacyTasks, ...board.dailyTasks]
   board.projectGroups.forEach(g => list.push(...g.tasks))
   return list
+})
+
+// 历史遗留任务按项目/日常分组（复用 projectGroups 已有的项目名映射）
+const legacyGroups = computed(() => {
+  const projectNameMap = new Map<number, string>()
+  board.projectGroups.forEach(g => projectNameMap.set(g.projectId, g.projectName))
+  const groups: { projectId: number | null; projectName: string; tasks: TaskVO[] }[] = []
+  const idxMap = new Map<number | null, number>()
+  board.legacyTasks.forEach(t => {
+    const hasPid = t.projectId != null && t.projectId !== 0
+    const key: number | null = hasPid ? Number(t.projectId) : null
+    let idx = idxMap.get(key)
+    if (idx === undefined) {
+      const name = key !== null
+        ? (projectNameMap.get(key) || `项目 ${key}`)
+        : '日常任务'
+      idx = groups.length
+      groups.push({ projectId: key, projectName: name, tasks: [] })
+      idxMap.set(key, idx)
+    }
+    groups[idx].tasks.push(t)
+  })
+  return groups
 })
 
 // 统计概览卡片
@@ -502,6 +532,11 @@ const submitDaily = async () => {
 onMounted(async () => {
   // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项即时可见
   await refreshPmsDicts()
+  // dictStore 已就绪，重新读取字典选项（覆盖 setup 阶段的 fallback 值）
+  const _dt = getDailyTaskTypeOptions()
+  dailyTypeOpts.value = _dt.length ? _dt : dailyTaskTypeOptions
+  const _dp = getDynamicPriorityOptions()
+  dailyPriorityOpts.value = _dp.length ? _dp : priorityOptions
   window.addEventListener('resize', handleResize)
   // 默认范围：本月
   const n = new Date()
@@ -511,6 +546,19 @@ onMounted(async () => {
   ]
   await ensureUsersLoaded()
   await loadBoard()
+
+  // 处理深链 taskId（钉钉驳回跳转场景）：自动定位并打开任务详情
+  const tid = route.query.taskId as string | undefined
+  if (tid) {
+    const all = [...board.legacyTasks, ...board.dailyTasks]
+    board.projectGroups.forEach(g => all.push(...g.tasks))
+    const t = all.find(x => String(x.taskId) === tid)
+    if (t) {
+      nextTick(() => taskDrawerRef.value?.open(t))
+    } else {
+      message.warning(`任务 #${tid} 不在当前看板范围内，请调整日期/人员筛选`)
+    }
+  }
 })
 
 onUnmounted(() => {
@@ -581,6 +629,31 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+/* 斑马纹：偶数行浅灰底（scoped 样式下用 :deep 或直接子选择器；TaskBoardCard 的 .task-row 是子元素） */
+.task-list > :nth-child(even) {
+  background: #fafbfc;
+}
+/* 延期任务左侧红色边条（用 :global 选择内部 .task-row 类的元素） */
+.task-list > :global(.task-row):has(.delay-tag) {
+  border-left: 3px solid #F53F3F;
+}
+.legacy-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.legacy-group {
+  margin-bottom: 4px;
+}
+.legacy-group-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4e5969;
+  margin: 4px 0 8px;
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
 }
 .reviewer-hint {
   margin-top: 4px;

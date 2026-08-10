@@ -279,15 +279,6 @@ const myTasks = ref(false)
 
 // 日常任务（无项目）：以固定哨兵值标识，提交时置 projectId = null 走部门审核流程
 const DAILY_PROJECT_VALUE = 0
-const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
-const currentTaskTypeOptions = computed(() =>
-  isDailyTask.value ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
-)
-// 优先级下拉：动态字典（fallback 硬编码）
-const currentPriorityOptions = computed(() => {
-  const opts = getDynamicPriorityOptions()
-  return opts.length ? opts : priorityOptions
-})
 
 const filteredList = computed(() => {
   let list = taskList.value
@@ -424,6 +415,16 @@ const taskForm = reactive<TaskVO & { projectId?: string | number; helperIds?: nu
   completeStatus: 'not_started',
   progress: 0
 })
+
+const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
+// 字典下拉选项（ref 而非 computed，避免 setup 阶段 dictStore 未加载导致走 hardcoded fallback）
+// refreshPmsDicts() 完成后会主动更新这些 ref，确保字典管理新增项即时可见
+const currentTaskTypeOptions = ref(
+  isDailyTask.value ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
+)
+// 优先级下拉：动态字典（fallback 硬编码）
+const _rawPriorityOpts = getDynamicPriorityOptions()
+const currentPriorityOptions = ref(_rawPriorityOpts.length ? _rawPriorityOpts : priorityOptions)
 
 const taskFormRules = reactive<FormRules>({
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
@@ -573,7 +574,16 @@ const submitTask = async () => {
 onMounted(async () => {
   // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项在本页下拉即时可见
   await refreshPmsDicts()
+  // dictStore 已就绪，重新读取字典选项（覆盖 setup 阶段的 fallback 值）
+  currentTaskTypeOptions.value = isDailyTask.value ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
+  const _pOpts = getDynamicPriorityOptions()
+  currentPriorityOptions.value = _pOpts.length ? _pOpts : priorityOptions
   loadList()
+})
+
+// 切换「日常任务/项目任务」时同步更新任务类型下拉选项
+watch(isDailyTask, (val) => {
+  currentTaskTypeOptions.value = val ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
 })
 </script>
 
