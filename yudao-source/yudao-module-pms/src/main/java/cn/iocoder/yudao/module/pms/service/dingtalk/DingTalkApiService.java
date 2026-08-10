@@ -54,6 +54,18 @@ public interface DingTalkApiService {
     String sendRobotMessage(List<String> userIds, String title, String content, String detailUrl);
 
     /**
+     * 发送机器人单聊消息（指定卡片类型）。
+     *
+     * @param userIds      接收人钉钉 userid 列表（每次最多 20 个）
+     * @param title        消息标题
+     * @param content      消息内容
+     * @param detailUrl    可选：详情跳转 URL
+     * @param cardType     卡片类型：dispatch=派发(一键接收+查看详情) / review=审核(通过+驳回)
+     * @return processQueryKey（消息 ID），失败返回 null
+     */
+    String sendRobotMessage(List<String> userIds, String title, String content, String detailUrl, String cardType);
+
+    /**
      * 发送 Markdown 工作通知
      *
      * @param userIdList   接收人钉钉 userid 列表（逗号分隔）

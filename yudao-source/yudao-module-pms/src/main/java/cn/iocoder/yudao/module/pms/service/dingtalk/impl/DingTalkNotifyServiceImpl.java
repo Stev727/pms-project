@@ -235,8 +235,10 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         String taskId;
         if (StrUtil.isNotBlank(config.getRobotCode())) {
             List<String> userIdArr = Arrays.asList(userIdList.split(","));
-            taskId = dingTalkApiService.sendRobotMessage(userIdArr, title, content, detailUrl);
-            log.info("[DingTalkNotify] 使用机器人通道发送 robotCode={} users={}", config.getRobotCode(), userIdArr.size());
+            // 根据触发事件推导卡片类型：审核类事件用 review 卡片（通过+驳回），其余用 dispatch 卡片（一键接收+详情）
+            String cardType = "task_review_submitted".equals(triggerEvent) ? "review" : "dispatch";
+            taskId = dingTalkApiService.sendRobotMessage(userIdArr, title, content, detailUrl, cardType);
+            log.info("[DingTalkNotify] 使用机器人通道发送 robotCode={} users={} cardType={}", config.getRobotCode(), userIdArr.size(), cardType);
         } else {
             taskId = dingTalkApiService.sendWorkNotification(userIdList, title, content, detailUrl);
         }

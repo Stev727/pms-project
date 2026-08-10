@@ -820,6 +820,38 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void approveReviewPublic(Long taskId) {
+        // 公开接口：签名已验证合法性，跳过身份校验与权限校验，直接执行状态流转
+        PmsTaskDO task = requireTask(taskId);
+        if (!PmsTaskReviewStatusEnum.canReview(task.getReviewStatus())) {
+            throw new ServiceException(ErrorCodeConstants.TASK_REVIEW_STATUS_INVALID);
+        }
+        PmsProjectDO project = projectMapper.selectById(task.getProjectId());
+
+        PmsTaskDO update = new PmsTaskDO();
+        update.setTaskId(taskId);
+        update.setReviewStatus(PmsTaskReviewStatusEnum.COMPLETED.getStatus());
+        update.setCompleteStatus("completed");
+        update.setProgress(100);
+        update.setActualCompleteDate(task.getActualCompleteDate() == null ? LocalDate.now() : task.getActualCompleteDate());
+        String reviewComment = "钉钉一键通过";
+        update.setReviewComment(reviewComment);
+        update.setReviewOpinion(reviewComment);
+        taskMapper.updateById(update);
+
+        // #1：子任务通过后，父任务进度自动汇总
+        refreshProgressUpward(task.getParentTaskId());
+
+        writeTaskLog(taskId, "approve_review_public", "通过钉钉一键通过，状态变更为已完成");
+        String projectName = project == null || project.getProjectName() == null ? "" : project.getProjectName();
+        String detailUrlPublic = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
+        sendNotifyQuietly("【PMS】任务审核通过",
+                "项目「" + projectName + "」任务「" + task.getTaskName() + "」审核已通过（钉钉一键）。",
+                buildReviewReceivers(task, project), "task_review_approved", taskId, detailUrlPublic);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void rejectReview(Long taskId, String reviewComment) {
         if (reviewComment == null || reviewComment.isBlank()) {
             throw new ServiceException(ErrorCodeConstants.TASK_REVIEW_COMMENT_REQUIRED);

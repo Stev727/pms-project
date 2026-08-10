@@ -114,6 +114,14 @@ public interface TaskService {
     void approveReview(Long taskId, String reviewComment);
 
     /**
+     * 审核通过（公开接口，跳过身份校验）：用于钉钉「一键通过」免登录直连。
+     * 复用 approveReview 的状态流转与通知逻辑，但 operatorId 用任务审核人兜底，不校验登录态。
+     *
+     * @param taskId 任务ID
+     */
+    void approveReviewPublic(Long taskId);
+
+    /**
      * 审核驳回：review_status submitted -> rejected，同时 complete_status 回到 in_progress。
      *
      * @param taskId        任务ID

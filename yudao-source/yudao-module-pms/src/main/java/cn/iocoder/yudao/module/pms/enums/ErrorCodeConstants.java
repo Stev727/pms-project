@@ -36,6 +36,7 @@ public interface ErrorCodeConstants {
     ErrorCode TASK_ACCEPT_PERMISSION_DENIED = new ErrorCode(1_040_000_032, "只有任务负责人或项目管理人员可以接收任务");
     ErrorCode TASK_ACCEPT_SIGN_EXPIRED = new ErrorCode(1_040_000_033, "接收链接已过期，请重新获取");
     ErrorCode TASK_ACCEPT_SIGN_INVALID = new ErrorCode(1_040_000_034, "接收链接无效");
+    ErrorCode TASK_REVIEW_ACTION_INVALID = new ErrorCode(1_040_000_035, "审核动作非法，仅支持 approve / reject");
 
     // ========== #6 文件预览 022-025 ==========
     ErrorCode DOCUMENT_NOT_EXISTS = new ErrorCode(1_040_000_022, "文档不存在");

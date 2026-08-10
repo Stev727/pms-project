@@ -57,7 +57,7 @@ public class PmsPublicController {
         }
 
         // 2. 校验签名
-        String expectedSign = sign(taskId, ts);
+        String expectedSign = sign(taskId, ts, "accept");
         if (!expectedSign.equals(sign)) {
             log.warn("[quickAccept] 签名校验失败: taskId={}, expected={}, received={}", taskId, expectedSign, sign);
             throw ServiceExceptionUtil.exception(ErrorCodeConstants.TASK_ACCEPT_SIGN_INVALID);
@@ -69,12 +69,50 @@ public class PmsPublicController {
         return success(true);
     }
 
+    @GetMapping("/task-review")
+    @Operation(summary = "快速审核任务（公开接口，通过签名验证）")
+    @Parameter(name = "taskId", description = "任务编号", required = true)
+    @Parameter(name = "action", description = "审核动作：approve=通过 / reject=驳回", required = true)
+    @Parameter(name = "ts", description = "时间戳（秒）", required = true)
+    @Parameter(name = "sign", description = "签名（HMAC-SHA256）", required = true)
+    public CommonResult<Boolean> quickReview(
+            @RequestParam("taskId") Long taskId,
+            @RequestParam("action") String action,
+            @RequestParam("ts") long ts,
+            @RequestParam("sign") String sign) {
+
+        // 1. 校验动作合法
+        if (!"approve".equals(action) && !"reject".equals(action)) {
+            throw ServiceExceptionUtil.exception(ErrorCodeConstants.TASK_REVIEW_ACTION_INVALID);
+        }
+
+        // 2. 校验时间戳（防重放攻击，5分钟内有效）
+        long now = Instant.now().getEpochSecond();
+        if (Math.abs(now - ts) > SIGN_EXPIRE_SECONDS) {
+            throw ServiceExceptionUtil.exception(ErrorCodeConstants.TASK_ACCEPT_SIGN_EXPIRED);
+        }
+
+        // 3. 校验签名（含 action，防止动作被篡改）
+        String expectedSign = sign(taskId, ts, action);
+        if (!expectedSign.equals(sign)) {
+            log.warn("[quickReview] 签名校验失败: taskId={}, action={}, expected={}, received={}", taskId, action, expectedSign, sign);
+            throw ServiceExceptionUtil.exception(ErrorCodeConstants.TASK_ACCEPT_SIGN_INVALID);
+        }
+
+        // 4. 执行审核逻辑（公开接口：跳过身份校验）
+        // 注意：reject 不提供公开直连，卡片的「驳回」按钮直接跳转系统页填原因，
+        // 因此此处 action 只可能是 approve；上一关已拦截非法 action。
+        taskService.approveReviewPublic(taskId);
+
+        return success(true);
+    }
+
     /**
-     * 生成签名: HMAC-SHA256(taskId + "|" + ts, secret)
+     * 生成签名: HMAC-SHA256(taskId + "|" + action + "|" + ts, secret)
      */
-    public static String sign(Long taskId, long ts) {
+    public static String sign(Long taskId, long ts, String action) {
         try {
-            String data = taskId + "|" + ts;
+            String data = taskId + "|" + action + "|" + ts;
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec keySpec = new SecretKeySpec(
                     SIGN_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");

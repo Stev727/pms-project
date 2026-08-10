@@ -181,6 +181,13 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
 
     @Override
     public String sendRobotMessage(List<String> userIds, String title, String content, String detailUrl) {
+        // 兼容旧调用：默认按"派发"卡片处理（含一键接收）
+        return sendRobotMessage(userIds, title, content, detailUrl, "dispatch");
+    }
+
+    @Override
+    public String sendRobotMessage(List<String> userIds, String title, String content,
+                                   String detailUrl, String cardType) {
         String token = getAccessToken();
         if (token == null) {
             log.warn("[DingTalk] access_token 为空，跳过发送机器人消息");
@@ -204,13 +211,11 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
             body.set("userIds", batch);
 
             if (StrUtil.isNotBlank(detailUrl)) {
-                // 竖向双按钮交互卡片(sampleActionCard2)：「一键接收」+「查看详情」
-                // 钉钉官方参数格式：title + text + actionTitle1/URL1 + actionTitle2/URL2
+                // 竖向双按钮交互卡片(sampleActionCard2)：title + text + actionTitle1/URL1 + actionTitle2/URL2
                 body.set("msgKey", "sampleActionCard2");
                 JSONObject cardParam = new JSONObject();
                 cardParam.set("title", title);
                 cardParam.set("text", content);
-                // 一键接收：指向免登录签名接口（不需要用户登录态）
                 // 从 detailUrl 提取 taskId 和 baseUrl
                 String qaBaseUrl = detailUrl.contains("/pms/") ? detailUrl.substring(0, detailUrl.indexOf("/pms/")) : detailUrl;
                 String qaTaskId = "";
@@ -219,18 +224,35 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
                     int tiEnd = detailUrl.indexOf("&", tiIdx);
                     qaTaskId = tiEnd > 0 ? detailUrl.substring(tiIdx + 7, tiEnd) : detailUrl.substring(tiIdx + 7);
                 }
-                // 生成签名链接（5分钟有效）
-                long ts = Instant.now().getEpochSecond();
-                String signStr = signForAccept(qaTaskId, ts);
-                String acceptUrl = qaBaseUrl + "/admin-api/pms/public/task-accept?taskId=" + qaTaskId + "&ts=" + ts + "&sign=" + signStr;
-                log.info("[DingTalk] 一键接收签名URL: {}", acceptUrl);
-                cardParam.set("actionTitle1", "\u4e00\u952e\u63a5\u6536");   // 一键接收
-                cardParam.set("actionURL1", acceptUrl);
-                cardParam.set("actionTitle2", "\u67e5\u770b\u8be6\u60c5");   // 查看详情
-                cardParam.set("actionURL2", detailUrl);
-                body.set("msgParam", cardParam.toString());
-                log.info("[DingTalk] 发送机器人交互卡片(含一键接收) robotCode={} users={} acceptUrl={}",
-                        config.getRobotCode(), batch.size(), acceptUrl);
+
+                if ("review".equals(cardType)) {
+                    // 审核卡片：按钮1=通过（免登录直连），按钮2=驳回（跳转系统填原因）
+                    long ts = Instant.now().getEpochSecond();
+                    String signStr = signForAccept(qaTaskId, ts, "approve");
+                    String approveUrl = qaBaseUrl + "/admin-api/pms/public/task-review?taskId=" + qaTaskId
+                            + "&action=approve&ts=" + ts + "&sign=" + signStr;
+                    log.info("[DingTalk] 审核通过签名URL: {}", approveUrl);
+                    cardParam.set("actionTitle1", "\u5ba1\u6838\u901a\u8fc7");   // 审核通过
+                    cardParam.set("actionURL1", approveUrl);
+                    cardParam.set("actionTitle2", "\u5ba1\u6838\u9a8c\u56de");   // 审核驳回（跳转系统）
+                    cardParam.set("actionURL2", detailUrl);
+                    body.set("msgParam", cardParam.toString());
+                    log.info("[DingTalk] 发送机器人交互卡片(审核型) robotCode={} users={} approveUrl={}",
+                            config.getRobotCode(), batch.size(), approveUrl);
+                } else {
+                    // dispatch 卡片（默认）：按钮1=一键接收（免登录直连），按钮2=查看详情
+                    long ts = Instant.now().getEpochSecond();
+                    String signStr = signForAccept(qaTaskId, ts, "accept");
+                    String acceptUrl = qaBaseUrl + "/admin-api/pms/public/task-accept?taskId=" + qaTaskId + "&ts=" + ts + "&sign=" + signStr;
+                    log.info("[DingTalk] 一键接收签名URL: {}", acceptUrl);
+                    cardParam.set("actionTitle1", "\u4e00\u952e\u63a5\u6536");   // 一键接收
+                    cardParam.set("actionURL1", acceptUrl);
+                    cardParam.set("actionTitle2", "\u67e5\u770b\u8be6\u60c5");   // 查看详情
+                    cardParam.set("actionURL2", detailUrl);
+                    body.set("msgParam", cardParam.toString());
+                    log.info("[DingTalk] 发送机器人交互卡片(含一键接收) robotCode={} users={} acceptUrl={}",
+                            config.getRobotCode(), batch.size(), acceptUrl);
+                }
             } else {
                 // 纯文本（无详情链接时降级）
                 body.set("msgKey", "sampleText");
@@ -474,8 +496,16 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
      * 生成快速接收签名: HMAC-SHA256(taskId + "|" + ts, secret)
      */
     private String signForAccept(String taskId, long ts) {
+        return signForAccept(taskId, ts, "accept");
+    }
+
+    /**
+     * 生成快速操作签名: HMAC-SHA256(taskId + "|" + action + "|" + ts, secret)
+     * action 用于区分操作类型（accept=接收 / approve=审核通过），防止签名被跨动作复用
+     */
+    private String signForAccept(String taskId, long ts, String action) {
         try {
-            String data = taskId + "|" + ts;
+            String data = taskId + "|" + action + "|" + ts;
             Mac mac = Mac.getInstance("HmacSHA256");
             SecretKeySpec keySpec = new SecretKeySpec(
                     ACCEPT_SIGN_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
