@@ -104,14 +104,14 @@ const canSubmitReview = computed(() => {
 .task-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 12px;
+  gap: 16px;
+  padding: 14px 16px;
   border: 1px solid #e5e6eb;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
-  min-height: 48px;
+  min-height: 58px;
 }
 .task-row:hover {
   background: #f7f8fa;

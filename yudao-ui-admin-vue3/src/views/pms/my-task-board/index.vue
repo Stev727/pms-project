@@ -98,12 +98,12 @@
         </template>
         <el-empty v-if="board.projectGroups.length === 0" description="该范围内无项目任务" :image-size="60" />
         <div v-for="group in board.projectGroups" :key="group.projectId" class="project-group">
-          <div class="project-group-title">
-            <Icon icon="ep:folder" class="mr-5px" />
-            {{ group.projectName }}
-            <el-tag size="small" effect="plain" class="ml-8px">{{ group.tasks.length }}</el-tag>
-          </div>
-          <div class="task-list">
+<div class="project-group-title" @click="toggleProject(group.projectId)" style="cursor:pointer;user-select:none">
+          <Icon :icon="isProjectCollapsed(group.projectId) ? 'ep:arrow-right' : 'ep:arrow-down'" class="mr-5px" />
+          {{ group.projectName }}
+          <el-tag size="small" effect="plain" class="ml-8px">{{ group.tasks.length }}</el-tag>
+        </div>
+        <div v-show="!isProjectCollapsed(group.projectId)" class="task-list">
             <task-board-card
               v-for="t in group.tasks"
               :key="t.taskId"
@@ -154,9 +154,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="负责人" prop="mainOwnerId">
-          <el-select v-model="dailyForm.mainOwnerId" placeholder="请选择负责人" filterable class="w-full">
+          <el-select v-model="dailyForm.mainOwnerId" placeholder="请选择负责人" filterable class="w-full" @change="onDailyOwnerChange">
             <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
           </el-select>
+          <div class="reviewer-hint">
+            直属领导：<span :class="{ warn: !dailyReviewerName }">{{ dailyReviewerName || '⚠️ 未抽取到该用户的直属领导，请联系管理员检查部门设置' }}</span>
+          </div>
         </el-form-item>
         <el-form-item label="优先级">
           <el-select v-model="dailyForm.priority" class="w-full">
@@ -188,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { getTaskBoard, createTask, submitReview, TaskVO } from '@/api/pms/task'
+import { getTaskBoard, createTask, submitReview, getReviewerOf, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
@@ -207,7 +210,7 @@ import { useUserStore } from '@/store/modules/user'
 defineOptions({ name: 'PmsMyTaskBoard' })
 
 const message = useMessage()
-const { userList, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const { userList, ensureLoaded: ensureUsersLoaded, getUserName } = useUserNames()
 const userStore = useUserStore()
 const currentUserId = computed(() => userStore.getUser?.id)
 
@@ -242,6 +245,21 @@ const dailyPriorityOpts = computed(() => {
   const opts = getDynamicPriorityOptions()
   return opts.length ? opts : priorityOptions
 })
+
+// 项目分组折叠/展开状态（reactive 对象属性触发响应式）
+const collapsedFlag = reactive<Record<number, boolean>>({})
+const isProjectCollapsed = (id: number) => !!collapsedFlag[id]
+const toggleProject = (id: number) => { collapsedFlag[id] = !collapsedFlag[id] }
+
+// 日常任务直属领导预校验（新建弹窗选择负责人后实时查询）
+const dailyReviewerName = ref('')
+const onDailyOwnerChange = async (userId: number | string | undefined) => {
+  if (!userId) { dailyReviewerName.value = ''; return }
+  try {
+    const r: any = await getReviewerOf(userId)
+    dailyReviewerName.value = (r?.code === 0 && r.data) ? getUserName(r.data) : ''
+  } catch { dailyReviewerName.value = '' }
+}
 
 // 全部任务汇总（用于统计概览与图表）
 const allTasks = computed<TaskVO[]>(() => {
@@ -448,6 +466,7 @@ const openCreateDaily = () => {
     taskName: '', taskType: 'other', mainOwnerId: undefined,
     priority: 'normal', planStartDate: '', planEndDate: '', description: ''
   })
+  dailyReviewerName.value = ''
   dailyDialogVisible.value = true
 }
 
@@ -561,7 +580,17 @@ onUnmounted(() => {
 .task-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+.reviewer-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #86909c;
+  line-height: 1.4;
+}
+.reviewer-hint .warn {
+  color: #F53F3F;
+  font-weight: 500;
 }
 .ml-8px {
   margin-left: 8px;

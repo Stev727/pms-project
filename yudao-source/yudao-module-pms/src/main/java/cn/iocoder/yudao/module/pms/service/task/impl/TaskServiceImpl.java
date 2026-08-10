@@ -159,15 +159,16 @@ public class TaskServiceImpl implements TaskService {
         }
         taskMapper.insert(entity);
 
-        // 【日常任务】创建后钉钉通知责任人 + 直属领导（fail-soft，不阻断事务）
+        // 【日常任务】创建即触发「领导审批」通知：triggerEvent 用 task_review_submitted，
+        // 让钉钉机器人走「审核型」卡片（按钮=审核通过/审核驳回），而非「派发型」（一键接收/查看详情）。
         if (entity.getProjectId() == null) {
             Long taskId = entity.getTaskId();
             String dailyDetailUrl = frontendBaseUrl + "/pms/my-task-board";
             // 通知责任人
             if (entity.getMainOwnerId() != null) {
-                sendNotifyQuietly("【PMS】您有新日常任务",
-                        "您有新的日常任务「" + entity.getTaskName() + "」，请关注并按时完成，完成后需您的直属领导审核。",
-                        List.of(entity.getMainOwnerId()), "task_dispatched", taskId, dailyDetailUrl);
+                sendNotifyQuietly("【PMS】您有新日常任务待领导审批",
+                        "您有新的日常任务「" + entity.getTaskName() + "」，已通知您的直属领导审批。",
+                        List.of(entity.getMainOwnerId()), "task_review_submitted", taskId, dailyDetailUrl);
             }
             // 通知直属领导（审核人），避免与责任人重复
             Long reviewerId = entity.getReviewerId();
@@ -179,9 +180,9 @@ public class TaskServiceImpl implements TaskService {
                         ownerName = owner.getNickname();
                     }
                 }
-                sendNotifyQuietly("【PMS】下属有新日常任务待您关注",
-                        "您的下属「" + ownerName + "」有新的日常任务「" + entity.getTaskName() + "」，任务完成时将由您审核。",
-                        List.of(reviewerId), "task_dispatched", taskId, dailyDetailUrl);
+                sendNotifyQuietly("【PMS】下属日常任务待您审批",
+                        "您的下属「" + ownerName + "」有新日常任务「" + entity.getTaskName() + "」，请审批（通过/驳回）。",
+                        List.of(reviewerId), "task_review_submitted", taskId, dailyDetailUrl);
             }
         }
 
@@ -893,7 +894,10 @@ public class TaskServiceImpl implements TaskService {
     public void approveReviewPublic(Long taskId) {
         // 公开接口：签名已验证合法性，跳过身份校验与权限校验，直接执行状态流转
         PmsTaskDO task = requireTask(taskId);
-        if (!PmsTaskReviewStatusEnum.canReview(task.getReviewStatus())) {
+        // 【日常任务】project_id 为 NULL 表示非项目任务：创建即进入「领导审批」流程，
+        // 允许 in_progress+reviewStatus=none 直接走快速审批（无需先 submitReview）。
+        boolean isDaily = task.getProjectId() == null;
+        if (!isDaily && !PmsTaskReviewStatusEnum.canReview(task.getReviewStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_REVIEW_STATUS_INVALID);
         }
         PmsProjectDO project = projectMapper.selectById(task.getProjectId());
@@ -904,7 +908,7 @@ public class TaskServiceImpl implements TaskService {
         update.setCompleteStatus("completed");
         update.setProgress(100);
         update.setActualCompleteDate(task.getActualCompleteDate() == null ? LocalDate.now() : task.getActualCompleteDate());
-        String reviewComment = "钉钉一键通过";
+        String reviewComment = isDaily ? "钉钉一键审批通过（日常任务）" : "钉钉一键通过";
         update.setReviewComment(reviewComment);
         update.setReviewOpinion(reviewComment);
         taskMapper.updateById(update);
@@ -912,12 +916,33 @@ public class TaskServiceImpl implements TaskService {
         // #1：子任务通过后，父任务进度自动汇总
         refreshProgressUpward(task.getParentTaskId());
 
-        writeTaskLog(taskId, "approve_review_public", "通过钉钉一键通过，状态变更为已完成");
-        String projectName = project == null || project.getProjectName() == null ? "" : project.getProjectName();
-        String detailUrlPublic = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
-        sendNotifyQuietly("【PMS】任务审核通过",
-                "项目「" + projectName + "」任务「" + task.getTaskName() + "」审核已通过（钉钉一键）。",
-                buildReviewReceivers(task, project), "task_review_approved", taskId, detailUrlPublic);
+        writeTaskLog(taskId, "approve_review_public", "通过钉钉一键" + (isDaily ? "审批通过（日常任务）" : "通过") + "，状态变更为已完成");
+        String detailUrlPublic = isDaily
+                ? frontendBaseUrl + "/pms/my-task-board"
+                : frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
+        if (isDaily) {
+            // 日常任务：仅通知责任人（直属领导已审批完成，无需重复通知）
+            if (task.getMainOwnerId() != null) {
+                sendNotifyQuietly("【PMS】您的日常任务已审批通过",
+                        "您的日常任务「" + task.getTaskName() + "」已由您的直属领导审批通过。",
+                        List.of(task.getMainOwnerId()), "task_review_approved", taskId, detailUrlPublic);
+            }
+        } else {
+            String projectName = project == null || project.getProjectName() == null ? "" : project.getProjectName();
+            sendNotifyQuietly("【PMS】任务审核通过",
+                    "项目「" + projectName + "」任务「" + task.getTaskName() + "」审核已通过（钉钉一键）。",
+                    buildReviewReceivers(task, project), "task_review_approved", taskId, detailUrlPublic);
+        }
+    }
+
+    @Override
+    public Long resolveReviewerOf(Long userId) {
+        // 暴露给前端做预校验：返回 null 表示未抽取到直属领导
+        try {
+            return resolveDailyTaskReviewer(userId);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Override

@@ -124,6 +124,15 @@ public interface TaskService {
     void approveReviewPublic(Long taskId);
 
     /**
+     * 查询某用户的直属领导 ID（日常任务的审核人兜底）。
+     * 用于新建日常任务弹窗预校验：返回 null 表示未抽取到直属领导，需提示用户检查部门领导设置。
+     *
+     * @param userId 用户ID
+     * @return 直属领导ID，若未抽取到返回 null
+     */
+    Long resolveReviewerOf(Long userId);
+
+    /**
      * 审核驳回：review_status submitted -> rejected，同时 complete_status 回到 in_progress。
      *
      * @param taskId        任务ID

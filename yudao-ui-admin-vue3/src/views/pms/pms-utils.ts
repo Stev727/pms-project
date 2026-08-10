@@ -183,11 +183,13 @@ function loadYudaoDictOptions(dictKey: string): { value: string; label: string; 
   try {
     const opts = getYudaoDictOptions(dictKey)
     if (opts && opts.length > 0) {
-      return opts.map((o: any) => ({
-        value: String(o.value),
-        label: o.label,
-        color: o.colorType || o.cssClass || ''
-      }))
+      return opts
+        .filter((o: any) => o.status == null || o.status === 0) // 仅启用项（status=0）
+        .map((o: any) => ({
+          value: String(o.value),
+          label: o.label,
+          color: o.colorType || o.cssClass || ''
+        }))
     }
   } catch { /* dictStore 未就绪时降级 */ }
   return []

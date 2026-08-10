@@ -51,6 +51,13 @@ public class TaskController {
         return success(taskService.createTask(entity));
     }
 
+    @GetMapping("/reviewer-of")
+    @Operation(summary = "查询某用户的直属领导ID（日常任务审核人预校验）")
+    @Parameter(name = "userId", description = "用户ID", required = true)
+    public CommonResult<Long> reviewerOf(@RequestParam("userId") Long userId) {
+        return success(taskService.resolveReviewerOf(userId));
+    }
+
     @PostMapping("/dispatch")
     @Operation(summary = "派发任务并通知负责人")
     @PreAuthorize("@ss.hasPermission('pms:task:update')")

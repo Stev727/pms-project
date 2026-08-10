@@ -192,7 +192,7 @@
           <el-col :span="12">
             <el-form-item label="优先级" prop="priority">
               <el-select v-model="taskForm.priority" placeholder="请选择" class="w-full">
-                <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+                <el-option v-for="opt in currentPriorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -283,6 +283,11 @@ const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
 const currentTaskTypeOptions = computed(() =>
   isDailyTask.value ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
 )
+// 优先级下拉：动态字典（fallback 硬编码）
+const currentPriorityOptions = computed(() => {
+  const opts = getDynamicPriorityOptions()
+  return opts.length ? opts : priorityOptions
+})
 
 const filteredList = computed(() => {
   let list = taskList.value

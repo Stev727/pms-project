@@ -162,3 +162,8 @@ export const getDeptReviewList = () => {
   return request.get({ url: '/pms/task/dept-review-list' })
 }
 
+/** 查询某用户的直属领导ID（日常任务审核人预校验；返回 null 表示未抽取到直属领导） */
+export const getReviewerOf = (userId: string | number) => {
+  return request.get({ url: '/pms/task/reviewer-of', params: { userId } })
+}
+
