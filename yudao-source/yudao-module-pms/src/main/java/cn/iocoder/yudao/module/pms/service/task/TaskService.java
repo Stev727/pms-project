@@ -37,6 +37,11 @@ public interface TaskService {
      */
     void acceptTask(Long taskId);
 
+    /**
+     * 公开接口版本：跳过身份校验（由签名保障安全性）
+     */
+    void acceptTaskPublic(Long taskId);
+
     void dispatchTask(Long taskId);
 
     void submitCompletion(Long taskId, String actualCompleteDate, String completionNote);

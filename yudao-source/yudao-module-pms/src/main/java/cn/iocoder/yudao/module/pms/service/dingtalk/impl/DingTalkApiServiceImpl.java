@@ -20,6 +20,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.time.Instant;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 钉钉核心 API 服务实现
@@ -206,9 +210,8 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
                 JSONObject cardParam = new JSONObject();
                 cardParam.set("title", title);
                 cardParam.set("text", content);
-                // 一键接收：指向独立快速接收页面（直接调 API，不进系统不弹确认框）
-                // 从 detailUrl 提取 baseUrl 和 taskId 构造 quick-accept 链接
-                // detailUrl 格式: {baseUrl}/pms/project-detail/{projectId}?taskId={taskId}
+                // 一键接收：指向免登录签名接口（不需要用户登录态）
+                // 从 detailUrl 提取 taskId 和 baseUrl
                 String qaBaseUrl = detailUrl.contains("/pms/") ? detailUrl.substring(0, detailUrl.indexOf("/pms/")) : detailUrl;
                 String qaTaskId = "";
                 int tiIdx = detailUrl.indexOf("taskId=");
@@ -216,7 +219,11 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
                     int tiEnd = detailUrl.indexOf("&", tiIdx);
                     qaTaskId = tiEnd > 0 ? detailUrl.substring(tiIdx + 7, tiEnd) : detailUrl.substring(tiIdx + 7);
                 }
-                String acceptUrl = qaBaseUrl + "/pms/quick-accept?taskId=" + qaTaskId;
+                // 生成签名链接（5分钟有效）
+                long ts = Instant.now().getEpochSecond();
+                String signStr = signForAccept(qaTaskId, ts);
+                String acceptUrl = qaBaseUrl + "/admin-api/pms/public/task-accept?taskId=" + qaTaskId + "&ts=" + ts + "&sign=" + signStr;
+                log.info("[DingTalk] 一键接收签名URL: {}", acceptUrl);
                 cardParam.set("actionTitle1", "\u4e00\u952e\u63a5\u6536");   // 一键接收
                 cardParam.set("actionURL1", acceptUrl);
                 cardParam.set("actionTitle2", "\u67e5\u770b\u8be6\u60c5");   // 查看详情
@@ -458,4 +465,31 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
             return "FAIL: 无法获取 access_token，请检查 AppKey/AppSecret";
         }
     }
+
+    // ========== 签名工具方法（与 PmsPublicController 保持一致） ==========
+
+    private static final String ACCEPT_SIGN_SECRET = "pms-quick-accept-2026";
+
+    /**
+     * 生成快速接收签名: HMAC-SHA256(taskId + "|" + ts, secret)
+     */
+    private String signForAccept(String taskId, long ts) {
+        try {
+            String data = taskId + "|" + ts;
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec keySpec = new SecretKeySpec(
+                    ACCEPT_SIGN_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(keySpec);
+            byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            log.error("[DingTalk] 签名计算失败", e);
+            return "";
+        }
+    }
+
 }

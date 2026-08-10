@@ -235,6 +235,21 @@ public class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void acceptTaskPublic(Long taskId) {
+        PmsTaskDO task = requireTask(taskId);
+        if (!"pending_accept".equals(task.getCompleteStatus())) {
+            throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
+        }
+        // 公开接口：签名已验证合法性，跳过身份校验，直接执行状态变更
+        PmsTaskDO update = new PmsTaskDO();
+        update.setTaskId(taskId);
+        update.setCompleteStatus("in_progress");
+        taskMapper.updateById(update);
+        writeTaskLog(taskId, "task_accept_public", "通过钉钉一键接收，状态变更为进行中");
+    }
+
+    @Override
     public void submitCompletion(Long taskId, String actualCompleteDate, String completionNote) {
         PmsTaskDO task = requireTask(taskId);
         if (!"in_progress".equals(task.getCompleteStatus())) {
