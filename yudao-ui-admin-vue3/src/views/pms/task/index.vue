@@ -241,7 +241,7 @@ import { getTaskList, createTask, updateTask, deleteTask, TaskVO } from '@/api/p
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
-import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
+import { getDictDataByType } from '@/api/system/dict/dict.data'
 import {
   taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions,
   formatDate, calcDelayDays
@@ -280,17 +280,22 @@ const myTasks = ref(false)
 // 日常任务（无项目）：以固定哨兵值标识，提交时置 projectId = null 走部门审核流程
 const DAILY_PROJECT_VALUE = 0
 const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
-// 字典下拉选项：先设为 hardcoded fallback，onMounted 中直接调 API 覆盖为真实字典数据
-const currentTaskTypeOptions = ref<{ value: string; label: string }[]>([])
+// 字典下拉选项（ref，onMounted 中从 API 加载）
+const currentTaskTypeOptions = ref<{ value: string; label: string }[]>(dailyTaskTypeOptions)
 const currentPriorityOptions = ref<{ value: string; label: string }[]>(priorityOptions)
 
-/** 从后端全量字典响应中提取指定 dictType 的选项列表 */
-function extractDictOptions(allData: any[], dictType: string): { value: string; label: string }[] {
-  return allData
-    .filter((d: any) => d.dictType === dictType && (d.status == null || d.status === 0))
+/** 将后端字典数据转为 el-option 需要的 {value, label}[] 格式 */
+function toOptionItems(rawList: any[]): { value: string; label: string }[] {
+  if (!Array.isArray(rawList)) return []
+  return rawList
+    .filter((d: any) => d.status == null || d.status === 0)
     .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
     .map((d: any) => ({ value: String(d.value), label: d.label }))
 }
+
+// 缓存：供 isDailyTask watch 切换时使用
+let _cachedDailyTypeOpts: { value: string; label: string }[] = []
+let _cachedProjectTypeOpts: { value: string; label: string }[] = []
 
 const filteredList = computed(() => {
   let list = taskList.value
@@ -574,33 +579,47 @@ const submitTask = async () => {
 }
 
 onMounted(async () => {
-  // 直接调后端字典 API 获取全量字典数据（绕开 dictStore 异步竞态问题）
+  // 逐个调字典 API（比全量拉取+客户端过滤更可靠，避免 dictType 名称不一致问题）
   try {
-    const res: any = await getSimpleDictDataList()
-    const dictData = Array.isArray(res) ? res : (res?.data || [])
-    // 提取日常任务类型
-    const dailyOpts = extractDictOptions(dictData, 'pms_daily_task_type')
-    // 提取项目任务类型
-    const projectOpts = extractDictOptions(dictData, 'pms_task_type')
-    // 提取优先级
-    const priOpts = extractDictOptions(dictData, 'pms_priority')
-    // 根据当前模式设置任务类型
+    // 并发请求三个字典
+    const [dailyRes, projectRes, priRes] = await Promise.allSettled([
+      getDictDataByType('pms_daily_task_type'),
+      getDictDataByType('task_type'),
+      getDictDataByType('pms_priority')
+    ])
+    // 日常任务类型（pms_daily_task_type）
+    if (dailyRes.status === 'fulfilled') {
+      const raw = (dailyRes.value as any)?.data ?? dailyRes.value ?? []
+      _cachedDailyTypeOpts = toOptionItems(Array.isArray(raw) ? raw : [])
+      console.log('[PMS] pms_daily_task_type loaded:', _cachedDailyTypeOpts.length, 'items')
+    } else {
+      console.warn('[PMS] pms_daily_task_type load failed:', dailyRes.reason)
+      _cachedDailyTypeOpts = dailyTaskTypeOptions
+    }
+    // 项目任务类型（注意：系统中的字典名是 task_type，不是 pms_task_type）
+    if (projectRes.status === 'fulfilled') {
+      const raw = (projectRes.value as any)?.data ?? projectRes.value ?? []
+      _cachedProjectTypeOpts = toOptionItems(Array.isArray(raw) ? raw : [])
+      console.log('[PMS] task_type loaded:', _cachedProjectTypeOpts.length, 'items')
+    } else {
+      _cachedProjectTypeOpts = taskTypeOptions
+    }
+    // 优先级（pms_priority 可能不存在，fallback 到 hardcoded）
+    if (priRes.status === 'fulfilled') {
+      const raw = (priRes.value as any)?.data ?? priRes.value ?? []
+      const priItems = toOptionItems(Array.isArray(raw) ? raw : [])
+      if (priItems.length > 0) currentPriorityOptions.value = priItems
+      console.log('[PMS] priority loaded:', priItems.length, 'items')
+    }
+    // 根据当前模式设置初始值
     currentTaskTypeOptions.value = isDailyTask.value
-      ? (dailyOpts.length > 0 ? dailyOpts : dailyTaskTypeOptions)
-      : (projectOpts.length > 0 ? projectOpts : taskTypeOptions)
-    currentPriorityOptions.value = priOpts.length > 0 ? priOpts : priorityOptions
-    // 缓存到模块变量供 watch 使用
-    _cachedDailyTypeOpts = dailyOpts
-    _cachedProjectTypeOpts = projectOpts
+      ? (_cachedDailyTypeOpts.length > 0 ? _cachedDailyTypeOpts : dailyTaskTypeOptions)
+      : (_cachedProjectTypeOpts.length > 0 ? _cachedProjectTypeOpts : taskTypeOptions)
   } catch (e) {
     console.warn('[PMS] 字典API加载失败，使用fallback', e)
   }
   loadList()
 })
-
-// 缓存：供 isDailyTask watch 切换时使用
-let _cachedDailyTypeOpts: { value: string; label: string }[] = []
-let _cachedProjectTypeOpts: { value: string; label: string }[] = []
 
 // 切换「日常任务/项目任务」时同步更新任务类型下拉选项
 watch(isDailyTask, (val) => {

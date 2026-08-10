@@ -3,6 +3,7 @@
   <div v-if="showHeader" class="task-row task-header">
     <div class="row-name"><span class="header-text">任务名称</span></div>
     <div class="row-cell cell-owner"><span class="header-text">责任人</span></div>
+    <div class="row-cell cell-helper"><span class="header-text">协助人</span></div>
     <div class="row-cell cell-date"><span class="header-text">计划日期</span></div>
     <div class="row-cell cell-delay"><span class="header-text">延期</span></div>
     <div class="row-cell cell-status"><span class="header-text">状态</span></div>
@@ -21,6 +22,12 @@
 
     <!-- 责任人 -->
     <div class="row-cell cell-owner">👤 {{ ownerName }}</div>
+
+    <!-- 协助人 -->
+    <div class="row-cell cell-helper" :title="helperNamesFull">
+      <span v-if="helperNames" class="helper-text">🤝 {{ helperNames }}</span>
+      <span v-else class="cell-empty">—</span>
+    </div>
 
     <!-- 计划日期 -->
     <div class="row-cell cell-date">📅 {{ formatDate(task.planStartDate) }} ~ {{ formatDate(task.planEndDate) }}</div>
@@ -78,6 +85,22 @@ const isDaily = computed(() =>
   props.task.projectId === null || props.task.projectId === undefined || props.task.projectId === 0
 )
 const ownerName = computed(() => getUserName(props.task.mainOwnerId))
+// 协助人：helperIds 是逗号分隔的用户ID字符串
+const helperNames = computed(() => {
+  const ids = props.task.helperIds
+  if (!ids) return ''
+  const idList = ids.split(',').map((s: string) => s.trim()).filter(Boolean)
+  if (idList.length === 0) return ''
+  const names = idList.map((id: string) => getUserName(Number(id) || id)).filter(Boolean)
+  // 超过2人时截断显示
+  return names.length > 2 ? `${names.slice(0, 2).join('、')} 等${names.length}人` : names.join('、')
+})
+const helperNamesFull = computed(() => {
+  const ids = props.task.helperIds
+  if (!ids) return ''
+  const idList = ids.split(',').map((s: string) => s.trim()).filter(Boolean)
+  return idList.map((id: string) => getUserName(Number(id) || id)).filter(Boolean).join('、')
+})
 const typeName = computed(() => {
   if (isDaily.value) {
     return getDailyTaskTypeOptions().find(o => o.value === props.task.taskType)?.label
@@ -177,6 +200,12 @@ const canSubmitReview = computed(() => {
   color: #c9cdd4;
 }
 .cell-owner { width: 88px; flex-shrink: 0; }
+.cell-helper { flex: 1 1 120px; min-width: 90px; max-width: 180px; }
+.helper-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cell-date { flex: 1 1 145px; min-width: 130px; }
 .cell-delay { width: 88px; flex-shrink: 0; justify-content: flex-start; }
 .cell-status { width: 80px; flex-shrink: 0; justify-content: flex-start; }

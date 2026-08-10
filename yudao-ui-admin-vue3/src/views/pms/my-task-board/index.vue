@@ -208,7 +208,7 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import TaskBoardCard from './components/TaskBoardCard.vue'
-import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
+import { getDictDataByType } from '@/api/system/dict/dict.data'
 import {
   taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions,
   calcDelayDays, formatDate
@@ -250,15 +250,15 @@ const projectTaskCount = computed(() =>
   board.projectGroups.reduce((sum, g) => sum + g.tasks.length, 0)
 )
 
-// 日常任务类型下拉（动态字典，fallback 到硬编码）
-// 日常任务类型下拉 + 优先级下拉：先设 fallback，onMounted 直接调 API 覆盖
+// 日常任务类型下拉 + 优先级下拉：先设 fallback，onMounted 用 getDictDataByType 逐个加载
 const dailyTypeOpts = ref<{ value: string; label: string }[]>(dailyTaskTypeOptions)
 const dailyPriorityOpts = ref<{ value: string; label: string }[]>(priorityOptions)
 
-/** 从后端全量字典响应中提取指定 dictType 的选项列表 */
-function extractDictOpts(allData: any[], dictType: string): { value: string; label: string }[] {
-  return allData
-    .filter((d: any) => d.dictType === dictType && (d.status == null || d.status === 0))
+/** 将后端字典数据转为 el-option 需要的 {value, label}[] 格式 */
+function toOptionItems(rawList: any[]): { value: string; label: string }[] {
+  if (!Array.isArray(rawList)) return []
+  return rawList
+    .filter((d: any) => d.status == null || d.status === 0)
     .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
     .map((d: any) => ({ value: String(d.value), label: d.label }))
 }
@@ -540,16 +540,26 @@ const submitDaily = async () => {
 }
 
 onMounted(async () => {
-  // 直接调后端字典 API 获取全量字典数据（绕开 dictStore 异步竞态问题）
+  // 逐个调字典 API（比全量拉取+客户端过滤更可靠）
   try {
-    const res: any = await getSimpleDictDataList()
-    const dictData = Array.isArray(res) ? res : (res?.data || [])
-    const dtOpts = extractDictOpts(dictData, 'pms_daily_task_type')
-    const dpOpts = extractDictOpts(dictData, 'pms_priority')
-    dailyTypeOpts.value = dtOpts.length > 0 ? dtOpts : dailyTaskTypeOptions
-    dailyPriorityOpts.value = dpOpts.length > 0 ? dpOpts : priorityOptions
+    const [dtRes, dpRes] = await Promise.allSettled([
+      getDictDataByType('pms_daily_task_type'),
+      getDictDataByType('pms_priority')
+    ])
+    if (dtRes.status === 'fulfilled') {
+      const raw = (dtRes.value as any)?.data ?? dtRes.value ?? []
+      const items = toOptionItems(Array.isArray(raw) ? raw : [])
+      if (items.length > 0) dailyTypeOpts.value = items
+      console.log('[PMS-Board] pms_daily_task_type:', items.length, 'items')
+    }
+    if (dpRes.status === 'fulfilled') {
+      const raw = (dpRes.value as any)?.data ?? dpRes.value ?? []
+      const items = toOptionItems(Array.isArray(raw) ? raw : [])
+      if (items.length > 0) dailyPriorityOpts.value = items
+      console.log('[PMS-Board] priority:', items.length, 'items')
+    }
   } catch (e) {
-    console.warn('[PMS] 字典API加载失败，使用fallback', e)
+    console.warn('[PMS-Board] 字典API加载失败，使用fallback', e)
   }
   window.addEventListener('resize', handleResize)
   // 默认范围：本月
