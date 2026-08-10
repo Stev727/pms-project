@@ -138,8 +138,13 @@
     <!-- 任务详情抽屉 -->
     <TaskDetailDrawer ref="taskDrawerRef" @refresh="loadList" />
 
-    <!-- 创建/编辑任务弹窗 -->
-    <el-dialog v-model="taskDialogVisible" :title="isEdit ? '编辑任务' : '新建任务'" width="680px" :close-on-click-modal="false">
+    <!-- 创建/编辑任务弹窗（仅用于创建日常任务；项目任务请在项目详情页创建） -->
+    <el-dialog v-model="taskDialogVisible" :title="isEdit ? '编辑任务' : '新建日常任务'" width="680px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" class="mb-12px" show-icon>
+        <template #title>
+          <span>此处仅创建日常任务（由直属领导审批），项目任务请到「项目管理 → 选择项目 → 新增任务」创建</span>
+        </template>
+      </el-alert>
       <el-form ref="taskFormRef" :model="taskForm" :rules="taskFormRules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -148,25 +153,8 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="所属项目" prop="projectId">
-              <el-select v-model="taskForm.projectId" placeholder="请选择项目" filterable class="w-full" @change="onProjectChange">
-                <el-option :value="DAILY_PROJECT_VALUE" label="日常任务（无项目）" />
-                <el-option v-for="p in availableProjects" :key="p.projectId" :label="p.projectName" :value="p.projectId" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="所属阶段" prop="stageId">
-              <el-select v-model="taskForm.stageId" placeholder="请先选择项目" filterable class="w-full" :disabled="!taskForm.projectId || isDailyTask">
-                <el-option v-for="s in stagesForSelectedProject" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="任务类型" prop="taskType">
-              <el-select v-model="taskForm.taskType" placeholder="请选择" class="w-full">
+              <el-select v-model="taskForm.taskType" placeholder="请选择任务类型" class="w-full">
                 <el-option v-for="opt in currentTaskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
@@ -241,7 +229,7 @@ import { getTaskList, createTask, updateTask, deleteTask, TaskVO } from '@/api/p
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
-import { getDictDataByType } from '@/api/system/dict/dict.data'
+import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
 import {
   taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions,
   formatDate, calcDelayDays
@@ -277,25 +265,20 @@ const queryParams = reactive({
 
 const myTasks = ref(false)
 
-// 日常任务（无项目）：以固定哨兵值标识，提交时置 projectId = null 走部门审核流程
-const DAILY_PROJECT_VALUE = 0
-const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
-// 字典下拉选项（ref，onMounted 中从 API 加载）
+// 本弹窗只创建日常任务（projectId 固定为 null），故无 DAILY_PROJECT_VALUE / isDailyTask 概念
+// 字典下拉选项：onMounted 中从 simple-list API 加载后填充
+// 任务类型：永远从 pms_daily_task_type 数据字典取值（项目任务请到项目详情页创建）
 const currentTaskTypeOptions = ref<{ value: string; label: string }[]>(dailyTaskTypeOptions)
 const currentPriorityOptions = ref<{ value: string; label: string }[]>(priorityOptions)
 
-/** 将后端字典数据转为 el-option 需要的 {value, label}[] 格式 */
-function toOptionItems(rawList: any[]): { value: string; label: string }[] {
-  if (!Array.isArray(rawList)) return []
-  return rawList
-    .filter((d: any) => d.status == null || d.status === 0)
+/** 从 simple-list 全量响应中提取指定 dictType 的选项列表 */
+function extractDictOptions(allData: any[], dictType: string): { value: string; label: string }[] {
+  if (!Array.isArray(allData)) return []
+  return allData
+    .filter((d: any) => d.dictType === dictType && (d.status == null || d.status === 0))
     .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
     .map((d: any) => ({ value: String(d.value), label: d.label }))
 }
-
-// 缓存：供 isDailyTask watch 切换时使用
-let _cachedDailyTypeOpts: { value: string; label: string }[] = []
-let _cachedProjectTypeOpts: { value: string; label: string }[] = []
 
 const filteredList = computed(() => {
   let list = taskList.value
@@ -339,12 +322,6 @@ const pagedList = computed(() => {
 
 const availableProjects = computed(() => {
   return projectList.value.filter(p => p.projectType !== 'standard_template')
-})
-
-const stagesForSelectedProject = computed(() => {
-  if (!taskForm.projectId) return []
-  return stageList.value.filter(s => String(s.projectId) === String(taskForm.projectId))
-    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
 })
 
 const loadList = async () => {
@@ -435,19 +412,7 @@ const taskForm = reactive<TaskVO & { projectId?: string | number; helperIds?: nu
 
 const taskFormRules = reactive<FormRules>({
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-  projectId: [{
-    validator: (_rule: any, _value: any, callback: any) => {
-      // 日常任务（无项目）合法；项目任务必须选择具体项目
-      if (taskForm.projectId === DAILY_PROJECT_VALUE) return callback()
-      if (taskForm.projectId === undefined || taskForm.projectId === null || taskForm.projectId === '') {
-        return callback(new Error('请选择项目'))
-      }
-      callback()
-    },
-    trigger: 'change'
-  }],
-  stageId: [{ required: false }],
-  taskType: [{ required: false }],
+  taskType: [{ required: true, message: '请选择任务类型', trigger: 'change' }],
   priority: [{ required: false }],
   planStartDate: [{ required: false }],
   planEndDate: [{ required: false }]
@@ -456,10 +421,10 @@ const taskFormRules = reactive<FormRules>({
 const resetTaskForm = () => {
   Object.assign(taskForm, {
     taskId: undefined,
-    projectId: queryParams.projectId || undefined,
+    projectId: undefined,  // 本弹窗只创建日常任务，projectId 固定为 null（后端 createTask 中 projectId==null 走部门审核）
     stageId: undefined,
     taskName: '',
-    taskType: 'design',
+    taskType: dailyTaskTypeOptions[0]?.value || 'other',
     priority: 'normal',
     cycle: 1,
     planStartDate: '',
@@ -473,16 +438,6 @@ const resetTaskForm = () => {
     progress: 0
   })
   isEdit.value = false
-}
-
-const onProjectChange = () => {
-  taskForm.stageId = undefined
-  // 切换为日常任务时，任务类型切换到日常字典；切回项目任务时回到默认项目类型
-  if (taskForm.projectId === DAILY_PROJECT_VALUE) {
-    taskForm.taskType = dailyTaskTypeOptions[0].value
-  } else if (!taskForm.taskType || dailyTaskTypeOptions.some(o => o.value === taskForm.taskType)) {
-    taskForm.taskType = 'design'
-  }
 }
 
 const handleCreate = () => {
@@ -547,26 +502,18 @@ const submitTask = async () => {
       await updateTask(data)
       message.success('任务更新成功')
     } else {
-      // 日常任务：无项目、无阶段，提交时 projectId 置 NULL，走部门审核流程
-      if (isDailyTask.value) {
-        data.projectId = null
-        data.stageId = null
-        // 兜底：无计划的日常任务无法在看板按日期归类，默认填入今天，保证可见
-        const today = formatDate(new Date(), 'YYYY-MM-DD')
-        if (!data.planStartDate) data.planStartDate = today
-        if (!data.planEndDate) data.planEndDate = data.planStartDate
-        const existingDaily = taskList.value.filter(t => t.projectId == null)
-        const seq = String(existingDaily.length + 1).padStart(3, '0')
-        data.taskCode = `DAILY-${seq}`
-      } else {
-        // 生成任务编号: TASK-阶段缩写-3位序号
-        const stageCode = stageList.value.find(s => s.stageId === data.stageId)?.stageCode || 'GEN'
-        const existingTasks = taskList.value.filter(t => String(t.stageId) === String(data.stageId))
-        const seq = String(existingTasks.length + 1).padStart(3, '0')
-        data.taskCode = `TASK-${stageCode}-${seq}`
-      }
+      // 本弹窗只创建日常任务：projectId/stageId 都置 null，走部门审核流程
+      data.projectId = null
+      data.stageId = null
+      // 兜底：无计划的日常任务无法在看板按日期归类，默认填入今天，保证可见
+      const today = formatDate(new Date(), 'YYYY-MM-DD')
+      if (!data.planStartDate) data.planStartDate = today
+      if (!data.planEndDate) data.planEndDate = data.planStartDate
+      const existingDaily = taskList.value.filter(t => t.projectId == null)
+      const seq = String(existingDaily.length + 1).padStart(3, '0')
+      data.taskCode = `DAILY-${seq}`
       await createTask(data)
-      message.success('任务创建成功')
+      message.success('日常任务创建成功')
     }
     taskDialogVisible.value = false
     await loadList()
@@ -579,55 +526,22 @@ const submitTask = async () => {
 }
 
 onMounted(async () => {
-  // 逐个调字典 API（比全量拉取+客户端过滤更可靠，避免 dictType 名称不一致问题）
+  // 用 simple-list（公开端点，返回全量启用字典）+ 客户端按 dictType 过滤
+  // 注意：系统中的字典名是 pms_daily_task_type / task_type（不是 pms_task_type）
   try {
-    // 并发请求三个字典
-    const [dailyRes, projectRes, priRes] = await Promise.allSettled([
-      getDictDataByType('pms_daily_task_type'),
-      getDictDataByType('task_type'),
-      getDictDataByType('pms_priority')
-    ])
-    // 日常任务类型（pms_daily_task_type）
-    if (dailyRes.status === 'fulfilled') {
-      const raw = (dailyRes.value as any)?.data ?? dailyRes.value ?? []
-      _cachedDailyTypeOpts = toOptionItems(Array.isArray(raw) ? raw : [])
-      console.log('[PMS] pms_daily_task_type loaded:', _cachedDailyTypeOpts.length, 'items')
-    } else {
-      console.warn('[PMS] pms_daily_task_type load failed:', dailyRes.reason)
-      _cachedDailyTypeOpts = dailyTaskTypeOptions
-    }
-    // 项目任务类型（注意：系统中的字典名是 task_type，不是 pms_task_type）
-    if (projectRes.status === 'fulfilled') {
-      const raw = (projectRes.value as any)?.data ?? projectRes.value ?? []
-      _cachedProjectTypeOpts = toOptionItems(Array.isArray(raw) ? raw : [])
-      console.log('[PMS] task_type loaded:', _cachedProjectTypeOpts.length, 'items')
-    } else {
-      _cachedProjectTypeOpts = taskTypeOptions
-    }
-    // 优先级（pms_priority 可能不存在，fallback 到 hardcoded）
-    if (priRes.status === 'fulfilled') {
-      const raw = (priRes.value as any)?.data ?? priRes.value ?? []
-      const priItems = toOptionItems(Array.isArray(raw) ? raw : [])
-      if (priItems.length > 0) currentPriorityOptions.value = priItems
-      console.log('[PMS] priority loaded:', priItems.length, 'items')
-    }
-    // 根据当前模式设置初始值
-    currentTaskTypeOptions.value = isDailyTask.value
-      ? (_cachedDailyTypeOpts.length > 0 ? _cachedDailyTypeOpts : dailyTaskTypeOptions)
-      : (_cachedProjectTypeOpts.length > 0 ? _cachedProjectTypeOpts : taskTypeOptions)
+    const res: any = await getSimpleDictDataList()
+    const dictData = Array.isArray(res) ? res : (res?.data || [])
+    // 任务类型永远从 pms_daily_task_type 取（项目任务在项目详情页创建）
+    const dailyOpts = extractDictOptions(dictData, 'pms_daily_task_type')
+    if (dailyOpts.length > 0) currentTaskTypeOptions.value = dailyOpts
+    // 优先级（系统暂未配置 pms_priority，fallback 到 hardcoded）
+    const priOpts = extractDictOptions(dictData, 'pms_priority')
+    if (priOpts.length > 0) currentPriorityOptions.value = priOpts
+    console.log('[PMS] pms_daily_task_type:', dailyOpts.length, 'items / pms_priority:', priOpts.length, 'items')
   } catch (e) {
     console.warn('[PMS] 字典API加载失败，使用fallback', e)
   }
   loadList()
-})
-
-// 切换「日常任务/项目任务」时同步更新任务类型下拉选项
-watch(isDailyTask, (val) => {
-  if (val) {
-    currentTaskTypeOptions.value = _cachedDailyTypeOpts.length > 0 ? _cachedDailyTypeOpts : dailyTaskTypeOptions
-  } else {
-    currentTaskTypeOptions.value = _cachedProjectTypeOpts.length > 0 ? _cachedProjectTypeOpts : taskTypeOptions
-  }
 })
 </script>
 
