@@ -242,7 +242,9 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import {
-  taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions, formatDate, calcDelayDays, refreshPmsDicts
+  taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions,
+  getDailyTaskTypeOptions, getDynamicTaskTypeOptions, getDynamicPriorityOptions,
+  formatDate, calcDelayDays, refreshPmsDicts
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -279,7 +281,7 @@ const myTasks = ref(false)
 const DAILY_PROJECT_VALUE = 0
 const isDailyTask = computed(() => taskForm.projectId === DAILY_PROJECT_VALUE)
 const currentTaskTypeOptions = computed(() =>
-  isDailyTask.value ? getDailyTaskTypeOptions() : taskTypeOptions
+  isDailyTask.value ? getDailyTaskTypeOptions() : getDynamicTaskTypeOptions()
 )
 
 const filteredList = computed(() => {
@@ -563,9 +565,9 @@ const submitTask = async () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项在本页下拉即时可见
-  refreshPmsDicts()
+  await refreshPmsDicts()
   loadList()
 })
 </script>

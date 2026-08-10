@@ -117,10 +117,10 @@ const canSubmitReview = computed(() => {
   background: #f7f8fa;
   border-color: #c9cdd4;
 }
-/* 名称区：弹性占据主要空间 */
+/* 名称区：固定宽度，避免长名称挤压右侧字段 */
 .row-name {
-  flex: 1 1 280px;
-  min-width: 0;
+  width: 260px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -130,11 +130,11 @@ const canSubmitReview = computed(() => {
   overflow: hidden;
 }
 .name-text {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex-shrink: 1;
-  min-width: 0;
 }
 /* 通用单元格 */
 .row-cell {
@@ -148,12 +148,12 @@ const canSubmitReview = computed(() => {
 .cell-empty {
   color: #c9cdd4;
 }
-.cell-owner { width: 96px; }
-.cell-date { width: 180px; }
+.cell-owner { width: 92px; }
+.cell-date { width: 170px; }
 .cell-delay { width: 90px; justify-content: flex-start; }
-.cell-status { width: 80px; justify-content: flex-start; }
-.cell-review { width: 70px; justify-content: flex-start; }
-.cell-progress { width: 120px; }
+.cell-status { width: 78px; justify-content: flex-start; }
+.cell-review { width: 68px; justify-content: flex-start; }
+.cell-progress { width: 110px; }
 .row-action { flex-shrink: 0; margin-left: auto; }
 .delay-tag {
   font-weight: 600;

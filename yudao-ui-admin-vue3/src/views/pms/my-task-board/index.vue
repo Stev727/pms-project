@@ -160,7 +160,7 @@
         </el-form-item>
         <el-form-item label="优先级">
           <el-select v-model="dailyForm.priority" class="w-full">
-            <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            <el-option v-for="opt in dailyPriorityOpts" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
         <el-row :gutter="16">
@@ -194,7 +194,8 @@ import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import TaskBoardCard from './components/TaskBoardCard.vue'
 import {
-  taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions, calcDelayDays, refreshPmsDicts, formatDate
+  taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions, getDailyTaskTypeOptions,
+  getDynamicPriorityOptions, calcDelayDays, refreshPmsDicts, formatDate
 } from '../pms-utils'
 import * as echarts from 'echarts'
 import { nextTick, onUnmounted } from 'vue'
@@ -235,6 +236,11 @@ const projectTaskCount = computed(() =>
 const dailyTypeOpts = computed(() => {
   const opts = getDailyTaskTypeOptions()
   return opts.length ? opts : dailyTaskTypeOptions
+})
+// 优先级下拉（动态字典，fallback 到硬编码）
+const dailyPriorityOpts = computed(() => {
+  const opts = getDynamicPriorityOptions()
+  return opts.length ? opts : priorityOptions
 })
 
 // 全部任务汇总（用于统计概览与图表）
@@ -476,7 +482,7 @@ const submitDaily = async () => {
 
 onMounted(async () => {
   // 强制刷新 yudao 系统字典缓存，使「字典管理」新增项即时可见
-  refreshPmsDicts()
+  await refreshPmsDicts()
   window.addEventListener('resize', handleResize)
   // 默认范围：本月
   const n = new Date()

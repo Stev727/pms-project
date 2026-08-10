@@ -159,6 +159,32 @@ public class TaskServiceImpl implements TaskService {
         }
         taskMapper.insert(entity);
 
+        // 【日常任务】创建后钉钉通知责任人 + 直属领导（fail-soft，不阻断事务）
+        if (entity.getProjectId() == null) {
+            Long taskId = entity.getTaskId();
+            String dailyDetailUrl = frontendBaseUrl + "/pms/my-task-board";
+            // 通知责任人
+            if (entity.getMainOwnerId() != null) {
+                sendNotifyQuietly("【PMS】您有新日常任务",
+                        "您有新的日常任务「" + entity.getTaskName() + "」，请关注并按时完成，完成后需您的直属领导审核。",
+                        List.of(entity.getMainOwnerId()), "task_dispatched", taskId, dailyDetailUrl);
+            }
+            // 通知直属领导（审核人），避免与责任人重复
+            Long reviewerId = entity.getReviewerId();
+            if (reviewerId != null && !reviewerId.equals(entity.getMainOwnerId())) {
+                String ownerName = "";
+                if (entity.getMainOwnerId() != null) {
+                    AdminUserDO owner = adminUserMapper.selectById(entity.getMainOwnerId());
+                    if (owner != null && owner.getNickname() != null) {
+                        ownerName = owner.getNickname();
+                    }
+                }
+                sendNotifyQuietly("【PMS】下属有新日常任务待您关注",
+                        "您的下属「" + ownerName + "」有新的日常任务「" + entity.getTaskName() + "」，任务完成时将由您审核。",
+                        List.of(reviewerId), "task_dispatched", taskId, dailyDetailUrl);
+            }
+        }
+
         // #1：新增子任务后，父任务进度需要重算
         if (entity.getParentTaskId() != null) {
             refreshProgressUpward(entity.getParentTaskId());
