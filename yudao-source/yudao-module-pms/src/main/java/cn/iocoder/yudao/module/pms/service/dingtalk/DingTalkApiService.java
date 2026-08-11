@@ -84,6 +84,15 @@ public interface DingTalkApiService {
     List<Map<String, Object>> getDepartmentList(Long parentDeptId);
 
     /**
+     * 获取单个部门详情（含 leader_userid_list）
+     * <p>API: /topapi/v2/department/get
+     *
+     * @param deptId 钉钉部门 ID
+     * @return 部门详情（含 leader_userid_list），失败返回 null
+     */
+    Map<String, Object> getDepartmentDetail(Long deptId);
+
+    /**
      * 获取部门用户列表
      *
      * @param deptId 部门 ID

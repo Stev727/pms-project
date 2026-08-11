@@ -1058,7 +1058,7 @@ public class TaskServiceImpl implements TaskService {
 
         // 未完成状态集合（看板只关心未完结的任务）
         List<String> unfinished = List.of("not_started", "pending_accept", "in_progress",
-                "completion_pending_review", "delayed", "rejected", "paused");
+                "completion_pending_review", "pending_review", "delayed", "rejected", "paused");
 
         List<PmsTaskDO> legacy;
         List<PmsTaskDO> inRange;

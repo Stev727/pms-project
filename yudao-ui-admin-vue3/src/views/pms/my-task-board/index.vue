@@ -34,9 +34,6 @@
           <el-button type="primary" @click="loadBoard" :loading="loading">
             <Icon icon="ep:search" class="mr-5px" />查询
           </el-button>
-          <el-button @click="openCreateDaily">
-            <Icon icon="ep:plus" class="mr-5px" />新建日常任务
-          </el-button>
         </el-form-item>
       </el-form>
     </ContentWrap>
@@ -154,72 +151,23 @@
 
     <!-- 任务详情抽屉（复用项目详情抽屉，只读为主） -->
     <TaskDetailDrawer ref="taskDrawerRef" @refresh="loadBoard" />
-
-    <!-- 新建日常任务弹窗 -->
-    <el-dialog v-model="dailyDialogVisible" title="新建日常任务" width="640px" :close-on-click-modal="false">
-      <el-form ref="dailyFormRef" :model="dailyForm" :rules="dailyRules" label-width="90px">
-        <el-form-item label="任务名称" prop="taskName">
-          <el-input v-model="dailyForm.taskName" placeholder="请输入任务名称" />
-        </el-form-item>
-        <el-form-item label="任务类型" prop="taskType">
-          <el-select v-model="dailyForm.taskType" placeholder="请选择" class="w-full">
-            <el-option v-for="opt in dailyTypeOpts" :key="opt.value" :label="opt.label" :value="opt.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="负责人" prop="mainOwnerId">
-          <el-select v-model="dailyForm.mainOwnerId" placeholder="请选择负责人" filterable class="w-full" @change="onDailyOwnerChange">
-            <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
-          </el-select>
-          <div class="reviewer-hint">
-            直属领导：<span :class="{ warn: !dailyReviewerName }">{{ dailyReviewerName || '⚠️ 未抽取到该用户的直属领导，请联系管理员检查部门设置' }}</span>
-          </div>
-        </el-form-item>
-        <el-form-item label="优先级">
-          <el-select v-model="dailyForm.priority" class="w-full">
-            <el-option v-for="opt in dailyPriorityOpts" :key="opt.value" :label="opt.label" :value="opt.value" />
-          </el-select>
-        </el-form-item>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="计划开始">
-              <el-date-picker v-model="dailyForm.planStartDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="计划结束">
-              <el-date-picker v-model="dailyForm.planEndDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="任务描述">
-          <el-input v-model="dailyForm.description" type="textarea" :rows="2" placeholder="请输入任务描述" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dailyDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="dailySubmitting" @click="submitDaily">确定</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { getTaskBoard, getBoardScope, createTask, submitReview, getReviewerOf, TaskVO } from '@/api/pms/task'
+import { getTaskBoard, getBoardScope, submitReview, TaskVO } from '@/api/pms/task'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import TaskBoardCard from './components/TaskBoardCard.vue'
-import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
 import {
-  taskStatusMap, priorityMap, priorityOptions, dailyTaskTypeOptions,
-  calcDelayDays, formatDate
+  taskStatusMap, calcDelayDays, formatDate
 } from '../pms-utils'
 import * as echarts from 'echarts'
 import { nextTick, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
 import { useUserStore } from '@/store/modules/user'
 
 defineOptions({ name: 'PmsMyTaskBoard' })
@@ -270,33 +218,10 @@ const projectTaskCount = computed(() =>
   board.projectGroups.reduce((sum, g) => sum + g.tasks.length, 0)
 )
 
-// 日常任务类型下拉 + 优先级下拉：先设 fallback，onMounted 用 simple-list 加载
-const dailyTypeOpts = ref<{ value: string; label: string }[]>(dailyTaskTypeOptions)
-const dailyPriorityOpts = ref<{ value: string; label: string }[]>(priorityOptions)
-
-/** 从 simple-list 全量响应中提取指定 dictType 的选项列表 */
-function extractDictOpts(allData: any[], dictType: string): { value: string; label: string }[] {
-  if (!Array.isArray(allData)) return []
-  return allData
-    .filter((d: any) => d.dictType === dictType && (d.status == null || d.status === 0))
-    .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
-    .map((d: any) => ({ value: String(d.value), label: d.label }))
-}
-
 // 项目分组折叠/展开状态（reactive 对象属性触发响应式）
 const collapsedFlag = reactive<Record<number, boolean>>({})
 const isProjectCollapsed = (id: number) => !!collapsedFlag[id]
 const toggleProject = (id: number) => { collapsedFlag[id] = !collapsedFlag[id] }
-
-// 日常任务直属领导预校验（新建弹窗选择负责人后实时查询）
-const dailyReviewerName = ref('')
-const onDailyOwnerChange = async (userId: number | string | undefined) => {
-  if (!userId) { dailyReviewerName.value = ''; return }
-  try {
-    const r: any = await getReviewerOf(userId)
-    dailyReviewerName.value = (r?.code === 0 && r.data) ? getUserName(r.data) : ''
-  } catch { dailyReviewerName.value = '' }
-}
 
 // 全部任务汇总（用于统计概览与图表）
 const allTasks = computed<TaskVO[]>(() => {
@@ -504,7 +429,11 @@ const loadBoard = async () => {
     const data = await getTaskBoard(params)
     board.legacyTasks = data.legacyTasks || []
     board.projectGroups = data.projectGroups || []
-    board.dailyTasks = data.dailyTasks || []
+    // 方向a 严格过滤：日常任务区只保留「无项目归属」的任务（projectId 为 null/0/空），
+    // 项目任务一律归入项目分组，确保与「任务列表」口径一致，杜绝项目任务误入日常区造成两边内容不一致。
+    // （历史遗留区为混合列表，由 legacyGroups 按 projectId 再分组，不在此过滤。）
+    const isProjectTask = (t: TaskVO) => t.projectId != null && t.projectId !== 0 && t.projectId !== ''
+    board.dailyTasks = (data.dailyTasks || []).filter((t: TaskVO) => !isProjectTask(t))
     nextTick(() => renderCharts())
   } catch (e) {
     console.error('加载看板失败', e)
@@ -513,77 +442,7 @@ const loadBoard = async () => {
   }
 }
 
-// ==================== 新建日常任务 ====================
-const dailyDialogVisible = ref(false)
-const dailyFormRef = ref<FormInstance>()
-const dailySubmitting = ref(false)
-const dailyForm = reactive({
-  taskName: '',
-  taskType: 'other',
-  mainOwnerId: undefined as number | undefined,
-  priority: 'normal',
-  planStartDate: '',
-  planEndDate: '',
-  description: ''
-})
-const dailyRules = reactive<FormRules>({
-  taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
-  taskType: [{ required: true, message: '请选择任务类型', trigger: 'change' }],
-  mainOwnerId: [{ required: true, message: '请选择负责人', trigger: 'change' }]
-})
-
-const openCreateDaily = () => {
-  Object.assign(dailyForm, {
-    taskName: '', taskType: 'other', mainOwnerId: undefined,
-    priority: 'normal', planStartDate: '', planEndDate: '', description: ''
-  })
-  dailyReviewerName.value = ''
-  dailyDialogVisible.value = true
-}
-
-const submitDaily = async () => {
-  const valid = await dailyFormRef.value?.validate().catch(() => false)
-  if (!valid) return
-  dailySubmitting.value = true
-  try {
-    const today = formatDate(new Date(), 'YYYY-MM-DD')
-    const data: any = {
-      ...dailyForm,
-      projectId: null,
-      stageId: null,
-      cycle: 1,
-      completeStatus: 'in_progress',
-      progress: 0,
-      isMilestone: false,
-      planStartDate: dailyForm.planStartDate || today,
-      planEndDate: dailyForm.planEndDate || dailyForm.planStartDate || today
-    }
-    await createTask(data)
-    ElMessage.success('日常任务创建成功')
-    dailyDialogVisible.value = false
-    await loadBoard()
-  } catch (e: any) {
-    console.error(e)
-    message.error(e?.message || '创建失败')
-  } finally {
-    dailySubmitting.value = false
-  }
-}
-
 onMounted(async () => {
-  // 用 simple-list（公开端点）+ 客户端按 dictType 过滤
-  // 注意：系统中的字典名是 pms_daily_task_type，不是 pms_daily_type 等其他变种
-  try {
-    const res: any = await getSimpleDictDataList()
-    const dictData = Array.isArray(res) ? res : (res?.data || [])
-    const dtOpts = extractDictOpts(dictData, 'pms_daily_task_type')
-    if (dtOpts.length > 0) dailyTypeOpts.value = dtOpts
-    const dpOpts = extractDictOpts(dictData, 'pms_priority')
-    if (dpOpts.length > 0) dailyPriorityOpts.value = dpOpts
-    console.log('[PMS-Board] pms_daily_task_type:', dtOpts.length, 'items / pms_priority:', dpOpts.length, 'items')
-  } catch (e) {
-    console.warn('[PMS-Board] 字典API加载失败，使用fallback', e)
-  }
   window.addEventListener('resize', handleResize)
   // 默认范围：本月
   const n = new Date()

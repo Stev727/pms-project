@@ -36,6 +36,7 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
     private static final String GET_TOKEN_URL = "/gettoken?appkey={}&appsecret={}";
     private static final String SEND_WORK_MSG_URL = "/topapi/message/corpconversation/asyncsend_v2?access_token={}";
     private static final String GET_DEPT_LIST_URL = "/topapi/v2/department/listsub?access_token={}";
+    private static final String GET_DEPT_GET_URL = "/topapi/v2/department/get?access_token={}";
     private static final String GET_USER_LIST_URL = "/topapi/v2/user/list?access_token={}";
     private static final String GET_USERID_BY_MOBILE_URL = "/topapi/v2/user/getbymobile?access_token={}";
 
@@ -377,6 +378,48 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
         } catch (Exception e) {
             log.error("[DingTalk] 获取部门列表异常", e);
             return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public Map<String, Object> getDepartmentDetail(Long deptId) {
+        if (deptId == null) return null;
+        String token = getAccessToken();
+        if (token == null) {
+            return null;
+        }
+        String url = properties.getBaseUrl() + StrUtil.format(GET_DEPT_GET_URL, token);
+        JSONObject body = new JSONObject();
+        body.set("dept_id", deptId);
+        body.set("language", "zh_CN");
+        // 钉钉 v2 部门接口默认不返回领导人/负责人字段，必须显式声明 field_filter_list 才会下发。
+        // 部门主管(dept_manager_userid_list) 即「直属领导」；leader_userid_list / org_dept_owner 作为兜底。
+        body.set("field_filter_list", JSONUtil.parseArray("[\"dept_manager_userid_list\",\"leader_userid_list\",\"org_dept_owner\"]"));
+        try {
+            HttpResponse response = HttpRequest.post(url)
+                    .body(body.toString())
+                    .timeout(10000)
+                    .execute();
+            JSONObject result = JSONUtil.parseObj(response.body());
+            if (result.getInt("errcode") == 0) {
+                JSONObject dept = result.getJSONObject("result");
+                if (dept == null) return null;
+                Map<String, Object> map = new HashMap<>();
+                map.put("dept_id", dept.getLong("dept_id"));
+                map.put("name", dept.getStr("name"));
+                map.put("parent_id", dept.getLong("parent_id"));
+                map.put("dept_manager_userid_list", dept.getJSONArray("dept_manager_userid_list"));
+                map.put("leader_userid_list", dept.getJSONArray("leader_userid_list"));
+                map.put("org_dept_owner", dept.getStr("org_dept_owner"));
+                return map;
+            } else {
+                log.warn("[DingTalk] 获取部门详情失败: deptId={}, errcode={}, errmsg={}",
+                        deptId, result.getInt("errcode"), result.getStr("errmsg"));
+                return null;
+            }
+        } catch (Exception e) {
+            log.error("[DingTalk] 获取部门详情异常 deptId={}", deptId, e);
+            return null;
         }
     }
 

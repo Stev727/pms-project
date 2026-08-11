@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.pms.service.dingtalk.impl;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONArray;
 import cn.iocoder.yudao.module.pms.dal.dataobject.dingtalk.PmsDingTalkConfigDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.dingtalk.PmsDingTalkDeptDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.dingtalk.PmsDingTalkUserDO;
@@ -121,6 +122,8 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
                     log.warn("[DingTalkSync] 更新部门名称失败: deptId={}, name={}, error={}",
                             existing.getDeptId(), deptName, e.getMessage());
                 }
+                // 同步部门 leader（钉钉 leader_userid_list → system_users.id）
+                syncDepartmentLeader(existing.getDeptId(), dingDeptId);
                 updateCount++;
             } else {
                 // 无映射或映射的 dept_id=0（之前创建失败），需要创建到 system_dept
@@ -182,8 +185,10 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
                         log.info("[DingTalkSync] 新建部门: dingDeptId={}, deptId={}, name={}",
                                 dingDeptId, newDeptId, deptName);
                     }
-                } else {
-                    log.error("[DingTalkSync] 部门创建失败，未获取到自增ID: name={}", deptName);
+                    if (newDeptId != null && newDeptId > 0) {
+                        // 新建部门后，同步钉钉 leader 到 system_dept.leader_user_id
+                        syncDepartmentLeader(newDeptId, dingDeptId);
+                    }
                 }
             }
         }
@@ -195,6 +200,65 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
         result.put("repaired", repairCount);
         log.info("[DingTalkSync] 部门同步完成: {}", result);
         return result;
+    }
+
+    /**
+     * 同步钉钉部门的 leader 到 system_dept.leader_user_id
+     * <p>流程：拉取部门详情 → 提取 leader_userid_list → 按 dingtalk_user_id 查 pms_dingtalk_user 映射 → 取第一个映射到的 system_user_id → UPDATE system_dept.leader_user_id</p>
+     *
+     * @param systemDeptId 本系统部门 ID（已存在的 system_dept.id）
+     * @param dingDeptId   钉钉部门 ID
+     */
+    private void syncDepartmentLeader(Long systemDeptId, Long dingDeptId) {
+        try {
+            Map<String, Object> detail = dingTalkApiService.getDepartmentDetail(dingDeptId);
+            if (detail == null) {
+                return;
+            }
+            // 解析 leader 钉钉 userid：部门主管列表 → leader_userid_list → 部门负责人(单值)
+            String firstLeaderDingId = resolveLeaderDingId(detail);
+            if (StrUtil.isBlank(firstLeaderDingId)) {
+                return;
+            }
+            PmsDingTalkUserDO mapping = dingTalkUserMapper.selectByDingTalkUserId(firstLeaderDingId);
+            if (mapping == null || mapping.getUserId() == null) {
+                log.info("[DingTalkSync] 钉钉 leader 未绑定系统用户，跳过: dingDeptId={}, dingUserId={}",
+                        dingDeptId, firstLeaderDingId);
+                return;
+            }
+            jdbcTemplate.update(
+                    "UPDATE system_dept SET leader_user_id = ? WHERE id = ?",
+                    mapping.getUserId(), systemDeptId);
+            log.info("[DingTalkSync] 同步部门 leader: dingDeptId={}, deptId={}, dingUserId={}, systemUserId={}",
+                    dingDeptId, systemDeptId, firstLeaderDingId, mapping.getUserId());
+        } catch (Exception e) {
+            log.warn("[DingTalkSync] 同步部门 leader 失败: dingDeptId={}, error={}",
+                    dingDeptId, e.getMessage());
+        }
+    }
+
+    /**
+     * 从部门详情中解析「直属领导」钉钉 userid：优先 dept_manager_userid_list（数组取首个），
+     * 其次 leader_userid_list，再次 org_dept_owner（单值字符串）。
+     */
+    private String resolveLeaderDingId(Map<String, Object> detail) {
+        for (String key : new String[]{"dept_manager_userid_list", "leader_userid_list"}) {
+            Object obj = detail.get(key);
+            if (obj instanceof JSONArray && !((JSONArray) obj).isEmpty()) {
+                String v = ((JSONArray) obj).getStr(0);
+                if (StrUtil.isNotBlank(v)) {
+                    return v.trim();
+                }
+            }
+        }
+        Object owner = detail.get("org_dept_owner");
+        if (owner != null) {
+            String v = String.valueOf(owner).trim();
+            if (StrUtil.isNotBlank(v)) {
+                return v;
+            }
+        }
+        return null;
     }
 
     /**

@@ -92,6 +92,15 @@
               <Icon icon="ep:upload" /> 导入
             </el-button>
             <el-button
+              type="info"
+              plain
+              :loading="dingTalkSyncLoading"
+              @click="handleDingTalkSync"
+              v-hasPermi="['system:user:update']"
+            >
+              <Icon icon="ep:refresh" />同步钉钉
+            </el-button>
+            <el-button
               type="success"
               plain
               @click="handleExport"
@@ -224,7 +233,9 @@ import { checkPermi } from '@/utils/permission'
 import { dateFormatter } from '@/utils/formatTime'
 import download from '@/utils/download'
 import { CommonStatusEnum } from '@/utils/constants'
+import { ElMessage } from 'element-plus'
 import * as UserApi from '@/api/system/user'
+import { syncAll as syncDingTalkAll } from '@/api/dingtalk'
 import UserForm from './UserForm.vue'
 import UserImportForm from './UserImportForm.vue'
 import UserAssignRoleForm from './UserAssignRoleForm.vue'
@@ -322,6 +333,30 @@ const handleExport = async () => {
   } catch {
   } finally {
     exportLoading.value = false
+  }
+}
+
+/** 同步钉钉数据（含部门 leader 同步） */
+const dingTalkSyncLoading = ref(false)
+const handleDingTalkSync = async () => {
+  try {
+    await message.confirm('确认同步钉钉组织架构？将同步部门、用户与部门 leader，可能耗时数十秒。')
+    dingTalkSyncLoading.value = true
+    const res: any = await syncDingTalkAll()
+    if (res?.code === 0 && res.data) {
+      const d = res.data
+      ElMessage.success(
+        `同步完成：部门 ${d.deptResult?.total ?? 0}（新增 ${d.deptResult?.new ?? 0}/更新 ${d.deptResult?.updated ?? 0}）` +
+        `、用户 ${d.userResult?.total ?? 0}`
+      )
+      // 同步后刷新列表（leader_user_id 会影响部门树显示）
+      await getList()
+    } else {
+      ElMessage.error(res?.msg || '同步失败')
+    }
+  } catch {
+  } finally {
+    dingTalkSyncLoading.value = false
   }
 }
 
