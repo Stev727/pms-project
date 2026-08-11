@@ -3,7 +3,7 @@
     <!-- 搜索栏 -->
     <ContentWrap>
       <el-form :model="queryParams" :inline="true" class="mb-0">
-        <el-form-item label="项目">
+        <el-form-item label="项目" v-if="activeTaskTab === 'project'">
           <el-select v-model="queryParams.projectId" placeholder="全部项目" clearable filterable style="width: 200px" @change="handleSearch">
             <el-option v-for="p in projectList" :key="p.projectId" :label="p.projectName" :value="p.projectId" />
           </el-select>
@@ -28,11 +28,18 @@
       </el-form>
     </ContentWrap>
 
+    <!-- 任务分类 Tab：项目管理 / 日常任务 / 合计 -->
+    <el-tabs v-model="activeTaskTab" class="task-tabs">
+      <el-tab-pane label="项目管理" name="project" />
+      <el-tab-pane label="日常任务" name="daily" />
+      <el-tab-pane label="合计" name="summary" />
+    </el-tabs>
+
     <!-- 表格 -->
-    <ContentWrap>
+    <ContentWrap v-if="activeTaskTab !== 'summary'">
       <div style="display: flex; justify-content: space-between; margin-bottom: 12px">
-        <el-button type="primary" @click="handleCreate" v-hasPermi="['pms:task:create']">
-          <Icon icon="ep:plus" class="mr-5px" />新建任务
+        <el-button type="primary" @click="handleCreate" v-hasPermi="['pms:task:create']" v-if="activeTaskTab === 'daily'">
+          <Icon icon="ep:plus" class="mr-5px" />新建日常任务
         </el-button>
         <div style="display: flex; align-items: center; gap: 12px">
           <el-switch v-model="myTasks" active-text="我的任务" size="small" />
@@ -133,6 +140,48 @@
           background
         />
       </div>
+    </ContentWrap>
+
+    <!-- 合计 Tab：汇总总览 -->
+    <ContentWrap v-else>
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-card shadow="never">
+            <div style="font-size:13px;color:#86909C;margin-bottom:8px">任务总数</div>
+            <div style="font-size:28px;font-weight:600;color:#1D2129">{{ stats.total }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="never">
+            <div style="font-size:13px;color:#86909C;margin-bottom:8px">项目任务</div>
+            <div style="font-size:28px;font-weight:600;color:#2468F2">{{ stats.projectCount }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="never">
+            <div style="font-size:13px;color:#86909C;margin-bottom:8px">日常任务</div>
+            <div style="font-size:28px;font-weight:600;color:#00B42A">{{ stats.dailyCount }}</div>
+          </el-card>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16" style="margin-top:16px">
+        <el-col :span="12">
+          <el-card shadow="never" header="按状态分布">
+            <el-table :data="Object.entries(stats.byStatus).map(([k, v]) => ({ status: k, count: v }))" size="small" border max-height="320">
+              <el-table-column label="状态" prop="status" />
+              <el-table-column label="数量" prop="count" width="100" align="center" />
+            </el-table>
+          </el-card>
+        </el-col>
+        <el-col :span="12">
+          <el-card shadow="never" header="按负责人 Top8">
+            <el-table :data="stats.ownerTop" size="small" border max-height="320">
+              <el-table-column label="负责人" prop="name" />
+              <el-table-column label="任务数" prop="cnt" width="100" align="center" />
+            </el-table>
+          </el-card>
+        </el-col>
+      </el-row>
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
@@ -265,6 +314,10 @@ const queryParams = reactive({
 
 const myTasks = ref(false)
 
+// 【PMS】任务管理三分 Tab：项目管理 / 日常任务 / 合计
+const activeTaskTab = ref<'project' | 'daily' | 'summary'>('project')
+watch(activeTaskTab, () => { currentPage.value = 1 })
+
 // 本弹窗只创建日常任务（projectId 固定为 null），故无 DAILY_PROJECT_VALUE / isDailyTask 概念
 // 字典下拉选项：onMounted 中从 simple-list API 加载后填充
 // 任务类型：永远从 pms_daily_task_type 数据字典取值（项目任务请到项目详情页创建）
@@ -282,6 +335,12 @@ function extractDictOptions(allData: any[], dictType: string): { value: string; 
 
 const filteredList = computed(() => {
   let list = taskList.value
+  // 按 Tab 区分：项目管理（有项目）/ 日常任务（无项目）
+  if (activeTaskTab.value === 'project') {
+    list = list.filter(t => t.projectId != null && t.projectId !== undefined && t.projectId !== 0 && t.projectId !== '')
+  } else if (activeTaskTab.value === 'daily') {
+    list = list.filter(t => t.projectId == null || t.projectId === undefined || t.projectId === 0 || t.projectId === '')
+  }
   if (queryParams.projectId) {
     list = list.filter(t => String(t.projectId) === String(queryParams.projectId))
   }
@@ -322,6 +381,34 @@ const pagedList = computed(() => {
 
 const availableProjects = computed(() => {
   return projectList.value.filter(p => p.projectType !== 'standard_template')
+})
+
+// 【PMS】合计 Tab 统计
+const projectTasks = computed(() => taskList.value.filter(t => t.projectId != null && t.projectId !== undefined && t.projectId !== 0 && t.projectId !== ''))
+const dailyTasks = computed(() => taskList.value.filter(t => t.projectId == null || t.projectId === undefined || t.projectId === 0 || t.projectId === ''))
+const stats = computed(() => {
+  const total = taskList.value.length
+  const byStatus: Record<string, number> = {}
+  for (const t of taskList.value) {
+    const s = t.completeStatus || 'unknown'
+    byStatus[s] = (byStatus[s] || 0) + 1
+  }
+  const byOwner: Record<string, number> = {}
+  for (const t of taskList.value) {
+    const o = String(t.mainOwnerId)
+    byOwner[o] = (byOwner[o] || 0) + 1
+  }
+  const ownerTop = Object.entries(byOwner)
+    .map(([uid, cnt]) => ({ uid, cnt, name: getUserName(Number(uid)) }))
+    .sort((a, b) => b.cnt - a.cnt)
+    .slice(0, 8)
+  return {
+    total,
+    projectCount: projectTasks.value.length,
+    dailyCount: dailyTasks.value.length,
+    byStatus,
+    ownerTop
+  }
 })
 
 const loadList = async () => {

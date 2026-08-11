@@ -30,8 +30,10 @@ import javax.validation.Valid;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static cn.iocoder.yudao.framework.apilog.core.enums.OperateTypeEnum.EXPORT;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
@@ -111,8 +113,35 @@ public class UserController {
         // 拼接数据
         Map<Long, DeptDO> deptMap = deptService.getDeptMap(
                 convertList(pageResult.getList(), AdminUserDO::getDeptId));
-        return success(new PageResult<>(UserConvert.INSTANCE.convertList(pageResult.getList(), deptMap),
-                pageResult.getTotal()));
+        List<UserRespVO> voList = UserConvert.INSTANCE.convertList(pageResult.getList(), deptMap);
+        // 【PMS】拼接直属领导（部门 leader_user_id -> 用户昵称）
+        fillLeader(voList, deptMap);
+        return success(new PageResult<>(voList, pageResult.getTotal()));
+    }
+
+    /**
+     * 【PMS】根据用户所属部门的 leader_user_id 批量填充直属领导编号与昵称。
+     * 通过一次批量查询避免 N+1；无部门或无领导时对应字段置空。
+     */
+    private void fillLeader(List<UserRespVO> voList, Map<Long, DeptDO> deptMap) {
+        Set<Long> leaderIds = convertSet(deptMap.values(), DeptDO::getLeaderUserId);
+        leaderIds.remove(null);
+        if (CollUtil.isEmpty(leaderIds)) {
+            return;
+        }
+        Map<Long, AdminUserDO> leaderMap = new HashMap<>();
+        for (AdminUserDO u : userService.getUserList(leaderIds)) {
+            leaderMap.put(u.getId(), u);
+        }
+        for (UserRespVO vo : voList) {
+            DeptDO dept = deptMap.get(vo.getDeptId());
+            if (dept == null || dept.getLeaderUserId() == null) {
+                continue;
+            }
+            vo.setLeaderUserId(dept.getLeaderUserId());
+            AdminUserDO leader = leaderMap.get(dept.getLeaderUserId());
+            vo.setLeaderNickname(leader != null ? leader.getNickname() : null);
+        }
     }
 
     @GetMapping("/list")
@@ -126,7 +155,10 @@ public class UserController {
         }
         // 拼接数据
         Map<Long, DeptDO> deptMap = deptService.getDeptMap(convertSet(list, AdminUserDO::getDeptId));
-        return success(UserConvert.INSTANCE.convertList(list, deptMap));
+        List<UserRespVO> voList = UserConvert.INSTANCE.convertList(list, deptMap);
+        // 【PMS】拼接直属领导
+        fillLeader(voList, deptMap);
+        return success(voList);
     }
 
     @GetMapping({"/list-all-simple", "/simple-list"})

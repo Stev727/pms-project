@@ -64,8 +64,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { taskStatusMap, dailyTaskTypeOptions, getDailyTaskTypeOptions, calcDelayDays, priorityMap, formatDate } from '../../pms-utils'
+import { taskStatusMap, getDailyTaskTypeOptions, calcDelayDays, priorityMap, formatDate } from '../../pms-utils'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+
+// 【PMS】日常任务类型下拉统一走系统字典真源
+const dailyTaskTypeOptions = getDailyTaskTypeOptions()
 
 const props = defineProps<{
   task?: TaskVO

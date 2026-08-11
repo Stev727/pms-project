@@ -144,6 +144,20 @@
             prop="deptName"
             :show-overflow-tooltip="true"
           />
+          <el-table-column
+            label="直属领导"
+            align="center"
+            key="leaderNickname"
+            prop="leaderNickname"
+            width="120"
+            :show-overflow-tooltip="true"
+          >
+            <template #default="scope">
+              <span v-if="scope.row.leaderNickname">{{ scope.row.leaderNickname }}</span>
+              <span v-else-if="scope.row.leaderUserId" class="link-type">ID:{{ scope.row.leaderUserId }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
           <el-table-column label="手机号码" align="center" prop="mobile" width="120" />
           <el-table-column label="状态" key="status">
             <template #default="scope">

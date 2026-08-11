@@ -208,14 +208,17 @@ import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getTaskList } from '@/api/pms/task'
 import ProjectForm from './ProjectForm.vue'
 import {
-  projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
-  formatDate, calcDelayDays
+  projectStatusMap, phaseColorMap, priorityMap, formatDate, calcDelayDays,
+  getDynamicProjectTypeOptions
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { useAppStore } from '@/store/modules/app'
 
 defineOptions({ name: 'PmsProject' })
+
+// 【PMS】项目类型下拉统一走系统字典真源
+const projectTypeOptions = getDynamicProjectTypeOptions()
 
 const { push } = useRouter()
 const route = useRoute()

@@ -96,11 +96,15 @@
 <script setup lang="ts">
 import { createProject, updateProject, ProjectVO } from '@/api/pms/project'
 import { createProjectMember } from '@/api/pms/member'
-import { projectTypeOptions, priorityOptions } from '../pms-utils'
+import { getDynamicProjectTypeOptions, getDynamicPriorityOptions } from '../pms-utils'
 import * as DeptApi from '@/api/system/dept'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 defineOptions({ name: 'ProjectForm' })
+
+// 【PMS】下拉统一走系统字典真源
+const projectTypeOptions = getDynamicProjectTypeOptions()
+const priorityOptions = getDynamicPriorityOptions()
 
 const emit = defineEmits<{ success: [] }>()
 const message = useMessage()

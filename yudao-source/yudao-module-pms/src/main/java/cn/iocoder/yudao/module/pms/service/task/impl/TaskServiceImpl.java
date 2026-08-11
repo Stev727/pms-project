@@ -1062,6 +1062,7 @@ public class TaskServiceImpl implements TaskService {
 
         List<PmsTaskDO> legacy;
         List<PmsTaskDO> inRange;
+        List<PmsTaskDO> dailyTasks;
         if (queryAll) {
             // 管理员查看全部：不加 main_owner_id 过滤
             legacy = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
@@ -1071,6 +1072,14 @@ public class TaskServiceImpl implements TaskService {
             inRange = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
                     .between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo)
                     .in(PmsTaskDO::getCompleteStatus, unfinished)
+                    .orderByAsc(PmsTaskDO::getPlanStartDate));
+            // 【PMS】日常任务（project_id 为空）：放宽日期——计划日期为空或落在范围内，均纳入看板，
+            // 避免「我的看板」因无计划日期而丢失日常任务（与任务看板语义对齐）。
+            // 【F3-fix】日常任务看板展示全部状态（含已完成），方便回顾；不再限制未完成
+            dailyTasks = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    .isNull(PmsTaskDO::getProjectId)
+                    .and(w -> w.isNull(PmsTaskDO::getPlanStartDate)
+                            .or().between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo))
                     .orderByAsc(PmsTaskDO::getPlanStartDate));
         } else {
             List<Long> ownerList = new ArrayList<>(owners);
@@ -1084,14 +1093,19 @@ public class TaskServiceImpl implements TaskService {
                     .between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo)
                     .in(PmsTaskDO::getCompleteStatus, unfinished)
                     .orderByAsc(PmsTaskDO::getPlanStartDate));
+            // 【F3-fix】日常任务看板展示全部状态（含已完成），方便回顾
+            dailyTasks = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    .isNull(PmsTaskDO::getProjectId)
+                    .in(PmsTaskDO::getMainOwnerId, ownerList)
+                    .and(w -> w.isNull(PmsTaskDO::getPlanStartDate)
+                            .or().between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo))
+                    .orderByAsc(PmsTaskDO::getPlanStartDate));
         }
 
-        List<PmsTaskDO> dailyTasks = new ArrayList<>();
         Map<Long, List<PmsTaskDO>> projectMap = new LinkedHashMap<>();
         for (PmsTaskDO t : inRange) {
-            if (t.getProjectId() == null) {
-                dailyTasks.add(t);
-            } else {
+            // 日常任务已由独立的 dailyTasks 查询处理，这里仅收口项目任务，避免重复计数
+            if (t.getProjectId() != null) {
                 projectMap.computeIfAbsent(t.getProjectId(), k -> new ArrayList<>()).add(t);
             }
         }

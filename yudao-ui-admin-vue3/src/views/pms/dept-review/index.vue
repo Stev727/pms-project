@@ -61,11 +61,14 @@
 <script setup lang="ts">
 import { getDeptReviewList, approveReview, rejectReview, TaskVO } from '@/api/pms/task'
 import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
-import { dailyTaskTypeOptions, priorityMap, formatDate } from '../pms-utils'
+import { getDailyTaskTypeOptions, priorityMap, formatDate } from '../pms-utils'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 defineOptions({ name: 'PmsDeptReview' })
+
+// 【PMS】日常任务类型下拉统一走系统字典真源
+const dailyTaskTypeOptions = getDailyTaskTypeOptions()
 
 const message = useMessage()
 const { userList, getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()

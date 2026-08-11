@@ -37,6 +37,13 @@ public class UserRespVO{
     @ExcelProperty("部门名称")
     private String deptName;
 
+    @Schema(description = "直属领导用户编号（部门 leader_user_id）", example = "1")
+    private Long leaderUserId;
+
+    @Schema(description = "直属领导昵称", example = "张经理")
+    @ExcelProperty("直属领导")
+    private String leaderNickname;
+
     @Schema(description = "岗位编号数组", example = "1")
     private Set<Long> postIds;
 

@@ -475,12 +475,17 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 import { getSimpleDeptList } from '@/api/system/dept'
 import { getNotifyModeList } from '@/api/pms/notify'
 import {
-  phaseColorMap, projectTypeOptions, taskTypeOptions, priorityOptions,
-  priorityMap, calcDuration
+  phaseColorMap, priorityMap, calcDuration,
+  getDynamicProjectTypeOptions, getDynamicTaskTypeOptions, getDynamicPriorityOptions
 } from '../pms-utils'
 import { buildTasksFromTemplate, buildTaskCreatePayload } from '../pms-template-utils'
 
 defineOptions({ name: 'PmsProjectCreate' })
+
+// 【PMS】下拉统一走系统字典真源（getDictOptions: 字典 > localStorage > 硬编码兜底）
+const projectTypeOptions = getDynamicProjectTypeOptions()
+const taskTypeOptions = getDynamicTaskTypeOptions()
+const priorityOptions = getDynamicPriorityOptions()
 
 const router = useRouter()
 const currentStep = ref(0)

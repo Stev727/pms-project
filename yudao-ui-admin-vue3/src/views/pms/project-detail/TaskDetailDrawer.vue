@@ -387,9 +387,9 @@ import { getProjectMemberList } from '@/api/pms/member'
 import { getDocumentList, createDocument } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
 import {
-  taskStatusMap, priorityMap, taskTypeOptions, priorityOptions,
-  formatDate, calcDelayDays, calcDuration,
-  getReviewStatusLabel, getReviewStatusStyle, getReviewPolicyLabel
+  taskStatusMap, priorityMap, formatDate, calcDelayDays, calcDuration,
+  getReviewStatusLabel, getReviewStatusStyle, getReviewPolicyLabel,
+  getDynamicTaskTypeOptions, getDynamicPriorityOptions
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { getAccessToken, getTenantId } from '@/utils/auth'
@@ -399,6 +399,10 @@ import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/modules/user'
 
 defineOptions({ name: 'TaskDetailDrawer' })
+
+// 【PMS】下拉统一走系统字典真源
+const taskTypeOptions = getDynamicTaskTypeOptions()
+const priorityOptions = getDynamicPriorityOptions()
 
 const emit = defineEmits<{
   (e: 'refresh'): void

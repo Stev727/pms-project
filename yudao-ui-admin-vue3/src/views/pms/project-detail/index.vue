@@ -326,14 +326,20 @@ import MaterialTrackTab from './MaterialTrackTab.vue' // #10 物料跟踪嵌入�
 import PermissionTab from './PermissionTab.vue' // #2 项目权限分级配置
 import ProjectForm from '../project/ProjectForm.vue'
 import {
-  projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
-  taskTypeOptions, priorityOptions, taskStatusMap, formatDate, calcDuration, calcDelayDays
+  projectStatusMap, phaseColorMap, priorityMap,
+  taskStatusMap, formatDate, calcDuration, calcDelayDays,
+  getDynamicProjectTypeOptions, getDynamicTaskTypeOptions, getDynamicPriorityOptions
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 
 defineOptions({ name: 'PmsProjectDetail' })
+
+// 【PMS】下拉统一走系统字典真源
+const projectTypeOptions = getDynamicProjectTypeOptions()
+const taskTypeOptions = getDynamicTaskTypeOptions()
+const priorityOptions = getDynamicPriorityOptions()
 
 const route = useRoute()
 const { push, back } = useRouter()

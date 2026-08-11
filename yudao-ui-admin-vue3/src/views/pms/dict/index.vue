@@ -1,15 +1,16 @@
 <template>
   <div class="pms-dict">
     <el-alert
-      title="当前字典数据存储在浏览器本地 (localStorage)，仅对当前设备生效。建议定期导出备份。"
-      type="warning"
+      title="字典由系统统一维护（系统管理 → 字典管理 亦可编辑）。本页修改即时全站生效，无需逐设备导出。"
+      type="success"
       :closable="false"
       show-icon
       class="mb-12px"
     />
     <ContentWrap>
       <div class="dict-global-toolbar">
-        <el-button size="small" @click="exportDict"><Icon icon="ep:download" class="mr-4px" />导出数据</el-button>
+        <el-button size="small" :loading="loadingGroup" @click="loadAll"><Icon icon="ep:refresh" class="mr-4px" />刷新</el-button>
+        <el-button size="small" @click="exportDict"><Icon icon="ep:download" class="mr-4px" />导出备份</el-button>
         <el-upload
           :show-file-list="false"
           :before-upload="importDict"
@@ -27,7 +28,7 @@
             </el-button>
           </div>
 
-          <el-table :data="getGroupItems(group.key)" border stripe size="small">
+          <el-table :data="getGroupItems(group.key)" border stripe size="small" v-loading="loadingGroup">
             <el-table-column prop="label" label="显示名称" min-width="150" />
             <el-table-column prop="value" label="字典值" width="180" />
             <el-table-column label="颜色标识" width="100" align="center">
@@ -88,10 +89,16 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  getDictDataByType,
+  createDictData,
+  updateDictData,
+  deleteDictData
+} from '@/api/system/dict/dict.data'
 
 defineOptions({ name: 'PmsDict' })
 
-// 字典分组定义 (SEVERE-6 修复: 所有硬编码下拉值都从此处维护)
+// 字典分组定义（与系统字典 dict_type 一一对应）
 const dictGroups = [
   { key: 'pms_task_type', label: '任务类型' },
   { key: 'pms_project_type', label: '项目类型' },
@@ -109,6 +116,7 @@ const activeType = ref('pms_task_type')
 const showForm = ref(false)
 const editing = ref<any>(null)
 const currentGroupKey = ref('')
+const loadingGroup = ref(false)
 
 const form = reactive({
   label: '',
@@ -120,85 +128,36 @@ const form = reactive({
 
 const currentGroupLabel = ref('')
 
-// 默认字典数据（从现有硬编码中迁移）
-const dictData = ref<Record<string, any[]>>({
-  pms_task_type: [
-    { label: '设计任务', value: 'design', color: '#2468F2', sort: 1, status: 0 },
-    { label: '评审任务', value: 'review', color: '#722ED1', sort: 2, status: 0 },
-    { label: '测试任务', value: 'testing', color: '#FF7D00', sort: 3, status: 0 },
-    { label: '采购任务', value: 'procurement', color: '#0FC6C2', sort: 4, status: 0 },
-    { label: '试制任务', value: 'prototyping', color: '#00B42A', sort: 5, status: 0 },
-    { label: '文档任务', value: 'documentation', color: '#86909C', sort: 6, status: 0 },
-    { label: '审批任务', value: 'approval', color: '#F53F3F', sort: 7, status: 0 },
-    { label: '供应商协同', value: 'supplier_synergy', color: '#D25F00', sort: 8, status: 0 },
-    { label: '其他', value: 'other', color: '#86909C', sort: 9, status: 0 }
-  ],
-  pms_project_type: [
-    { label: '新研发项目', value: 'new_dev', color: '#2468F2', sort: 1, status: 0 },
-    { label: '改型项目', value: 'modification', color: '#722ED1', sort: 2, status: 0 },
-    { label: '降本项目', value: 'cost_down', color: '#FF7D00', sort: 3, status: 0 },
-    { label: '平台项目', value: 'platform', color: '#0FC6C2', sort: 4, status: 0 }
-  ],
-  pms_quality_category: [
-    { label: '设计问题', value: 'design', color: '#2468F2', sort: 1, status: 0 },
-    { label: '工艺问题', value: 'process', color: '#722ED1', sort: 2, status: 0 },
-    { label: '物料问题', value: 'material', color: '#FF7D00', sort: 3, status: 0 },
-    { label: '测试问题', value: 'testing', color: '#0FC6C2', sort: 4, status: 0 },
-    { label: '其他', value: 'other', color: '#86909C', sort: 5, status: 0 }
-  ],
-  pms_change_type: [
-    { label: '工期变更', value: 'schedule', color: '#2468F2', sort: 1, status: 0 },
-    { label: '内容变更', value: 'content', color: '#722ED1', sort: 2, status: 0 },
-    { label: '物料变更', value: 'material', color: '#FF7D00', sort: 3, status: 0 },
-    { label: '人员变更', value: 'personnel', color: '#0FC6C2', sort: 4, status: 0 },
-    { label: '成本变更', value: 'cost', color: '#00B42A', sort: 5, status: 0 }
-  ],
-  pms_document_category: [
-    { label: '技术文档', value: 'tech_doc', color: '#2468F2', sort: 1, status: 0 },
-    { label: '管理文档', value: 'mgmt_doc', color: '#722ED1', sort: 2, status: 0 },
-    { label: '项目文档', value: 'project_doc', color: '#FF7D00', sort: 3, status: 0 },
-    { label: '输出物', value: 'deliverable', color: '#0FC6C2', sort: 4, status: 0 },
-    { label: '图纸', value: 'drawing', color: '#00B42A', sort: 5, status: 0 },
-    { label: '报告', value: 'report', color: '#86909C', sort: 6, status: 0 },
-    { label: '标准文件', value: 'standard', color: '#F53F3F', sort: 7, status: 0 }
-  ],
-  pms_approval_type: [
-    { label: '立项审批', value: 'project_init', color: '#00B42A', sort: 1, status: 0 },
-    { label: '开模审批', value: 'mold_open', color: '#2468F2', sort: 2, status: 0 },
-    { label: '设计评审', value: 'design_review', color: '#722ED1', sort: 3, status: 0 },
-    { label: '试产转量产', value: 'trial_to_mass', color: '#FF7D00', sort: 4, status: 0 },
-    { label: '变更审批', value: 'change', color: '#F53F3F', sort: 5, status: 0 },
-    { label: '质量审批', value: 'quality', color: '#0FC6C2', sort: 6, status: 0 },
-    { label: '延期审批', value: 'delay', color: '#D25F00', sort: 7, status: 0 }
-  ],
-  pms_member_role: [
-    { label: '项目经理', value: 'pm', color: '#F53F3F', sort: 1, status: 0 },
-    { label: '技术负责人', value: 'tech_lead', color: '#FF7D00', sort: 2, status: 0 },
-    { label: '硬件工程师', value: 'hw_engineer', color: '#2468F2', sort: 3, status: 0 },
-    { label: '软件工程师', value: 'sw_engineer', color: '#2468F2', sort: 4, status: 0 },
-    { label: '测试工程师', value: 'qa_engineer', color: '#00B42A', sort: 5, status: 0 },
-    { label: '结构工程师', value: 'mech_engineer', color: '#86909C', sort: 6, status: 0 },
-    { label: '采购', value: 'procurement', color: '#0FC6C2', sort: 7, status: 0 }
-  ],
-  pms_material_type: [
-    { label: '长周期物料', value: 'long_lead', color: '#F53F3F', sort: 1, status: 0 },
-    { label: '标准件', value: 'standard', color: '#2468F2', sort: 2, status: 0 },
-    { label: '定制件', value: 'custom', color: '#722ED1', sort: 3, status: 0 }
-  ],
-  pms_template_type: [
-    { label: '标准研发模板', value: 'standard', color: '#2468F2', sort: 1, status: 0 },
-    { label: '快速开发模板', value: 'fast_dev', color: '#00B42A', sort: 2, status: 0 },
-    { label: '硬件研发模板', value: 'hardware', color: '#FF7D00', sort: 3, status: 0 },
-    { label: '软件研发模板', value: 'software', color: '#722ED1', sort: 4, status: 0 },
-    { label: '定制模板', value: 'custom', color: '#86909C', sort: 5, status: 0 }
-  ],
-  pms_priority: [
-    { label: '紧急', value: 'urgent', color: '#F53F3F', sort: 1, status: 0 },
-    { label: '高', value: 'high', color: '#FF7D00', sort: 2, status: 0 },
-    { label: '普通', value: 'normal', color: '#4E5969', sort: 3, status: 0 },
-    { label: '低', value: 'low', color: '#86909C', sort: 4, status: 0 }
-  ]
-})
+// 字典数据（真实来源：yudao 系统字典 system_dict_data，经后端 API 读写）
+const dictData = ref<Record<string, any[]>>({})
+dictGroups.forEach((g) => { dictData.value[g.key] = [] })
+
+async function loadGroup(key: string) {
+  try {
+    const list: any[] = await getDictDataByType(key)
+    dictData.value[key] = (list || [])
+      .map((d: any) => ({
+        id: d.id,
+        label: d.label,
+        value: d.value,
+        color: d.colorType || '',
+        sort: d.sort ?? 0,
+        status: d.status ?? 0
+      }))
+      .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+  } catch {
+    dictData.value[key] = []
+  }
+}
+
+async function loadAll() {
+  loadingGroup.value = true
+  try {
+    await Promise.all(dictGroups.map((g) => loadGroup(g.key)))
+  } finally {
+    loadingGroup.value = false
+  }
+}
 
 function getGroupItems(key: string) {
   return dictData.value[key] || []
@@ -207,7 +166,7 @@ function getGroupItems(key: string) {
 function handleAdd(key: string) {
   editing.value = null
   currentGroupKey.value = key
-  currentGroupLabel.value = dictGroups.find(g => g.key === key)?.label || ''
+  currentGroupLabel.value = dictGroups.find((g) => g.key === key)?.label || ''
   form.label = ''
   form.value = ''
   form.color = ''
@@ -219,7 +178,7 @@ function handleAdd(key: string) {
 function handleEdit(key: string, row: any) {
   editing.value = row
   currentGroupKey.value = key
-  currentGroupLabel.value = dictGroups.find(g => g.key === key)?.label || ''
+  currentGroupLabel.value = dictGroups.find((g) => g.key === key)?.label || ''
   form.label = row.label
   form.value = row.value
   form.color = row.color || ''
@@ -228,38 +187,52 @@ function handleEdit(key: string, row: any) {
   showForm.value = true
 }
 
-function saveItem() {
+async function saveItem() {
   if (!form.label) { ElMessage.warning('请输入显示名称'); return }
   if (!form.value) { ElMessage.warning('请输入字典值'); return }
 
-  const item = {
+  const payload: any = {
+    dictType: currentGroupKey.value,
     label: form.label,
     value: form.value,
-    color: form.color,
+    colorType: form.color || '',
+    cssClass: '',
+    remark: '',
     sort: form.sort,
     status: form.statusBool ? 0 : 1
   }
-
-  const items = dictData.value[currentGroupKey.value]
-  if (editing.value) {
-    const idx = items.findIndex(i => i === editing.value)
-    if (idx > -1) items.splice(idx, 1, item)
-    ElMessage.success('已更新')
-  } else {
-    items.push(item)
-    ElMessage.success('已添加')
+  try {
+    if (editing.value && editing.value.id) {
+      await updateDictData({ ...payload, id: editing.value.id })
+      ElMessage.success('已更新')
+    } else {
+      await createDictData(payload)
+      ElMessage.success('已添加')
+    }
+    showForm.value = false
+    editing.value = null
+    await loadGroup(currentGroupKey.value)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '保存失败')
   }
-
-  showForm.value = false
-  editing.value = null
 }
 
-function handleDelete(key: string, row: any) {
-  ElMessageBox.confirm(`确认删除选项「${row.label}」？`, '提示', { type: 'warning' }).then(() => {
+async function handleDelete(key: string, row: any) {
+  if (!row.id) {
+    // 尚未持久化的本地项直接移除
     const items = dictData.value[key]
-    const idx = items.findIndex(i => i === row)
+    const idx = items.findIndex((i) => i === row)
     if (idx > -1) items.splice(idx, 1)
-    ElMessage.success('已删除')
+    return
+  }
+  ElMessageBox.confirm(`确认删除选项「${row.label}」？`, '提示', { type: 'warning' }).then(async () => {
+    try {
+      await deleteDictData(row.id)
+      ElMessage.success('已删除')
+      await loadGroup(key)
+    } catch (e: any) {
+      ElMessage.error(e?.message || '删除失败')
+    }
   }).catch(() => {})
 }
 
@@ -272,26 +245,39 @@ function exportDict() {
   a.download = `pms_dict_backup_${new Date().toISOString().slice(0, 10)}.json`
   a.click()
   URL.revokeObjectURL(url)
-  ElMessage.success('字典数据已导出')
+  ElMessage.success('字典数据已导出（仅备份，编辑请使用本页或系统字典管理）')
 }
 
-function importDict(file: File) {
+async function importDict(file: File) {
   const reader = new FileReader()
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
-      const data = JSON.parse(e.target?.result as string)
+      const data = JSON.parse((e.target?.result as string) || '{}')
       if (typeof data !== 'object') throw new Error('格式错误')
-      // 合并导入数据（只导入匹配的 group key）
-      let imported = 0
-      for (const key of Object.keys(dictData.value)) {
-        if (data[key] && Array.isArray(data[key])) {
-          dictData.value[key] = data[key]
-          imported++
+      let created = 0
+      for (const group of dictGroups) {
+        const items = data[group.key]
+        if (Array.isArray(items)) {
+          for (const it of items) {
+            try {
+              await createDictData({
+                dictType: group.key,
+                label: it.label,
+                value: it.value,
+                colorType: it.color || '',
+                cssClass: '',
+                remark: '',
+                sort: it.sort || 0,
+                status: it.status ?? 0
+              })
+              created++
+            } catch { /* 跳过重复/异常项 */ }
+          }
         }
       }
-      localStorage.setItem('pms_dict_data', JSON.stringify(dictData.value))
-      ElMessage.success(`导入成功，已更新 ${imported} 个分组`)
-    } catch (err) {
+      ElMessage.success(`已导入 ${created} 项，正在刷新...`)
+      await loadAll()
+    } catch {
       ElMessage.error('导入失败：JSON 格式错误')
     }
   }
@@ -299,29 +285,11 @@ function importDict(file: File) {
   return false // 阻止 el-upload 自动上传
 }
 
-let saveTimer: any = null
 onMounted(() => {
-  // 初始化时从 localStorage 加载（模拟数据库持久化）
-  const saved = localStorage.getItem('pms_dict_data')
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved)
-      // 合并默认值，保留用户修改
-      for (const key of Object.keys(dictData.value)) {
-        if (parsed[key]) dictData.value[key] = parsed[key]
-      }
-    } catch { /* ignore */ }
-  }
-  // 监听变化自动保存
-  saveTimer = setInterval(() => {
-    localStorage.setItem('pms_dict_data', JSON.stringify(dictData.value))
-  }, 5000)
+  loadAll()
 })
-
 onUnmounted(() => {
-  if (saveTimer) { clearInterval(saveTimer); saveTimer = null }
-  // 离开时保存一次
-  localStorage.setItem('pms_dict_data', JSON.stringify(dictData.value))
+  // 已无 localStorage 持久化逻辑
 })
 </script>
 
