@@ -301,10 +301,10 @@
                   <el-button v-if="!row.isStage" link type="danger" size="small" @click="removeEditTask(row)">
                     <Icon icon="ep:delete" />删除
                   </el-button>
-                  <el-button v-else link type="primary" size="small" @click="openEditStage(row)">
+                  <el-button v-else v-hasPermi="['pms:template:update']" link type="primary" size="small" @click="openEditStage(row)">
                     <Icon icon="ep:edit" />编辑
                   </el-button>
-                  <el-button v-if="row.isStage" link type="danger" size="small" @click="removeEditStage(row)">
+                  <el-button v-if="row.isStage" v-hasPermi="['pms:template:update']" link type="danger" size="small" @click="removeEditStage(row)">
                     <Icon icon="ep:delete" />删除
                   </el-button>
                 </template>
