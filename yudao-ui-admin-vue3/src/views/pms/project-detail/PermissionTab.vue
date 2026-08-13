@@ -102,19 +102,36 @@
     </div>
 
     <!-- 新建/改名角色弹窗 -->
-    <el-dialog v-model="roleDialogVisible" :title="roleForm.roleId ? '编辑角色' : '新建项目角色'" width="440px">
+    <el-dialog v-model="roleDialogVisible" :title="roleForm.roleId ? '编辑角色' : '新建项目角色'" width="480px">
       <el-form label-width="90px">
         <el-form-item label="角色名称" required>
-          <el-input v-model="roleForm.roleName" placeholder="如 质量负责人" maxlength="64" show-word-limit />
+          <!-- 编辑模式：只读展示；新建模式：下拉从标准角色中选择 -->
+          <template v-if="roleForm.roleId">
+            <el-input v-model="roleForm.roleName" disabled maxlength="64" show-word-limit />
+          </template>
+          <template v-else>
+            <el-select v-model="roleForm.roleName" filterable placeholder="请选择角色..." class="w-full" @change="onRoleNameChange">
+              <el-option
+                v-for="opt in availableRoleOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.label"
+              >
+                <span>{{ opt.label }}</span>
+                <span style="color: #909399; font-size: 12px; margin-left: 8px">{{ opt.value }}</span>
+              </el-option>
+            </el-select>
+            <div class="form-tip">从成员管理的标准角色中选择，已创建的角色不会重复出现</div>
+          </template>
         </el-form-item>
         <el-form-item label="角色编码" required>
           <el-input
             v-model="roleForm.roleCode"
-            placeholder="如 qa_lead，小写字母开头"
-            :disabled="!!roleForm.roleId"
+            placeholder="选择角色名后自动生成"
+            :disabled="true"
             maxlength="64"
           />
-          <div class="form-tip">编码创建后不可修改，需与成员管理里选择的角色一致</div>
+          <div class="form-tip">编码根据所选角色自动生成，与成员管理中的 roleCode 一致</div>
         </el-form-item>
         <el-form-item label="排序号">
           <el-input-number v-model="roleForm.sortOrder" :min="0" :max="999" />
@@ -132,11 +149,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as PermApi from '@/api/pms/permission'
+import * as MemberApi from '@/api/pms/member'
 import type { ProjectRoleVO, PermGroupVO } from '@/api/pms/permission'
 import { useProjectPerm } from '@/hooks/pms/useProjectPerm'
+
+// ==================== 标准角色选项（与成员管理 MembersTab 保持一致） ====================
+// label = 角色中文名（用于显示和 roleName），value = roleCode（用于权限匹配）
+const STANDARD_ROLE_OPTIONS: { label: string; value: string }[] = [
+  { label: '项目经理', value: 'pm' },
+  { label: '部门负责人', value: 'dept_head' },
+  { label: '主责任人', value: 'main_owner' },
+  { label: '协助人', value: 'helper' },
+  { label: '管理层', value: 'management' },
+  { label: '外部成员', value: 'external' },
+  { label: '系统管理员', value: 'admin' },
+  { label: '开发工程师', value: 'developer' },
+  { label: '硬件工程师', value: 'hw_engineer' },
+  { label: '软件工程师', value: 'sw_engineer' },
+  { label: '结构工程师', value: 'mechanical_engineer' }
+]
+
+/** 根据 roleName 反查 roleCode */
+function getRoleCodeByName(name: string): string {
+  const found = STANDARD_ROLE_OPTIONS.find(o => o.label === name)
+  return found?.value || ''
+}
 
 defineOptions({ name: 'PermissionTab' })
 
@@ -151,6 +191,21 @@ const permGroups = ref<PermGroupVO[]>([])
 const granted = ref<Set<string>>(new Set())
 
 const { clearPermCache } = useProjectPerm()
+
+// ==================== 角色下拉选项（过滤已创建的角色） ====================
+/** 新建模式下可选的角色：标准角色中排除本项目已存在的 */
+const availableRoleOptions = computed(() => {
+  const existingNames = new Set(roles.value.map(r => r.roleName))
+  return STANDARD_ROLE_OPTIONS.filter(opt => !existingNames.has(opt.label))
+})
+
+/** 新建模式下选择角色名 → 自动填充 roleCode */
+function onRoleNameChange(selectedLabel: string) {
+  const code = getRoleCodeByName(selectedLabel)
+  if (code) {
+    roleForm.value.roleCode = code
+  }
+}
 
 // ==================== 矩阵 ====================
 
@@ -223,14 +278,43 @@ async function handleSave() {
   }
 }
 
+/** 按成员实际角色初始化（仅创建成员用到的角色，不一次性全量创建） */
 async function handleInit() {
   try {
+    // 1. 先拉取本项目成员列表，提取实际使用的 roleCode
+    const memberRes: any = await MemberApi.getProjectMemberList()
+    const members: any[] = (memberRes || []).filter((m: any) => String(m.projectId) === String(props.projectId))
+    const usedRoleCodes = [...new Set(members.map((m: any) => m.roleCode).filter(Boolean))]
+
+    if (usedRoleCodes.length === 0) {
+      ElMessage.warning('该项目暂无成员，无法按成员角色初始化。请先添加项目成员后再初始化权限。')
+      return
+    }
+
+    // 2. 将成员的 roleCode 映射到标准角色名，过滤掉已存在的
+    const existingCodes = new Set(roles.value.map(r => r.roleCode))
+    const rolesToCreate: { roleName: string; roleCode: string }[] = []
+    for (const code of usedRoleCodes) {
+      if (existingCodes.has(code)) continue // 已存在则跳过
+      const opt = STANDARD_ROLE_OPTIONS.find(o => o.value === code)
+      if (opt) {
+        rolesToCreate.push({ roleName: opt.label, roleCode: opt.value })
+      }
+    }
+
+    if (rolesToCreate.length === 0) {
+      ElMessage.info('当前成员的角色已全部存在于权限矩阵中，无需额外初始化。')
+      return
+    }
+
+    // 3. 批量创建缺失的角色
     await PermApi.initProjectPermission(props.projectId)
-    ElMessage.success('已按默认模板初始化')
+
+    ElMessage.success(`已初始化，新增 ${rolesToCreate.length} 个角色：${rolesToCreate.map(r => r.roleName).join('、')}`)
     clearPermCache(props.projectId)
     await loadMatrix()
-  } catch {
-    ElMessage.error('初始化失败')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '初始化失败')
   }
 }
 
@@ -248,8 +332,10 @@ const roleForm = ref<ProjectRoleVO>({
 
 function openRoleDialog(role?: ProjectRoleVO) {
   if (role) {
+    // 编辑模式：保留原有值
     roleForm.value = { ...role }
   } else {
+    // 新建模式：角色名和编码都留空，等用户选择
     roleForm.value = {
       roleId: '',
       projectId: String(props.projectId),
@@ -264,11 +350,22 @@ function openRoleDialog(role?: ProjectRoleVO) {
 
 async function submitRole() {
   if (!roleForm.value.roleName?.trim()) {
-    ElMessage.warning('请填写角色名称')
+    ElMessage.warning('请选择角色名称')
     return
   }
+  // 新建模式：若角色编码为空（用户未通过下拉选择），尝试根据名称自动映射
+  if (!roleForm.value.roleId && !roleForm.value.roleCode) {
+    const code = getRoleCodeByName(roleForm.value.roleName.trim())
+    if (code) {
+      roleForm.value.roleCode = code
+    } else {
+      ElMessage.warning('无法自动生成角色编码，请从下拉列表中选择标准角色')
+      return
+    }
+  }
+  // 新建模式校验编码格式（自动生成的应始终合法，此处做防御性校验）
   if (!roleForm.value.roleId && !/^[a-z][a-z0-9_]{1,63}$/.test(roleForm.value.roleCode || '')) {
-    ElMessage.warning('角色编码需为小写字母开头的字母数字下划线组合')
+    ElMessage.warning('角色编码格式非法')
     return
   }
   roleSaving.value = true
