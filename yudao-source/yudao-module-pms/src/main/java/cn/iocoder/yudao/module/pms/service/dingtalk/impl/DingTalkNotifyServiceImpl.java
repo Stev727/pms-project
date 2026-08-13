@@ -279,23 +279,63 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         LocalDate today = LocalDate.now();
 
         for (PmsNotifyRuleDO rule : rules) {
-            String triggerEvent = rule.getTriggerEvent();
-            if ("task_t_minus_3".equals(triggerEvent)) {
-                processTMinus3Rule(rule, tasks, today);
-            } else if ("task_overdue".equals(triggerEvent)) {
-                processOverdueRule(rule, tasks, today);
-            }
+            processRule(rule, tasks, today);
         }
 
         log.info("[DingTalkNotify] 每日通知检查完成");
     }
 
     /**
-     * 处理 T-3 提醒规则
+     * 按规则统一分发处理（支持 T-N 提前提醒、逾期每日、逾期满 N 天、项目级作用域）
      */
-    private void processTMinus3Rule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today) {
-        // 计算 3 个工作日后的日期
-        LocalDate targetDate = addWorkDays(today, 3);
+    private void processRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today) {
+        String triggerEvent = rule.getTriggerEvent();
+        if (StrUtil.isBlank(triggerEvent)) {
+            return;
+        }
+
+        // 项目级规则：仅作用于指定项目；全局/模式级规则作用于全部活跃任务
+        List<PmsTaskDO> scopedTasks = tasks;
+        if ("project".equals(rule.getScopeType()) && rule.getProjectId() != null) {
+            final Long pid = rule.getProjectId();
+            scopedTasks = tasks.stream()
+                    .filter(t -> pid.equals(t.getProjectId()))
+                    .collect(Collectors.toList());
+            if (scopedTasks.isEmpty()) {
+                return;
+            }
+        }
+
+        if (triggerEvent.startsWith("task_t_minus_")) {
+            int days = parseSuffixDays(triggerEvent, "task_t_minus_", 3);
+            processAdvanceRule(rule, scopedTasks, today, days);
+        } else if ("task_overdue".equals(triggerEvent)) {
+            processOverdueRule(rule, scopedTasks, today, 1);
+        } else if (triggerEvent.startsWith("task_overdue_")) {
+            int days = parseSuffixDays(triggerEvent, "task_overdue_", 1);
+            processOverdueRule(rule, scopedTasks, today, days);
+        } else {
+            log.info("[DingTalkNotify] 跳过非定时扫描事件: triggerEvent={}", triggerEvent);
+        }
+    }
+
+    /**
+     * 解析 triggerEvent 后缀数字（如 task_overdue_3 -> 3）
+     */
+    private int parseSuffixDays(String triggerEvent, String prefix, int defaultDays) {
+        try {
+            String num = triggerEvent.substring(prefix.length());
+            return Integer.parseInt(num.trim());
+        } catch (Exception e) {
+            return defaultDays;
+        }
+    }
+
+    /**
+     * 处理提前提醒规则（计划结束前 N 个工作日）
+     */
+    private void processAdvanceRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today, int daysBefore) {
+        LocalDate targetDate = addWorkDays(today, daysBefore);
         String targetDateStr = targetDate.format(DATE_FMT);
 
         for (PmsTaskDO task : tasks) {
@@ -303,11 +343,13 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             String taskEndDateStr = task.getPlanEndDate().format(DATE_FMT);
             if (!taskEndDateStr.equals(targetDateStr)) continue;
 
-            if (hasNotifyAlreadySent(task.getTaskId(), "task_t_minus_3", today)) {
+            if (hasNotifyAlreadySent(task.getTaskId(), rule.getTriggerEvent(), today)) {
                 continue;
             }
 
-            List<Long> receiverIds = getTaskReceivers(task);
+            List<Long> receiverIds = computeReceivers(rule, task);
+            if (receiverIds.isEmpty()) continue;
+
             PmsProjectDO project = projectMapper.selectById(task.getProjectId());
             String projectName = project != null ? project.getProjectName() : "";
 
@@ -318,26 +360,26 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             vars.put("user_name", "");
 
             boolean success = sendNotifyByRule(rule.getRuleId(), vars, receiverIds);
-            log.info("[DingTalkNotify] T-3 提醒: task={}, receivers={}, success={}",
-                    task.getTaskName(), receiverIds, success);
+            log.info("[DingTalkNotify] 提前{}天提醒: task={}, receivers={}, success={}",
+                    daysBefore, task.getTaskName(), receiverIds, success);
         }
     }
 
     /**
-     * 处理逾期规则（含升级逻辑）
+     * 处理逾期规则（延期满 minDelayDays 天触发；minDelayDays=1 即每日逾期提醒）
      */
-    private void processOverdueRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today) {
+    private void processOverdueRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today, int minDelayDays) {
         for (PmsTaskDO task : tasks) {
             if (task.getPlanEndDate() == null) continue;
             if (task.getPlanEndDate().isAfter(today)) continue; // 未逾期
 
             int delayDays = (int) java.time.temporal.ChronoUnit.DAYS.between(task.getPlanEndDate(), today);
-            if (delayDays <= 0) continue;
+            if (delayDays < minDelayDays) continue;
 
-            if (hasNotifyAlreadySent(task.getTaskId(), "task_overdue", today)) {
+            if (hasNotifyAlreadySent(task.getTaskId(), rule.getTriggerEvent(), today)) {
                 continue;
             }
-            List<Long> receiverIds = getOverdueReceiverIds(task);
+            List<Long> receiverIds = computeReceivers(rule, task);
             if (receiverIds.isEmpty()) continue;
 
             PmsProjectDO project = projectMapper.selectById(task.getProjectId());
@@ -350,8 +392,74 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             vars.put("plan_end_date", task.getPlanEndDate().format(DATE_FMT));
 
             boolean success = sendNotifyByRule(rule.getRuleId(), vars, receiverIds, "task", task.getTaskId());
-            log.info("[DingTalkNotify] 逾期提醒: task={}, delayDays={}, rule={}, success={}",
-                    task.getTaskName(), delayDays, rule.getRuleName(), success);
+            log.info("[DingTalkNotify] 逾期提醒(满{}天): task={}, delayDays={}, rule={}, success={}",
+                    minDelayDays, task.getTaskName(), delayDays, rule.getRuleName(), success);
+        }
+    }
+
+    /**
+     * 根据规则 notifyTarget 解析接收人；为空时回退到默认接收人。
+     * 支持：main_owner(主责任人) / helper(协助人) / pm(项目经理) / dept_head(部门负责人)
+     */
+    private List<Long> computeReceivers(PmsNotifyRuleDO rule, PmsTaskDO task) {
+        String target = rule.getNotifyTarget();
+        boolean isAdvance = rule.getTriggerEvent() != null && rule.getTriggerEvent().startsWith("task_t_minus_");
+        if (StrUtil.isBlank(target)) {
+            // 回退默认：提前提醒->责任人+协助人；逾期->项目经理
+            return isAdvance ? getTaskReceivers(task) : getProjectManagers(task.getProjectId());
+        }
+        List<Long> result = new ArrayList<>();
+        for (String token : target.split(",")) {
+            token = token.trim();
+            if (token.isEmpty()) continue;
+            switch (token) {
+                case "main_owner":
+                    if (task.getMainOwnerId() != null) result.add(task.getMainOwnerId());
+                    break;
+                case "helper":
+                    if (StrUtil.isNotBlank(task.getHelperIds())) {
+                        for (String h : task.getHelperIds().split(",")) {
+                            String ht = h.trim();
+                            if (StrUtil.isNotBlank(ht)) {
+                                try { result.add(Long.parseLong(ht)); } catch (NumberFormatException ignored) {}
+                            }
+                        }
+                    }
+                    break;
+                case "pm": {
+                    PmsProjectDO p = projectMapper.selectById(task.getProjectId());
+                    if (p != null && p.getProjectManagerId() != null) result.add(p.getProjectManagerId());
+                    break;
+                }
+                case "dept_head": {
+                    Long leader = resolveDeptLeader(task.getProjectId());
+                    if (leader != null) result.add(leader);
+                    break;
+                }
+                default:
+                    log.warn("[DingTalkNotify] 不支持的通知对象 token: {}", token);
+            }
+        }
+        result = result.stream().distinct().collect(Collectors.toList());
+        if (result.isEmpty()) {
+            return isAdvance ? getTaskReceivers(task) : getProjectManagers(task.getProjectId());
+        }
+        return result;
+    }
+
+    /**
+     * 解析项目所属部门的负责人用户ID
+     */
+    private Long resolveDeptLeader(Long projectId) {
+        try {
+            Long deptId = jdbcTemplate.queryForObject(
+                    "SELECT dept_id FROM pms_project WHERE id = ? AND deleted = 0", Long.class, projectId);
+            if (deptId == null) return null;
+            return jdbcTemplate.queryForObject(
+                    "SELECT leader_user_id FROM system_dept WHERE id = ?", Long.class, deptId);
+        } catch (Exception e) {
+            log.warn("[DingTalkNotify] 解析部门负责人失败: projectId={}", projectId, e);
+            return null;
         }
     }
 

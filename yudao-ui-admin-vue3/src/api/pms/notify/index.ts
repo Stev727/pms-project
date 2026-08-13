@@ -19,6 +19,12 @@ export interface NotifyRuleVO {
   escalationTarget?: string
   escalationChannel?: string
   escalationTemplate?: string
+  // ===== 作用域 / 关联字段 =====
+  modeId?: string | number
+  sourceModeId?: string | number
+  scopeType?: string
+  projectId?: string | number
+  taskId?: string | number
   createTime?: string
 }
 
@@ -40,6 +46,11 @@ export const getNotifyRule = (id: number) => {
 
 export const getNotifyRuleList = () => {
   return request.get({ url: '/pms/notify-rule/list' })
+}
+
+/** 立即执行一次通知检查（手动触发每日扫描，便于验证规则是否触发） */
+export const manualTriggerNotifyCheck = () => {
+  return request.post({ url: '/pms/notify-rule/manual-check' })
 }
 
 export interface NotifyModeVO {

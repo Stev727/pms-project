@@ -184,6 +184,13 @@
             <MaterialTrackTab :project-id="projectId" ref="materialTrackTabRef" />
           </template>
         </el-tab-pane>
+
+        <!-- 通知管理 Tab (NEW - 项目级通知规则：延期/提前自动提醒) -->
+        <el-tab-pane label="通知管理" name="notify">
+          <template v-if="activeTab === 'notify'">
+            <NotifyTab :project-id="projectId" />
+          </template>
+        </el-tab-pane>
       </el-tabs>
     </ContentWrap>
 
@@ -319,6 +326,7 @@ import QualityTab from './QualityTab.vue'
 import ReviewCenterTab from './ReviewCenterTab.vue'
 import MaterialTrackTab from './MaterialTrackTab.vue' // #10 物料跟踪嵌入项目详情
 import PermissionTab from './PermissionTab.vue' // #2 项目权限分级配置
+import NotifyTab from './NotifyTab.vue' // 项目级通知规则管理
 import ProjectForm from '../project/ProjectForm.vue'
 import {
   projectStatusMap, phaseColorMap, priorityMap,

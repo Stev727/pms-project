@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.pms.controller.admin.notifyrule;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.pms.dal.dataobject.notifyrule.PmsNotifyRuleDO;
+import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
 import cn.iocoder.yudao.module.pms.service.notifyrule.NotifyRuleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -21,6 +22,9 @@ public class NotifyRuleController {
 
     @Resource
     private NotifyRuleService notifyRuleService;
+
+    @Resource
+    private DingTalkNotifyService dingTalkNotifyService;
 
     @PostMapping("/create")
     @Operation(summary = "创建通知规则")
@@ -59,6 +63,14 @@ public class NotifyRuleController {
     @PreAuthorize("@ss.hasPermission('pms:notify:query')")
     public CommonResult<List<PmsNotifyRuleDO>> list() {
         return success(notifyRuleService.getNotifyRuleList());
+    }
+
+    @PostMapping("/manual-check")
+    @Operation(summary = "立即执行一次通知检查（手动触发每日扫描，便于验证规则是否触发）")
+    @PreAuthorize("@ss.hasPermission('pms:notify:update')")
+    public CommonResult<Boolean> manualCheck() {
+        dingTalkNotifyService.executeDailyNotifyCheck();
+        return success(true);
     }
 
 }
