@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
 import cn.iocoder.yudao.module.pms.service.task.TaskService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.format.annotation.DateTimeFormat;
 import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.util.List;
@@ -137,6 +139,17 @@ public class TaskController {
     @PreAuthorize("@ss.hasPermission('pms:task:query')")
     public CommonResult<PmsTaskDO> get(@RequestParam("id") Long id) {
         return success(taskService.getTask(id));
+    }
+
+    @GetMapping("/weekly-report")
+    @Operation(summary = "周报看板聚合查询（上周完成/本周计划/上周延期/上周动态）")
+    @Parameter(name = "date", description = "基准日期 yyyy-MM-dd，默认今天；按自然周（周一~周日）计算")
+    @Parameter(name = "userId", description = "目标人员ID；为空=本人；0=全部（仅管理员）")
+    @PreAuthorize("@ss.hasPermission('pms:task:query')")
+    public CommonResult<TaskWeeklyReportVO> weeklyReport(
+            @RequestParam(value = "date", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(value = "userId", required = false) Long userId) {
+        return success(taskService.getWeeklyReport(userId, date));
     }
 
     @GetMapping("/list")

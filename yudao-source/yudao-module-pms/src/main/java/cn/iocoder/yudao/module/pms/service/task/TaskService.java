@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.pms.service.task;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -171,6 +172,14 @@ public interface TaskService {
      * 我的任务看板：返回当前登录用户可查看的人员范围（权限判定结果），供前端限制下拉可选范围与默认视图。
      */
     TaskBoardScopeVO getBoardScope();
+
+    /**
+     * 周报看板聚合查询。
+     *
+     * @param userId 目标人员ID；为空=本人；0=全部（仅管理员）
+     * @param date   基准日期，默认今天；按自然周（周一~周日）计算
+     */
+    TaskWeeklyReportVO getWeeklyReport(Long userId, LocalDate date);
 
     /**
      * 部门审核中心：查询待当前用户（责任人直属领导）审核的日常任务列表

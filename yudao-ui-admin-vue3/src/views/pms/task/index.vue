@@ -500,6 +500,7 @@ const taskForm = reactive<TaskVO & { projectId?: string | number; helperIds?: nu
 const taskFormRules = reactive<FormRules>({
   taskName: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
   taskType: [{ required: true, message: '请选择任务类型', trigger: 'change' }],
+  mainOwnerId: [{ required: true, message: '请选择负责人', trigger: 'change' }],
   priority: [{ required: false }],
   planStartDate: [{ required: false }],
   planEndDate: [{ required: false }]
@@ -516,7 +517,7 @@ const resetTaskForm = () => {
     cycle: 1,
     planStartDate: '',
     planEndDate: '',
-    mainOwnerId: undefined,
+    mainOwnerId: currentUserId.value as any,
     helperIds: [] as number[],
     description: '',
     outputRequirement: '',
@@ -627,6 +628,10 @@ onMounted(async () => {
     console.log('[PMS] pms_daily_task_type:', dailyOpts.length, 'items / pms_priority:', priOpts.length, 'items')
   } catch (e) {
     console.warn('[PMS] 字典API加载失败，使用fallback', e)
+  }
+  // 默认负责人筛选为当前登录用户
+  if (currentUserId.value) {
+    queryParams.mainOwnerId = currentUserId.value as any
   }
   loadList()
 })

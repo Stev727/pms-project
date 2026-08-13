@@ -174,3 +174,49 @@ export const getReviewerOf = (userId: string | number) => {
   return request.get({ url: '/pms/task/reviewer-of', params: { userId } })
 }
 
+// ==================== 周报看板（新增） ====================
+/** 延期任务（任务本体 + 逾期天数） */
+export interface DelayedTaskVO {
+  task: TaskVO
+  overdueDays: number
+}
+
+/** 单条变更明细（方案2：精确前后值） */
+export interface ChangeItemVO {
+  operationType?: string
+  beforeValue?: string
+  afterValue?: string
+  operationTime?: string
+  operatorName?: string
+}
+
+/** 单个任务的变更集合（按任务聚合） */
+export interface TaskChangeLogVO {
+  taskId?: string
+  taskName?: string
+  projectName?: string
+  changes?: ChangeItemVO[]
+}
+
+/** 周报看板聚合返回 */
+export interface WeeklyReportVO {
+  weekStart?: string
+  weekEnd?: string
+  lastWeekStart?: string
+  lastWeekEnd?: string
+  targetUserId?: number
+  isAdmin?: boolean
+  isLeader?: boolean
+  lastWeekCompleted?: TaskVO[]
+  thisWeekPlan?: TaskVO[]
+  lastWeekDelayed?: DelayedTaskVO[]
+  lastWeekChanges?: TaskChangeLogVO[]
+}
+
+/** 周报看板聚合查询：上周完成 / 本周计划 / 上周延期 / 上周动态
+ *  date 缺省=今天，按自然周（周一~周日）计算；
+ *  userId 缺省=本人，0=全部（管理员），或指定人员ID（领导/管理员可切换看下属）
+ */
+export const getWeeklyReport = (params: { date?: string; userId?: number | string }) => {
+  return request.get({ url: '/pms/task/weekly-report', params })
+}

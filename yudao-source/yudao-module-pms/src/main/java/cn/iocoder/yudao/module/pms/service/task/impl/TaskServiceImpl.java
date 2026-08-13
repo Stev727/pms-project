@@ -18,6 +18,7 @@ import cn.iocoder.yudao.module.pms.enums.PmsReviewPolicyEnum;
 import cn.iocoder.yudao.module.pms.enums.PmsTaskReviewStatusEnum;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
 import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
@@ -32,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.annotation.Resource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -44,6 +46,7 @@ import java.util.Set;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.function.Consumer;
 import cn.hutool.core.util.StrUtil;
 
 /**
@@ -171,6 +174,7 @@ public class TaskServiceImpl implements TaskService {
     @Transactional(rollbackFor = Exception.class)
     public void dispatchTask(Long taskId) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
         if (!("not_started".equals(task.getCompleteStatus()) || "rejected".equals(task.getCompleteStatus()))) {
             throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
         }
@@ -192,6 +196,7 @@ public class TaskServiceImpl implements TaskService {
         }
         taskMapper.updateById(task);
         writeTaskLog(taskId, "dispatch", "派发任务给用户[" + task.getMainOwnerId() + "]");
+        logStatusChange(taskId, oldStatus, "pending_accept");
         String title = "【PMS】任务派发通知";
         // 构建富文本通知内容（项目名、任务名、计划周期、协助人）
         StringBuilder sb = new StringBuilder();
@@ -229,6 +234,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public void simulateDingtalkConfirm(Long taskId) {
         PmsTaskDO task = taskMapper.selectById(taskId);
+        String oldStatus = task.getCompleteStatus();
         if (task == null) {
             throw new ServiceException(ErrorCodeConstants.TASK_NOT_EXISTS);
         }
@@ -240,12 +246,14 @@ public class TaskServiceImpl implements TaskService {
 
         // 记录任务日志
         writeTaskLog(taskId, "dingtalk_confirm", "钉钉确认模拟：任务状态变更为进行中");
+        logStatusChange(taskId, oldStatus, "in_progress");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void acceptTask(Long taskId) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
         // 仅「待接收」状态可接收
         if (!"pending_accept".equals(task.getCompleteStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
@@ -261,12 +269,14 @@ public class TaskServiceImpl implements TaskService {
         update.setCompleteStatus("in_progress");
         taskMapper.updateById(update);
         writeTaskLog(taskId, "task_accept", "任务负责人确认接收，状态变更为进行中");
+        logStatusChange(taskId, oldStatus, "in_progress");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void acceptTaskPublic(Long taskId) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
         if (!"pending_accept".equals(task.getCompleteStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
         }
@@ -276,12 +286,14 @@ public class TaskServiceImpl implements TaskService {
         update.setCompleteStatus("in_progress");
         taskMapper.updateById(update);
         writeTaskLog(taskId, "task_accept_public", "通过钉钉一键接收，状态变更为进行中");
+        logStatusChange(taskId, oldStatus, "in_progress");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void submitCompletion(Long taskId, String actualCompleteDate, String completionNote) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
         if (!"in_progress".equals(task.getCompleteStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
         }
@@ -331,12 +343,15 @@ public class TaskServiceImpl implements TaskService {
         }
 
         writeTaskLog(taskId, "submit_completion", "提交完成，审核人[" + reviewerId727 + "]");
+        logStatusChange(taskId, oldStatus, "completion_pending_review");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void reviewCompletion(Long taskId, boolean approved, String reviewOpinion, Long operatorId) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
+        Integer oldProgress = task.getProgress();
         PmsProjectDO project = requireProjectManager(task, operatorId);
         if (!"completion_pending_review".equals(task.getCompleteStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
@@ -354,6 +369,8 @@ public class TaskServiceImpl implements TaskService {
         // #3：同步到新字段，两个入口的审核意见展示保持一致
         task.setReviewComment(reviewOpinion == null ? "" : reviewOpinion);
         taskMapper.updateById(task);
+        logStatusChange(taskId, oldStatus, task.getCompleteStatus());
+        logProgressChange(taskId, oldProgress, task.getProgress());
 
         // #1：完成状态变化会影响父任务进度
         refreshProgressUpward(task.getParentTaskId());
@@ -412,6 +429,12 @@ public class TaskServiceImpl implements TaskService {
             if (current != null) {
                 refreshProgressUpward(current.getParentTaskId());
             }
+        }
+        if (entity.getCompleteStatus() != null && !entity.getCompleteStatus().equals(old.getCompleteStatus())) {
+            logStatusChange(entity.getTaskId(), old.getCompleteStatus(), entity.getCompleteStatus());
+        }
+        if (entity.getProgress() != null && !entity.getProgress().equals(old.getProgress())) {
+            logProgressChange(entity.getTaskId(), old.getProgress(), entity.getProgress());
         }
     }
 
@@ -510,9 +533,11 @@ public class TaskServiceImpl implements TaskService {
                 .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
                 .orderByAsc(PmsTaskDO::getSortOrder)));
 
-            // 批2：非PM项目中自己负责/协助/待审核的任务
+            // 批2：非PM项目中自己负责/协助/待审核的任务（含日常任务 project_id IS NULL）
             LambdaQueryWrapperX<PmsTaskDO> wrapper2 = new LambdaQueryWrapperX<>();
-            wrapper2.notIn(PmsTaskDO::getProjectId, pmProjectIds);
+            // 【修复】日常任务 project_id 为 NULL；MySQL 下 NULL NOT IN (...) 返回 UNKNOWN 会剔除该行，
+            // 故显式 OR project_id IS NULL，保证 PM 自建/负责的日常任务在「任务管理」可见
+            wrapper2.and(w -> w.isNull(PmsTaskDO::getProjectId).or().notIn(PmsTaskDO::getProjectId, pmProjectIds));
             wrapper2.eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId);
             wrapper2.orderByAsc(PmsTaskDO::getSortOrder);
             appendMyTaskCondition(wrapper2, userId);
@@ -552,6 +577,8 @@ public class TaskServiceImpl implements TaskService {
     @Transactional(rollbackFor = Exception.class)
     public void updateTaskProgress(Long taskId, Integer progress) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
+        Integer oldProgress = task.getProgress();
         // 父任务进度由子任务汇总得到，不允许手工填报
         Long childCount = taskMapper.selectCountByParentTaskId(taskId);
         if (childCount != null && childCount > 0) {
@@ -572,6 +599,10 @@ public class TaskServiceImpl implements TaskService {
         }
         taskMapper.updateById(update);
         writeTaskLog(taskId, "progress_report", "进度更新为 " + value + "%");
+        logProgressChange(taskId, oldProgress, value);
+        if ("not_started".equals(oldStatus) && value > 0) {
+            logStatusChange(taskId, "not_started", "in_progress");
+        }
         refreshProgressUpward(task.getParentTaskId());
     }
 
@@ -789,6 +820,7 @@ public class TaskServiceImpl implements TaskService {
     @Transactional(rollbackFor = Exception.class)
     public void submitReview(Long taskId) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
         // 只有进行中 / 已延期的任务可以提交审核
         if (!("in_progress".equals(task.getCompleteStatus()) || "delayed".equals(task.getCompleteStatus()))) {
             throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
@@ -815,6 +847,7 @@ public class TaskServiceImpl implements TaskService {
             taskMapper.updateById(update);
             refreshProgressUpward(task.getParentTaskId());
             writeTaskLog(taskId, "submit_review", "提交审核，策略[" + policyLabel(policy) + "]自动通过");
+            logStatusChange(taskId, oldStatus, "completed");
             String detailUrl689 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
             sendNotifyQuietly("【PMS】任务已完成",
                     "项目「" + projectName + "」任务「" + task.getTaskName() + "」已按" + policyLabel(policy) + "策略直接完成。",
@@ -842,6 +875,7 @@ public class TaskServiceImpl implements TaskService {
         taskMapper.updateById(update);
 
         writeTaskLog(taskId, "submit_review", "提交审核，审核人[" + reviewerId + "]");
+        logStatusChange(taskId, oldStatus, "completion_pending_review");
         String detailUrl714 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
         sendNotifyQuietly("【PMS】任务待您审核",
                 "项目「" + projectName + "」任务「" + task.getTaskName() + "」已提交完成，请及时审核。",
@@ -852,6 +886,8 @@ public class TaskServiceImpl implements TaskService {
     @Transactional(rollbackFor = Exception.class)
     public void approveReview(Long taskId, String reviewComment) {
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
+        Integer oldProgress = task.getProgress();
         if (!PmsTaskReviewStatusEnum.canReview(task.getReviewStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_REVIEW_STATUS_INVALID);
         }
@@ -875,6 +911,8 @@ public class TaskServiceImpl implements TaskService {
         refreshProgressUpward(task.getParentTaskId());
 
         writeTaskLog(taskId, "approve_review", "审核通过" + (reviewComment == null || reviewComment.isBlank() ? "" : "：" + reviewComment));
+        logStatusChange(taskId, oldStatus, "completed");
+        logProgressChange(taskId, oldProgress, 100);
         String projectName = project == null || project.getProjectName() == null ? "" : project.getProjectName();
         String detailUrl747 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
         sendNotifyQuietly("【PMS】任务审核通过",
@@ -888,6 +926,8 @@ public class TaskServiceImpl implements TaskService {
     public void approveReviewPublic(Long taskId) {
         // 公开接口：签名已验证合法性，跳过身份校验与权限校验，直接执行状态流转
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
+        Integer oldProgress = task.getProgress();
         // 【日常任务】project_id 为 NULL 表示非项目任务：创建即进入「领导审批」流程，
         // 允许 in_progress+reviewStatus=none 直接走快速审批（无需先 submitReview）。
         boolean isDaily = task.getProjectId() == null;
@@ -911,6 +951,8 @@ public class TaskServiceImpl implements TaskService {
         refreshProgressUpward(task.getParentTaskId());
 
         writeTaskLog(taskId, "approve_review_public", "通过钉钉一键" + (isDaily ? "审批通过（日常任务）" : "通过") + "，状态变更为已完成");
+        logStatusChange(taskId, oldStatus, "completed");
+        logProgressChange(taskId, oldProgress, 100);
         String detailUrlPublic = isDaily
                 ? frontendBaseUrl + "/pms/my-task-board"
                 : frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
@@ -946,6 +988,7 @@ public class TaskServiceImpl implements TaskService {
             throw new ServiceException(ErrorCodeConstants.TASK_REVIEW_COMMENT_REQUIRED);
         }
         PmsTaskDO task = requireTask(taskId);
+        String oldStatus = task.getCompleteStatus();
         if (!PmsTaskReviewStatusEnum.canReview(task.getReviewStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_REVIEW_STATUS_INVALID);
         }
@@ -962,6 +1005,7 @@ public class TaskServiceImpl implements TaskService {
         taskMapper.updateById(update);
 
         writeTaskLog(taskId, "reject_review", "审核驳回：" + reviewComment);
+        logStatusChange(taskId, oldStatus, "in_progress");
         String projectName = project == null || project.getProjectName() == null ? "" : project.getProjectName();
         String detailUrl778 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
         sendNotifyQuietly("【PMS】任务审核被驳回",
@@ -1229,6 +1273,152 @@ public class TaskServiceImpl implements TaskService {
         Long reviewerId = securityFrameworkService.hasAnyRoles("super_admin") ? null : userId;
         return taskMapper.selectDeptReviewTasks(reviewerId, status);
     }
+    // ==================================================================
+    // 周报看板
+    // ==================================================================
+
+    @Override
+    public TaskWeeklyReportVO getWeeklyReport(Long userId, LocalDate date) {
+        Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
+        BoardScope scope = resolveBoardScope(loginUserId);
+        List<Long> owners = resolveReportOwners(userId, scope);
+        boolean isAll = (owners == null); // null 表示管理员查看全部
+
+        // 计算自然周（周一~周日）
+        LocalDate d = (date == null) ? LocalDate.now() : date;
+        LocalDate weekStart = d.with(DayOfWeek.MONDAY);
+        LocalDate weekEnd = weekStart.plusDays(6);
+        LocalDate lastWeekStart = weekStart.minusDays(7);
+        LocalDate lastWeekEnd = weekStart.minusDays(1);
+        LocalDate today = LocalDate.now();
+
+        TaskWeeklyReportVO vo = new TaskWeeklyReportVO();
+        vo.setWeekStart(weekStart);
+        vo.setWeekEnd(weekEnd);
+        vo.setLastWeekStart(lastWeekStart);
+        vo.setLastWeekEnd(lastWeekEnd);
+        vo.setTargetUserId(userId != null ? userId : loginUserId);
+        vo.setIsAdmin(scope.isAdmin);
+        vo.setIsLeader(scope.isLeader);
+
+        // A 上周完成
+        List<PmsTaskDO> completed = queryOwned(owners, isAll, w -> w
+                .eq(PmsTaskDO::getCompleteStatus, "completed")
+                .between(PmsTaskDO::getActualCompleteDate, lastWeekStart, lastWeekEnd));
+        vo.setLastWeekCompleted(completed);
+
+        // B 本周计划（未完成 + 计划窗口与本周重叠，且必须有计划开始日期）
+        List<String> notCompleted = List.of("not_started", "pending_accept", "in_progress",
+                "completion_pending_review", "pending_review", "delayed", "rejected", "paused");
+        List<PmsTaskDO> plan = queryOwned(owners, isAll, w -> w
+                .in(PmsTaskDO::getCompleteStatus, notCompleted)
+                .isNotNull(PmsTaskDO::getPlanStartDate)
+                .le(PmsTaskDO::getPlanStartDate, weekEnd)
+                .and(ww -> ww.isNull(PmsTaskDO::getPlanEndDate).or().ge(PmsTaskDO::getPlanEndDate, weekStart)));
+        vo.setThisWeekPlan(plan);
+
+        // C 上周延期（已启动/流转过但未完成且逾期到上周末）
+        List<String> started = List.of("pending_accept", "in_progress", "completion_pending_review",
+                "pending_review", "delayed", "paused", "rejected");
+        List<PmsTaskDO> delayed = queryOwned(owners, isAll, w -> w
+                .in(PmsTaskDO::getCompleteStatus, started)
+                .le(PmsTaskDO::getPlanEndDate, lastWeekEnd));
+        List<TaskWeeklyReportVO.DelayedTaskVO> delayedVO = new ArrayList<>();
+        for (PmsTaskDO t : delayed) {
+            TaskWeeklyReportVO.DelayedTaskVO dv = new TaskWeeklyReportVO.DelayedTaskVO();
+            dv.setTask(t);
+            long od = t.getPlanEndDate() == null ? 0 : ChronoUnit.DAYS.between(t.getPlanEndDate(), today);
+            dv.setOverdueDays(od);
+            delayedVO.add(dv);
+        }
+        vo.setLastWeekDelayed(delayedVO);
+
+        // D 上周动态（方案2：状态/进度变更日志，精确前后值）
+        List<TaskWeeklyReportVO.TaskChangeLogVO> changes = buildChangeLogs(owners, isAll, lastWeekStart, lastWeekEnd);
+        vo.setLastWeekChanges(changes);
+
+        return vo;
+    }
+
+    private List<Long> resolveReportOwners(Long userId, BoardScope scope) {
+        Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId != null && userId == 0L) {
+            return scope.isAdmin ? null : List.of(loginUserId);
+        }
+        if (userId == null) {
+            return List.of(loginUserId);
+        }
+        if (scope.allowedUserIds != null && !scope.allowedUserIds.contains(userId)) {
+            return List.of(loginUserId);
+        }
+        return List.of(userId);
+    }
+
+    private List<PmsTaskDO> queryOwned(List<Long> owners, boolean isAll,
+                                       Consumer<LambdaQueryWrapperX<PmsTaskDO>> extra) {
+        LambdaQueryWrapperX<PmsTaskDO> w = new LambdaQueryWrapperX<>();
+        if (!isAll && owners != null) {
+            w.in(PmsTaskDO::getMainOwnerId, owners);
+        }
+        extra.accept(w);
+        w.orderByDesc(PmsTaskDO::getUpdateTime);
+        return taskMapper.selectList(w);
+    }
+
+    private List<TaskWeeklyReportVO.TaskChangeLogVO> buildChangeLogs(List<Long> owners, boolean isAll,
+                                                                     LocalDate lastWeekStart, LocalDate lastWeekEnd) {
+        LambdaQueryWrapperX<PmsTaskDO> tw = new LambdaQueryWrapperX<>();
+        tw.select(PmsTaskDO::getTaskId, PmsTaskDO::getTaskName, PmsTaskDO::getProjectId,
+                PmsTaskDO::getMainOwnerId, PmsTaskDO::getPlanEndDate);
+        if (!isAll && owners != null) {
+            tw.in(PmsTaskDO::getMainOwnerId, owners);
+        }
+        List<PmsTaskDO> ownedTasks = taskMapper.selectList(tw);
+        if (ownedTasks.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<Long> taskIds = ownedTasks.stream().map(PmsTaskDO::getTaskId)
+                .collect(Collectors.toList());
+        Map<Long, PmsTaskDO> taskMap = ownedTasks.stream()
+                .collect(Collectors.toMap(PmsTaskDO::getTaskId, t -> t, (a, b) -> a));
+
+        List<PmsTaskLogDO> logs = taskLogMapper.selectList(new LambdaQueryWrapperX<PmsTaskLogDO>()
+                .in(PmsTaskLogDO::getTaskId, taskIds)
+                .in(PmsTaskLogDO::getOperationType, List.of("status_change", "progress_update"))
+                .between(PmsTaskLogDO::getOperationTime, lastWeekStart.atStartOfDay(), lastWeekEnd.atTime(23, 59, 59))
+                .orderByAsc(PmsTaskLogDO::getOperationTime));
+
+        Map<Long, List<PmsTaskLogDO>> byTask = new LinkedHashMap<>();
+        for (PmsTaskLogDO lg : logs) {
+            byTask.computeIfAbsent(lg.getTaskId(), k -> new ArrayList<>()).add(lg);
+        }
+        List<TaskWeeklyReportVO.TaskChangeLogVO> result = new ArrayList<>();
+        for (Map.Entry<Long, List<PmsTaskLogDO>> entry : byTask.entrySet()) {
+            PmsTaskDO t = taskMap.get(entry.getKey());
+            if (t == null) continue;
+            TaskWeeklyReportVO.TaskChangeLogVO cv = new TaskWeeklyReportVO.TaskChangeLogVO();
+            cv.setTaskId(t.getTaskId());
+            cv.setTaskName(t.getTaskName());
+            if (t.getProjectId() != null) {
+                PmsProjectDO p = projectMapper.selectById(t.getProjectId());
+                cv.setProjectName(p != null && p.getProjectName() != null ? p.getProjectName() : "未知项目");
+            }
+            List<TaskWeeklyReportVO.ChangeItemVO> items = new ArrayList<>();
+            for (PmsTaskLogDO lg : entry.getValue()) {
+                TaskWeeklyReportVO.ChangeItemVO it = new TaskWeeklyReportVO.ChangeItemVO();
+                it.setOperationType(lg.getOperationType());
+                it.setBeforeValue(lg.getBeforeValue());
+                it.setAfterValue(lg.getAfterValue());
+                it.setOperationTime(lg.getOperationTime());
+                it.setOperatorName(lg.getOperatorName());
+                items.add(it);
+            }
+            cv.setChanges(items);
+            result.add(cv);
+        }
+        return result;
+    }
+
 
     /**
      * 解析日常任务（无项目）的审核人：责任人的直属部门领导。
@@ -1376,6 +1566,45 @@ public class TaskServiceImpl implements TaskService {
         } catch (Exception e) {
             // 日志失败不影响主流程
         }
+    }
+
+    // ===== 周报看板：变更日志埋点（方案2 精确前后值）=====
+    private void writeTaskChange(Long taskId, String operationType, String beforeValue, String afterValue) {
+        try {
+            PmsTaskLogDO log = new PmsTaskLogDO();
+            log.setTaskId(taskId);
+            log.setOperationType(operationType);
+            log.setOperatorId(SecurityFrameworkUtils.getLoginUserId());
+            log.setOperationTime(LocalDateTime.now());
+            String content;
+            if ("status_change".equals(operationType)) {
+                content = "状态: " + (beforeValue == null ? "无" : beforeValue) + " → " + (afterValue == null ? "无" : afterValue);
+            } else {
+                content = "进度: " + (beforeValue == null ? "0" : beforeValue) + "% → " + (afterValue == null ? "0" : afterValue) + "%";
+            }
+            log.setOperationContent(content);
+            log.setBeforeValue(beforeValue);
+            log.setAfterValue(afterValue);
+            taskLogMapper.insert(log);
+        } catch (Exception e) {
+            // 日志失败不影响主流程
+        }
+    }
+
+    private void logStatusChange(Long taskId, String oldStatus, String newStatus) {
+        if (oldStatus == null ? newStatus == null : oldStatus.equals(newStatus)) {
+            return;
+        }
+        writeTaskChange(taskId, "status_change", oldStatus, newStatus);
+    }
+
+    private void logProgressChange(Long taskId, Integer oldProgress, Integer newProgress) {
+        if (Objects.equals(oldProgress, newProgress)) {
+            return;
+        }
+        writeTaskChange(taskId, "progress_update",
+                oldProgress == null ? null : oldProgress.toString(),
+                newProgress == null ? null : newProgress.toString());
     }
 
     /**

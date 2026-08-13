@@ -370,11 +370,13 @@ import { getTaskList, updateTask, createTask, deleteTask, TaskVO } from '@/api/p
 import { getStageList, createStage, updateStage, deleteStage, StageVO } from '@/api/pms/stage'
 import { dateFormatter } from '@/utils/formatTime'
 import { getSimpleDeptList } from '@/api/system/dept'
+import { useUserStore } from '@/store/modules/user'
 
 defineOptions({ name: 'PmsTemplate' })
 
 const message = useMessage()
 const { t } = useI18n()
+const userStore = useUserStore()
 
 const loading = ref(true)
 const list = ref<ProjectVO[]>([])
@@ -408,7 +410,8 @@ const editForm = reactive<ProjectVO>({
 })
 const editRules = {
   projectName: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
-  status: [{ required: true, message: '请选择状态', trigger: 'change' }]
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }],
+  deptId: [{ required: true, message: '请选择所属部门', trigger: 'change' }]
 }
 const editTaskList = ref<TaskVO[]>([])
 const editStageList = ref<StageVO[]>([])
@@ -429,7 +432,8 @@ const createForm = reactive({
 const createRules = {
   projectName: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
   projectType: [{ required: true, message: '请选择模板类型', trigger: 'change' }],
-  status: [{ required: true, message: '请选择状态', trigger: 'change' }]
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }],
+  deptId: [{ required: true, message: '请选择所属部门', trigger: 'change' }]
 }
 
 const openCreateDialog = () => {
@@ -437,7 +441,7 @@ const openCreateDialog = () => {
     projectName: '',
     projectType: 'standard_template',
     status: 'active',
-    deptId: undefined,
+    deptId: (userStore.getUser?.deptId) as number | undefined,
     description: ''
   })
   createVisible.value = true
