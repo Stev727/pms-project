@@ -248,11 +248,6 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="工期" prop="cycle">
-              <el-input-number v-model="taskForm.cycle" :min="1" :max="999" class="w-full" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="里程碑">
               <el-switch v-model="taskForm.isMilestone" active-text="是" inactive-text="否" />
             </el-form-item>
@@ -281,7 +276,7 @@ import TaskDetailDrawer from '../project-detail/TaskDetailDrawer.vue'
 import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
 import {
   taskStatusMap, priorityMap, priorityOptions, taskTypeOptions, dailyTaskTypeOptions,
-  formatDate, calcDelayDays
+  formatDate, calcDuration, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -505,6 +500,16 @@ const taskFormRules = reactive<FormRules>({
   planStartDate: [{ required: false }],
   planEndDate: [{ required: false }]
 })
+
+// 工期按计划起止日期自动计算，无需手工填写
+watch(
+  () => [taskForm.planStartDate, taskForm.planEndDate],
+  ([start, end]) => {
+    if (start && end && end >= start) {
+      taskForm.cycle = calcDuration(start, end)
+    }
+  }
+)
 
 const resetTaskForm = () => {
   Object.assign(taskForm, {

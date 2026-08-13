@@ -58,6 +58,7 @@
             <span :style="{ fontWeight: row.isStageRow ? '600' : 'normal', color: row.isStageRow ? '#1D2129' : '#4E5969' }">
               {{ row.taskName }}
             </span>
+            <el-tag v-if="row.isStageRow" type="primary" size="small" effect="plain">排序 {{ row.sortOrder ?? 0 }}</el-tag>
             <el-tag v-if="row.isCriticalPath && !row.isStageRow" type="danger" size="small" effect="plain">关键路径</el-tag>
           </div>
         </template>
@@ -182,10 +183,10 @@
               link type="danger" size="small" @click.stop="handleDeleteTask(row)"
             >删除</el-button>
           </template>
-          <!-- 阶段行操作：编辑/删除（仅PM可见） -->
-          <template v-if="row.isStageRow && isPM">
-            <el-button link type="primary" size="small" @click.stop="handleEditStage(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click.stop="handleDeleteStage(row)">删除</el-button>
+          <!-- 阶段行操作：编辑/删除（权限可配置） -->
+          <template v-if="row.isStageRow">
+            <el-button link type="primary" size="small" @click.stop="handleEditStage(row)" v-if="checkPermi(['pms:task:update'])">编辑</el-button>
+            <el-button link type="danger" size="small" @click.stop="handleDeleteStage(row)" v-if="checkPermi(['pms:task:delete'])">删除</el-button>
           </template>
         </template>
       </el-table-column>
@@ -281,7 +282,9 @@ const canProject = (permKey: string): boolean => {
 const showStageDialog = ref(false)
 const openStageDialog = () => {
   editingStageId.value = null
-  Object.assign(stageForm, { stageName: '', sortOrder: 0, isMilestone: false, planStartDate: '', planEndDate: '' })
+  // 默认排序 = 当前项目阶段最大排序 + 1，新建阶段自然追加到末尾且可手动调整
+  const maxSort = props.stages.reduce((m, s) => Math.max(m, Number(s.sortOrder) || 0), 0)
+  Object.assign(stageForm, { stageName: '', sortOrder: maxSort + 1, isMilestone: false, planStartDate: '', planEndDate: '' })
   showStageDialog.value = true
 }
 const stageSaving = ref(false)
@@ -368,15 +371,18 @@ const handleEditStage = (row: TreeRow) => {
   showStageDialog.value = true
 }
 
-// 删除阶段（级联删除任务）
+// 删除阶段：有子任务则弹框确认（含级联删除警告），无子任务直接删除
 const handleDeleteStage = async (row: TreeRow) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定删除阶段「${row.stageName}」吗？该阶段下的所有任务将一并删除，此操作不可恢复！`,
-      '危险操作',
-      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
-    )
-  } catch { return }
+  const hasChildren = (props.tasks || []).some(t => String(t.stageId) === String(row.stageId))
+  if (hasChildren) {
+    try {
+      await ElMessageBox.confirm(
+        `阶段「${row.stageName}」下存在任务，删除后将一并删除，此操作不可恢复！`,
+        '危险操作',
+        { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch { return }
+  }
   try {
     await deleteStage(String(row.stageId))
     ElMessage.success('阶段已删除')
@@ -508,7 +514,8 @@ const filteredTreeData = computed<TreeRow[]>(() => {
     tasksByStage.get(key)!.push(t)
   }
 
-  for (const stage of props.stages) {
+  const sortedStages = [...props.stages].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+  for (const stage of sortedStages) {
     const stageRow: TreeRow = {
       ...stage,
       taskName: stage.stageName,

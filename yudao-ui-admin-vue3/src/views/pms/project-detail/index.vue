@@ -279,11 +279,6 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="工期(天)" prop="cycle">
-              <el-input-number v-model="taskForm.cycle" :min="1" :max="999" class="w-full" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="里程碑">
               <el-switch v-model="taskForm.isMilestone" />
             </el-form-item>
@@ -413,6 +408,16 @@ const taskForm = reactive({
   completionStandard: '',
   estimatedHours: undefined as number | undefined
 })
+
+// 工期按计划起止日期自动计算，无需手工填写
+watch(
+  () => [taskForm.planStartDate, taskForm.planEndDate],
+  ([start, end]) => {
+    if (start && end && end >= start) {
+      taskForm.cycle = calcDuration(start, end)
+    }
+  }
+)
 
 // #1 子任务层级：可作为父任务的候选（层级未满 3 级）
 const candidateParentTasks = computed(() => projectTasks.value.filter((t: TaskVO) => (t.level || 1) < 3))
