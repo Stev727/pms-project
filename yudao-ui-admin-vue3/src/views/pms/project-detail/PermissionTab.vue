@@ -44,7 +44,7 @@
       <template #default>
         <span>该项目尚未初始化项目角色，成员的项目级权限将全部为空。</span>
         <el-button link type="primary" size="small" @click="handleInit" v-if="editable">
-          按默认模板初始化
+          按成员角色初始化
         </el-button>
       </template>
     </el-alert>
@@ -286,10 +286,14 @@ async function handleSave() {
   }
 }
 
-/** 按成员实际角色初始化（仅创建成员用到的角色，不一次性全量创建） */
+/**
+ * 按成员实际角色初始化（仅创建成员用到的角色，不调用后端默认模板批量创建）
+ * 例：成员 20 人但只有 5 个不同角色 → 只创建这 5 个角色。
+ *     之后新增成员如出现新角色，可通过"新建角色"对话框按需添加。
+ */
 async function handleInit() {
   try {
-    // 1. 先拉取本项目成员列表，提取实际使用的 roleCode
+    // 1. 拉取本项目成员列表，提取实际使用的 roleCode（去重）
     const memberRes: any = await MemberApi.getProjectMemberList()
     const members: any[] = (memberRes || []).filter((m: any) => String(m.projectId) === String(props.projectId))
     const usedRoleCodes = [...new Set(members.map((m: any) => m.roleCode).filter(Boolean))]
@@ -300,7 +304,7 @@ async function handleInit() {
     }
 
     // 2. 将成员的 roleCode 映射到标准角色名，过滤掉已存在的
-    const existingCodes = new Set(roles.value.map(r => r.roleCode))
+    const existingCodes = new Set(roles.value.map(r => r.roleCode).filter(Boolean))
     const rolesToCreate: { roleName: string; roleCode: string }[] = []
     for (const code of usedRoleCodes) {
       if (existingCodes.has(code)) continue // 已存在则跳过
@@ -315,10 +319,30 @@ async function handleInit() {
       return
     }
 
-    // 3. 批量创建缺失的角色
-    await PermApi.initProjectPermission(props.projectId)
+    // 3. 逐个创建缺失的角色（不调用默认模板，避免批量创建所有标准角色）
+    const created: string[] = []
+    for (const r of rolesToCreate) {
+      try {
+        await PermApi.createProjectRole({
+          projectId: String(props.projectId),
+          roleName: r.roleName,
+          roleCode: r.roleCode,
+          sortOrder: (roles.value.length + created.length + 1) * 10,
+          remark: '由"按成员角色初始化"自动创建'
+        })
+        created.push(r.roleName)
+      } catch (e: any) {
+        // 单个失败不阻塞其它
+        console.error(`创建角色 ${r.roleName} 失败`, e)
+      }
+    }
 
-    ElMessage.success(`已初始化，新增 ${rolesToCreate.length} 个角色：${rolesToCreate.map(r => r.roleName).join('、')}`)
+    if (created.length === 0) {
+      ElMessage.error('初始化失败：所有角色均创建失败')
+      return
+    }
+
+    ElMessage.success(`已按成员角色初始化，新增 ${created.length} 个角色：${created.join('、')}`)
     clearPermCache(props.projectId)
     await loadMatrix()
   } catch (e: any) {
