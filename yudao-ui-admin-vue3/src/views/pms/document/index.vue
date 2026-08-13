@@ -188,11 +188,16 @@ function previewDoc(row: any) {
 
 async function downloadDoc(row: any) {
   try {
-    await downloadDocument(row.documentId, row.fileName)
+    const result = await downloadDocument(row.documentId, row.fileName)
+    if (result === 'blob-error') {
+      ElMessage.error('下载失败：文件获取异常，请联系管理员')
+      return
+    }
     ElMessage.success(`正在下载：${row.fileName}`)
     await loadDocuments()
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
+    ElMessage.error(e?.message || '下载失败')
   }
 }
 

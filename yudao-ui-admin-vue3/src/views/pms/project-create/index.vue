@@ -416,7 +416,7 @@
             <el-descriptions-item label="项目编号">{{ projectForm.projectCode || '自动生成' }}</el-descriptions-item>
             <el-descriptions-item label="项目类型">{{ getTypeLabel(projectForm.projectType) }}</el-descriptions-item>
             <el-descriptions-item label="优先级">{{ priorityMap[projectForm.priority]?.label || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="项目经理">{{ getManagerName(projectForm.projectManagerId) }}</el-descriptions-item>
+            <el-descriptions-item label="项目经理">{{ getManagerName(projectForm.projectManagerId ?? '') }}</el-descriptions-item>
             <el-descriptions-item label="所属部门">{{ getDeptName(projectForm.deptId) }}</el-descriptions-item>
             <el-descriptions-item label="计划周期">{{ projectForm.planStartDate }} ~ {{ projectForm.planEndDate }} ({{ totalDays }}天)</el-descriptions-item>
             <el-descriptions-item label="项目预算">{{ projectForm.budget ? '￥' + projectForm.budget : '-' }}</el-descriptions-item>
@@ -525,7 +525,7 @@ const projectForm = reactive({
   projectCode: '',
   projectType: '',
   priority: 'normal',
-  projectManagerId: undefined as string | undefined,
+  projectManagerId: undefined as number | undefined,
   deptId: undefined as number | undefined,
   planStartDate: '',
   planEndDate: '',
@@ -539,7 +539,7 @@ const formRules = {
   projectType: [{ required: true, message: '请选择项目类型', trigger: 'change' }],
   priority: [{ required: false }],
   projectManagerId: [{ required: true, message: '请选择项目经理', trigger: 'change' }],
-  deptId: [{ required: false }],
+  deptId: [{ required: true, message: '请选择所属部门', trigger: 'change' }],
   planStartDate: [{ required: true, message: '请选择计划开始日期', trigger: 'change' }],
   planEndDate: [
     { required: true, message: '请选择计划结束日期', trigger: 'change' },
@@ -606,7 +606,7 @@ function getTaskRoleName(row: any): string {
 }
 
 // 项目经理变更时自动同步到成员列表
-function onManagerChange(val: string) {
+function onManagerChange(val: number | string) {
   if (!val) return
   const idStr = String(val)
   // 移除旧的 PM 成员
@@ -828,6 +828,7 @@ async function loadTemplateTasks(templateId: number | string) {
     const tplStages = (stages as StageVO[]).filter(s => String(s.projectId) === tplId)
     stageList.value = tplStages
     const tplTasks = (tasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
+    console.log(`[loadTemplateTasks] tplId=${tplId} stages=${tplStages.length} tasks=${tplTasks.length}`)
     adjustedTasks.value = buildTasksFromTemplate(
       tplTasks,
       tplStages,
@@ -835,6 +836,10 @@ async function loadTemplateTasks(templateId: number | string) {
     )
     if (tplTasks.length === 0 && String(selectedTemplate.value) === tplId) {
       ElMessage.warning("当前模板没有已保存的任务明细，请先到模板管理补充并保存任务")
+    }
+    if (adjustedTasks.length === 0 && tplTasks.length > 0) {
+      ElMessage.error("模板任务加载异常：模板有任务但未能生成调整任务列表，请刷新重试")
+      console.error('[loadTemplateTasks] buildTasksFromTemplate returned empty but tplTasks=', tplTasks)
     }
     templateStageMap.value[tplId] = tplStages.length
     templateTaskMap.value[tplId] = tplTasks.length
@@ -860,12 +865,17 @@ function nextStep() {
     formRef.value?.validate(valid => {
       if (!valid) return
       // 确保项目经理在成员列表中
-      const pmId = String(projectForm.projectManagerId)
+      const pmId = String(projectForm.projectManagerId ?? "")
       if (pmId && !selectedMembers.value.find(m => String(m.userId) === pmId)) {
         selectedMembers.value.unshift({ userId: pmId, roleCode: 'pm', isExternal: false, status: 'active' })
       }
       if (selectedMembers.value.length === 0) {
         ElMessage.warning('请至少添加一名项目成员')
+        return
+      }
+      // 守卫：确保模板任务已加载
+      if (adjustedTasks.value.length === 0 && selectedTemplate.value) {
+        ElMessage.warning('模板任务尚未加载完成，请稍候重试或重新选择模板')
         return
       }
       currentStep.value++

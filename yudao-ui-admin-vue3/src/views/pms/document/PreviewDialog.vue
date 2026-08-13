@@ -140,14 +140,20 @@ async function loadPreview(docId: string) {
     if (res.previewType === 'pdf' || res.previewType === 'image') {
       // 请求字节流，生成 Blob URL
       const blob = await fetchPreviewFileBlob(docId)
-      blobUrl.value = window.URL.createObjectURL(blob)
+      if (blob && blob instanceof Blob) {
+        blobUrl.value = window.URL.createObjectURL(blob)
+      } else {
+        throw new Error('预览文件数据异常')
+      }
     } else if (res.previewType === 'text') {
       textContent.value = res.textContent || ''
     }
     // unsupported: 无需额外加载
   } catch (e: any) {
     console.error('[PreviewDialog] 预览加载失败', e)
-    // 错误提示由 axios 拦截器统一处理
+    const errMsg = e?.message || e?.msg || String(e || '未知错误')
+    previewType.value = 'unsupported'
+    ElMessage.error('预览加载失败: ' + errMsg)
   } finally {
     loading.value = false
   }

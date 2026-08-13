@@ -87,26 +87,49 @@ export const previewDocument = (docId: string | number) => {
 /**
  * 【#6 新增】获取预览文件 Blob（PDF/图片）。
  * 用 axios 带 token 请求，前端 createObjectURL 给 iframe/img。
+ *
+ * 必须用 request.download（而非 request.get({ responseType:'blob' })）：
+ * request.get 内部 return res.data，但 responseType='blob' 时拦截器直接返回
+ * Blob（非 response 对象），Blob 无 .data 属性 → 拿到 undefined。
+ * request.download 直接 return res，对 blob 响应正确返回 Blob。
+ *
+ * 安全说明：后端异常时拦截器会解析 JSON 错误并 reject，此处 Blob 类型校验作兜底。
  */
 export const fetchPreviewFileBlob = async (docId: string | number): Promise<Blob> => {
-  const resp = await request.get({
-    url: '/pms/document/preview-file?docId=' + docId,
-    responseType: 'blob'
+  const resp = await request.download({
+    url: '/pms/document/preview-file?docId=' + docId
   })
-  // request.get 在 responseType='blob' 时直接返回 Blob
-  return resp as unknown as Blob
+  // 校验：确保返回的是 Blob 而非错误 JSON 对象
+  if (!resp || typeof resp !== 'object' || !(resp instanceof Blob)) {
+    const errMsg = (resp && typeof resp === 'object' && 'msg' in resp)
+      ? (resp as any).msg
+      : '预览文件获取失败'
+    throw new Error(errMsg)
+  }
+  return resp
 }
 
 /**
  * 【#7 新增】下载文档（触发浏览器下载）。
  * 用隐藏 a 标签 + token fetch，避免 token 丢失。
+ *
+ * 必须用 request.download（而非 request.get({ responseType:'blob' })），原因同 fetchPreviewFileBlob。
+ *
+ * 安全说明：同 fetchPreviewFileBlob，后端异常时拦截器解析 JSON 错误并 reject，
+ * 此处 Blob 类型校验作兜底。
  */
 export const downloadDocument = async (docId: string | number, fileName?: string) => {
-  const resp = await request.get({
-    url: '/pms/document/download?docId=' + docId,
-    responseType: 'blob'
+  const resp = await request.download({
+    url: '/pms/document/download?docId=' + docId
   })
-  const blob = resp as unknown as Blob
+  // 校验：确保返回的是 Blob
+  if (!resp || typeof resp !== 'object' || !(resp instanceof Blob)) {
+    const errMsg = (resp && typeof resp === 'object' && 'msg' in resp)
+      ? (resp as any).msg
+      : '文件下载失败'
+    throw new Error(errMsg)
+  }
+  const blob = resp as Blob
   const url = window.URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

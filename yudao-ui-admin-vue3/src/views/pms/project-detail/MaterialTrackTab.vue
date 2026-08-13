@@ -123,17 +123,17 @@
 
     <!-- 新增物料弹窗（无项目选择字段） -->
     <el-dialog v-model="createDialogVisible" title="新增物料" width="560px" :close-on-click-modal="false">
-      <el-form :model="createForm" label-width="100px">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="24">
-            <el-form-item label="物料名称" required>
+            <el-form-item label="物料名称" prop="materialName" required>
               <el-input v-model="createForm.materialName" placeholder="请输入物料名称" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="物料编码">
+            <el-form-item label="物料编码" prop="materialCode" required>
               <el-input v-model="createForm.materialCode" placeholder="请输入物料编码" />
             </el-form-item>
           </el-col>
@@ -145,7 +145,7 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="数量">
+            <el-form-item label="数量" prop="quantity" required>
               <el-input-number v-model="createForm.quantity" :min="0" :precision="2" style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -212,6 +212,13 @@ const loading = ref(false)
 const tableData = ref<MaterialTrackVO[]>([])
 const createDialogVisible = ref(false)
 const submitting = ref(false)
+const createFormRef = ref()
+const createRules = {
+  materialName: [{ required: true, message: '请输入物料名称', trigger: 'blur' }],
+  materialCode: [{ required: true, message: '请输入物料编码', trigger: 'blur' }],
+  quantity: [{ required: true, message: '请输入数量', trigger: 'blur' }]
+}
+
 const createForm = reactive({
   materialName: '',
   materialCode: '',
@@ -328,10 +335,9 @@ function openCreateDialog() {
 }
 
 async function submitCreate() {
-  if (!createForm.materialName) {
-    ElMessage.warning('请填写物料名称')
-    return
-  }
+  try {
+    await createFormRef.value?.validate()
+  } catch(e) { return }
   submitting.value = true
   try {
     await createMaterialTrack({

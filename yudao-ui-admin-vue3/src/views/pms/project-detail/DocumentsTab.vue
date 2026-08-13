@@ -313,6 +313,7 @@ async function downloadDoc(row: any) {
     row.downloadCount = (row.downloadCount || 0) + 1
   } catch (e: any) {
     console.error('[downloadDoc] 下载失败', e)
+    ElMessage.error(e?.message || '下载失败，请检查文件是否存在或联系管理员')
   }
 }
 

@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -173,8 +174,7 @@ public class DocumentPreviewServiceImpl implements DocumentPreviewService {
             // attachment 触发浏览器下载
             response.setContentType("application/octet-stream;charset=UTF-8");
             response.setHeader("Content-Length", String.valueOf(bytes.length));
-            response.setHeader("Content-Disposition",
-                    "attachment; filename=\"" + sanitizeFileName(doc.getFileName()) + "\"");
+            setContentDisposition(response, doc.getFileName(), true);
             response.getOutputStream().write(bytes);
             response.getOutputStream().flush();
         } catch (Exception e) {
@@ -385,19 +385,37 @@ public class DocumentPreviewServiceImpl implements DocumentPreviewService {
         response.setContentType(contentType + ";charset=UTF-8");
         response.setHeader("Content-Length", String.valueOf(length));
         // 预览用 inline，不用 attachment（避免触发下载）
-        response.setHeader("Content-Disposition", "inline; filename=\"" + sanitizeFileName(fileName) + "\"");
+        setContentDisposition(response, fileName, false);
         // 允许前端跨域加载（iframe 场景）
         response.setHeader("Access-Control-Allow-Origin", "*");
     }
 
     /**
-     * 文件名净化（移除换行等危险字符）
+     * 构造 Content-Disposition 响应头，兼容中文 / 特殊字符文件名。
+     *
+     * 根因：HTTP 头必须按 ISO-8859-1(Latin-1) 编码，直接写入 UTF-8 中文名
+     * 会导致 Tomcat 抛 IllegalArgumentException（"cannot be encoded as it is
+     * outside the permitted range of 0 to 255"），使预览 / 下载双双失败。
+     *
+     * 修复：采用 RFC 5987 —— 优先用 filename*=UTF-8''<urlencode> 携带原始 UTF-8 名；
+     * 同时提供 filename（ISO-8859-1 兜底）兼容旧浏览器。
+     *
+     * @param attachment true=下载(attachment)，false=预览(inline)
      */
-    private String sanitizeFileName(String name) {
-        if (name == null) {
-            return "preview";
+    private void setContentDisposition(HttpServletResponse response, String fileName, boolean attachment) {
+        String disposition = attachment ? "attachment" : "inline";
+        String safeName = (fileName == null || fileName.isEmpty()) ? "download" : fileName;
+        try {
+            String encoded = URLEncoder.encode(safeName, StandardCharsets.UTF_8.name())
+                    .replace("+", "%20");
+            // ISO-8859-1 兜底：把 UTF-8 字节序列 reinterpret 为 Latin-1，确保无 >255 字符
+            String fallback = new String(safeName.getBytes(StandardCharsets.UTF_8), StandardCharsets.ISO_8859_1);
+            response.setHeader("Content-Disposition",
+                    disposition + "; filename=\"" + fallback + "\"; filename*=UTF-8''" + encoded);
+        } catch (Exception e) {
+            // 极端兜底：任何编码异常都不应阻断响应
+            response.setHeader("Content-Disposition", disposition + "; filename=\"download\"");
         }
-        return name.replaceAll("[\\r\\n\"]", "_");
     }
 
 }
