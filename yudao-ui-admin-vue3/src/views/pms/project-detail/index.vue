@@ -218,7 +218,7 @@
                 <el-option
                   v-for="p in candidateParentTasks"
                   :key="p.taskId"
-                  :label="`${p.taskCode ? p.taskCode + ' - ' : ''}${p.taskName}（${p.level || 1}级）`"
+                  :label="`${p.taskName}（${p.level || 1}级）`"
                   :value="String(p.taskId)"
                 />
               </el-select>
