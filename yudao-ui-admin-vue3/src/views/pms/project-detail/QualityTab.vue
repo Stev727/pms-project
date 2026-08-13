@@ -4,17 +4,10 @@
       <span class="toolbar-title">质量问题 ({{ filteredList.length }})</span>
       <div style="display: flex; gap: 8px">
         <el-select v-model="filterSeverity" placeholder="严重程度" clearable size="small" style="width: 110px">
-          <el-option label="致命(9-10)" value="fatal" />
-          <el-option label="严重(6-8)" value="severe" />
-          <el-option label="一般(3-5)" value="minor" />
-          <el-option label="建议(1-2)" value="suggestion" />
+          <el-option v-for="opt in severityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
         <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
-          <el-option label="新建" value="new" />
-          <el-option label="已指派" value="assigned" />
-          <el-option label="处理中" value="processing" />
-          <el-option label="待验证" value="pending_verify" />
-          <el-option label="已关闭" value="closed" />
+          <el-option v-for="opt in statusOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
         <el-button type="primary" size="small" @click="showForm = true" v-if="checkPermi(['pms:quality:create'])">
           <Icon icon="ep:plus" class="mr-4px" />录入问题
@@ -91,10 +84,10 @@
         <el-form-item label="问题描述" required><el-input v-model="newIssue.description" type="textarea" :rows="3" /></el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="严重程度"><el-select v-model="newIssue.severity" class="w-full"><el-option label="致命" value="fatal" /><el-option label="严重" value="severe" /><el-option label="一般" value="minor" /><el-option label="建议" value="suggestion" /></el-select></el-form-item>
+            <el-form-item label="严重程度"><el-select v-model="newIssue.severity" class="w-full"><el-option v-for="opt in severityOptions" :key="opt.value" :label="opt.label" :value="opt.value" /></el-select></el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="分类"><el-select v-model="newIssue.category" class="w-full"><el-option label="设计问题" value="design" /><el-option label="工艺问题" value="process" /><el-option label="物料问题" value="material" /><el-option label="测试问题" value="testing" /><el-option label="其他" value="other" /></el-select></el-form-item>
+            <el-form-item label="分类"><el-select v-model="newIssue.category" class="w-full"><el-option v-for="opt in categoryOptions" :key="opt.value" :label="opt.label" :value="opt.value" /></el-select></el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
@@ -121,6 +114,7 @@ import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { getSimpleDictDataList } from '@/api/system/dict/dict.data'
 
 defineOptions({ name: 'QualityTab' })
 
@@ -145,22 +139,58 @@ const filteredList = computed(() => {
   return r
 })
 
-const newIssue = reactive({ description: '', severity: 'minor', category: 'design', responsiblePerson: '', source: '', rootCause: '', solution: '' })
+const newIssue = reactive({ description: '', severity: '', category: '', responsiblePerson: '', source: '', rootCause: '', solution: '' })
 
-function getSeverityLabel(s: string): string {
-  return { fatal: '致命', severe: '严重', minor: '一般', suggestion: '建议' }[s] || s
+// ==================== 字典数据 ====================
+const allDictData = ref<any[]>([])
+
+/** 从全量字典中提取指定类型的选项列表（按 sort 排序） */
+function extractDictOptions(dictType: string): { value: string; label: string }[] {
+  if (!Array.isArray(allDictData.value)) return []
+  return allDictData.value
+    .filter((d: any) => d.dictType === dictType && (d.status == null || d.status === 0))
+    .sort((a: any, b: any) => (a.sort || 0) - (b.sort || 0))
+    .map((d: any) => ({ value: String(d.value), label: d.label }))
 }
+
+/** 字典选项（computed，字典加载后自动更新） */
+const severityOptions = computed(() => extractDictOptions('quality_severity'))
+const categoryOptions = computed(() => extractDictOptions('pms_quality_category'))
+const statusOptions = computed(() => extractDictOptions('quality_status'))
+
+// ==================== 字典值 → 标签/样式 映射（从字典数据动态查找） ====================
+function findDictLabel(dictType: string, value: string): string {
+  if (!value) return '-'
+  const opt = extractDictOptions(dictType).find(o => o.value === String(value))
+  return opt?.label || value
+}
+
+function getSeverityLabel(s: string): string { return findDictLabel('quality_severity', s) }
+function getCategoryLabel(c: string): string { return findDictLabel('pms_quality_category', c) }
+function getStatusLabel(s: string): string { return findDictLabel('quality_status', s) }
+
+/** 严重程度 tag 类型：按字典 sort 值映射（sort 越大越严重） */
 function getSeverityType(s: string): string {
-  return { fatal: 'danger', severe: 'warning', minor: 'primary', suggestion: 'info' }[s] || 'info'
+  const opts = extractDictOptions('quality_severity')
+  const idx = opts.findIndex(o => o.value === String(s))
+  if (idx === -1) return 'info'
+  // 前2项(最严重)→danger/warning，中间→primary，末尾→info/success
+  if (idx <= 1) return idx === 0 ? 'danger' : 'warning'
+  if (idx >= opts.length - 2) return idx === opts.length - 1 ? 'info' : 'success'
+  return 'primary'
 }
-function getCategoryLabel(c: string): string {
-  return { design: '设计问题', process: '工艺问题', material: '物料问题', testing: '测试问题', other: '其他' }[c] || c
-}
-function getStatusLabel(s: string): string {
-  return { new: '新建', open: '待处理', assigned: '已指派', in_progress: '处理中', processing: '处理中', pending_verify: '待验证', resolved: '已解决', closed: '已关闭' }[s] || s
-}
+
+/** 状态颜色 */
 function getStatusColor(s: string): string {
-  return { new: '#86909C', open: '#F53F3F', assigned: '#2468F2', in_progress: '#FF7D00', processing: '#FF7D00', pending_verify: '#FF7D00', resolved: '#00B42A', closed: '#00B42A' }[s] || '#86909C'
+  // 从字典数据取 colorType 或按默认规则
+  const colorMap: Record<string, string> = {
+    unassigned: '#86909C', open: '#F53F3F', assigned: '#2468F2',
+    improving: '#FF7D00', processing: '#FF7D00', in_progress: '#FF7D00',
+    to_verify: '#FF7D00', pending_verify: '#FF7D00',
+    verified: '#00B42A', resolved: '#00B42A', closed: '#00B42A',
+    new: '#86909C'
+  }
+  return colorMap[s] || '#86909C'
 }
 
 function openDetail(row: any) { selected.value = row; drawerVisible.value = true }
@@ -215,7 +245,9 @@ async function submitIssue() {
     }
     showForm.value = false
     editingIssue.value = null
-    Object.assign(newIssue, { description: '', severity: 'minor', category: 'design', responsiblePerson: '', source: '', rootCause: '', solution: '' })
+    const defaultSeverity = severityOptions.value[0]?.value || ''
+    const defaultCategory = categoryOptions.value[0]?.value || ''
+    Object.assign(newIssue, { description: '', severity: defaultSeverity, category: defaultCategory, responsiblePerson: '', source: '', rootCause: '', solution: '' })
     await fetchList()
   } catch (e) { console.error(e) }
   finally { saving.value = false }
@@ -223,10 +255,12 @@ async function submitIssue() {
 
 function editIssue(row: any) {
   editingIssue.value = row
+  const defaultSeverity = severityOptions.value[0]?.value || ''
+  const defaultCategory = categoryOptions.value[0]?.value || ''
   Object.assign(newIssue, {
     description: row.issueDescription || '',
-    severity: row.severity || 'minor',
-    category: row.rootCauseCategory || 'design',
+    severity: row.severity || defaultSeverity,
+    category: row.rootCauseCategory || defaultCategory,
     responsiblePerson: row.responsiblePerson || '',
     source: row.source || '',
     rootCause: row.rootCauseDetail || '',
@@ -255,9 +289,16 @@ async function fetchList() {
   finally { loading.value = false }
 }
 
-onMounted(() => {
+onMounted(async () => {
   ensureUsersLoaded()
   loadProjectMembers(props.projectId)
+  // 加载字典数据（严重程度/分类/状态）
+  try {
+    const res: any = await getSimpleDictDataList()
+    allDictData.value = Array.isArray(res) ? res : (res?.data || [])
+  } catch (e) {
+    console.warn('[QualityTab] 字典加载失败，使用空字典', e)
+  }
   fetchList()
 })
 defineExpose({ refresh: fetchList })
