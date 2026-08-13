@@ -11,6 +11,7 @@
           <el-option label="变更审批" value="change" />
           <el-option label="质量审批" value="quality" />
           <el-option label="延期审批" value="delay" />
+          <el-option label="任务审核" value="task_review" />
         </el-select>
         <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
           <el-option label="待审批" value="pending" />
@@ -57,7 +58,7 @@
       <el-table-column label="操作" width="120" align="center">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click="viewDetail(row)">详情</el-button>
-          <template v-if="row.approvalStatus === 'pending'">
+          <template v-if="row.source !== 'task' && row.approvalStatus === 'pending'">
             <el-button link type="success" size="small" @click="doApprove(row, true)" v-if="checkPermi(['pms:approval:update'])">通过</el-button>
             <el-button link type="danger" size="small" @click="doApprove(row, false)" v-if="checkPermi(['pms:approval:update'])">驳回</el-button>
           </template>
@@ -111,6 +112,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getApprovalRecordList, updateApprovalRecord } from '@/api/pms/approval'
+import { getTaskList } from '@/api/pms/task'
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
@@ -145,14 +147,16 @@ function getTypeLabel(t: string): string {
   return {
     change: '变更审批', quality: '质量审批', delay: '延期审批',
     project_init: '立项审批', mold_open: '开模审批',
-    design_review: '设计评审', trial_to_mass: '试产转量产'
+    design_review: '设计评审', trial_to_mass: '试产转量产',
+    task_review: '任务审核'
   }[t] || t
 }
 
 function getTypeTag(t: string): string {
   return {
     project_init: 'success', mold_open: 'primary', design_review: 'warning',
-    trial_to_mass: 'danger', change: 'warning', quality: 'danger', delay: ''
+    trial_to_mass: 'danger', change: 'warning', quality: 'danger', delay: '',
+    task_review: 'info'
   }[t] || 'info'
 }
 
@@ -203,15 +207,45 @@ async function loadApprovals() {
   loading.value = true
   try {
     await ensureUsersLoaded()
-    const data = await getApprovalRecordList({ projectId: props.projectId })
+    // 1) 原有审批流记录（立项/变更/质量…）
+    const data = await getApprovalRecordList()
     const allApprovals = (data as any[]) || []
-    // P0-5: 前端增加 null 检查 + 项目隔离过滤
-    const projectApprovals = allApprovals.filter(a =>
-      a.projectId && String(a.projectId) === String(props.projectId)
-    )
-    approvalList.value = projectApprovals.map(a => ({
+    const projectApprovals = allApprovals
+      .filter(a => a.projectId && String(a.projectId) === String(props.projectId))
+      .map(a => ({
+        ...a,
+        source: 'approval',
+        approvalTitle: a.approvalNo || `${getTypeLabel(a.approvalType)}-${a.approvalId}`
+      }))
+
+    // 2) 审核中心（ReviewCenterTab）审核的任务完成情况，作为「任务审核」记录合并展示
+    const taskRes = await getTaskList({ projectId: props.projectId })
+    const tasks = (taskRes as any[]) || []
+    const taskReviews = tasks
+      .filter(t => String(t.projectId) === String(props.projectId) && t.reviewStatus && t.reviewStatus !== 'none')
+      .map(t => ({
+        source: 'task',
+        approvalId: `task-${t.taskId}`,
+        projectId: t.projectId,
+        approvalType: 'task_review',
+        approvalNo: t.taskCode || '-',
+        approvalTitle: t.taskName,
+        approvalStatus:
+          t.reviewStatus === 'submitted' ? 'pending'
+          : t.reviewStatus === 'completed' ? 'approved'
+          : t.reviewStatus === 'rejected' ? 'rejected'
+          : t.reviewStatus,
+        initiatorId: t.mainOwnerId,
+        approverId: t.reviewerId,
+        initiateTime: t.createTime,
+        completeTime: t.actualCompleteDate,
+        approvalOpinion: t.reviewComment || t.reviewOpinion || '',
+        oaCallbackStatus: ''
+      }))
+
+    const merged = [...projectApprovals, ...taskReviews]
+    approvalList.value = merged.map(a => ({
       ...a,
-      approvalTitle: a.approvalNo || `${getTypeLabel(a.approvalType)}-${a.approvalId}`,
       initiatorName: a.initiatorName || (a.initiatorId ? getUserName(a.initiatorId) : '-'),
       approverName: a.approverName || (a.approverId ? getUserName(a.approverId) : '-')
     }))

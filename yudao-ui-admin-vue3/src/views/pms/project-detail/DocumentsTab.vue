@@ -72,8 +72,8 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="上传人" width="80">
-            <template #default="{ row }">{{ row.uploadByName || row.uploadBy || '-' }}</template>
+          <el-table-column label="上传人" width="100">
+            <template #default="{ row }">{{ getUserName(row.uploadBy) }}</template>
           </el-table-column>
           <el-table-column label="上传时间" width="110">
             <template #default="{ row }">{{ formatDate(row.uploadTime, 'YYYY-MM-DD HH:mm') }}</template>
@@ -196,6 +196,7 @@ import {
   type DocumentVO
 } from '@/api/pms/document'
 import { getProjectRoleList, type ProjectRoleVO } from '@/api/pms/permission'
+import { useUserNames } from '@/hooks/pms/useUserNames'
 import { getTaskList, TaskVO } from '@/api/pms/task'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { formatDate, phaseColorMap } from '../pms-utils'
@@ -225,6 +226,7 @@ const stages = ref<StageVO[]>([])
 const projectRoles = ref<ProjectRoleVO[]>([])
 const selectedRows = ref<any[]>([])
 const groupExpanded = ref<Record<string, boolean>>({})
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 // 预览弹窗状态
 const previewVisible = ref(false)
@@ -447,6 +449,7 @@ function formatSize(bytes: number): string {
 
 onMounted(async () => {
   await loadPerm(props.projectId)
+  await ensureUsersLoaded()
   await loadTasks()
   await loadProjectRoles()
   await loadDocuments()

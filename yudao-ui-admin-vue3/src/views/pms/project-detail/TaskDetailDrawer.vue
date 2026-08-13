@@ -44,6 +44,13 @@
             <el-button v-if="!isEditMode && canRejectReview" type="danger" plain size="small" @click="handleRejectReviewBtn">
               <Icon icon="ep:close" class="mr-4px" />驳回
             </el-button>
+            <!-- 删除任务：需 pms:task:delete 权限；PM可删所有，非PM只能删自己负责的 -->
+            <el-button
+              v-if="!isEditMode && checkPermi(['pms:task:delete']) && (isPM || String(task?.mainOwnerId) === currentUserId)"
+              type="danger" plain size="small" @click="handleDeleteTask"
+            >
+              <Icon icon="ep:delete" class="mr-4px" />删除任务
+            </el-button>
             <el-button v-if="isEditMode" type="primary" size="small" :loading="savingEdit" @click="saveEdit">保存</el-button>
             <el-button v-if="isEditMode" size="small" @click="cancelEdit">取消</el-button>
           </div>
@@ -382,7 +389,7 @@
 </template>
 
 <script setup lang="ts">
-import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, acceptTask as acceptTaskApi, submitTaskCompletion, submitReview, approveReview, rejectReview, getSubTaskList } from '@/api/pms/task'
+import { TaskVO, updateTask, getTask, simulateDingtalkConfirm as simulateDingtalkConfirmApi, acceptTask as acceptTaskApi, submitTaskCompletion, submitReview, approveReview, rejectReview, getSubTaskList, deleteTask } from '@/api/pms/task'
 import { getProjectMemberList } from '@/api/pms/member'
 import { getDocumentList, createDocument } from '@/api/pms/document'
 import { getChangeRecordList } from '@/api/pms/change'
@@ -1038,6 +1045,26 @@ const handleRejectReviewBtn = async () => {
   } catch (e: any) {
     if (e === 'cancel' || e?.action === 'cancel') return
     message.error(e?.message || '驳回失败')
+  }
+}
+
+// ==================== 删除任务 ====================
+// 权限校验：checkPermi(['pms:task:delete'])；业务规则：PM可删全部，非PM只能删自己负责的
+const handleDeleteTask = async () => {
+  if (!task.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除任务「${task.value.taskName}」吗？此操作不可恢复！`,
+      '删除任务',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+    await deleteTask(String(task.value.taskId))
+    message.success('任务已删除')
+    emit('refresh')
+    drawerVisible.value = false
+  } catch (e: any) {
+    if (e === 'cancel' || e?.action === 'cancel') return
+    message.error(e?.message || '删除任务失败')
   }
 }
 

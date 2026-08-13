@@ -6,7 +6,7 @@
         <el-button type="primary" size="small" @click="$emit('create-task')" v-if="checkPermi(['pms:task:create']) && canProject(PERM.TASK_CREATE)">
           <Icon icon="ep:plus" class="mr-4px" />新建任务
         </el-button>
-        <el-button size="small" @click="openStageDialog" v-if="isPM">
+        <el-button size="small" @click="openStageDialog" v-if="checkPermi(['pms:task:create'])">
           <Icon icon="ep:folder-add" class="mr-4px" />新建阶段
         </el-button>
         <el-input v-model="searchKeyword" placeholder="搜索任务名称" clearable size="small" style="width: 200px">
@@ -176,9 +176,9 @@
             >添加子任务</el-button>
             <!-- 详情 -->
             <el-button link type="primary" size="small" @click.stop="$emit('taskClick', row)">详情</el-button>
-            <!-- 删除任务：PM可删所有，非PM只能删自己负责的 -->
+            <!-- 删除任务：需 pms:task:delete 权限；PM可删所有，非PM只能删自己负责的 -->
             <el-button
-              v-if="isPM || String(row.mainOwnerId) === currentUserId"
+              v-if="checkPermi(['pms:task:delete']) && (isPM || String(row.mainOwnerId) === currentUserId)"
               link type="danger" size="small" @click.stop="handleDeleteTask(row)"
             >删除</el-button>
           </template>
