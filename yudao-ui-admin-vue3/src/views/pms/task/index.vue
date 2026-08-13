@@ -42,7 +42,7 @@
           <Icon icon="ep:plus" class="mr-5px" />新建日常任务
         </el-button>
         <div style="display: flex; align-items: center; gap: 12px">
-          <el-switch v-model="myTasks" active-text="我的任务" size="small" />
+          <el-switch v-model="myTasks" active-text="仅看我负责的" size="small" />
           <el-radio-group v-model="viewMode" size="small">
             <el-radio-button label="table">表格</el-radio-button>
             <el-radio-button label="card">卡片</el-radio-button>
@@ -349,17 +349,10 @@ const filteredList = computed(() => {
   if (queryParams.mainOwnerId) {
     list = list.filter(t => String(t.mainOwnerId) === String(queryParams.mainOwnerId))
   }
-  // “我的任务” 筛选
+  // "仅看我负责的" 筛选：只看当前登录人为责任人的任务
   if (myTasks.value && currentUserId.value) {
     const uid = String(currentUserId.value)
-    list = list.filter(t => {
-      if (String(t.mainOwnerId) === uid) return true
-      if (t.helperIds) {
-        const helpers = String(t.helperIds).split(',').map(s => s.trim())
-        if (helpers.includes(uid)) return true
-      }
-      return false
-    })
+    list = list.filter(t => String(t.mainOwnerId) === uid)
   }
   // 排除模板项目的任务；日常任务（无项目）直接保留
   return list.filter(t => {
