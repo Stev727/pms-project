@@ -257,7 +257,6 @@ import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { useProjectPerm, PERM } from '@/hooks/pms/useProjectPerm'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useCache } from '@/hooks/web/useCache'
 import { useUserStore } from '@/store/modules/user'
 
 defineOptions({ name: 'TaskListTab' })
@@ -476,29 +475,26 @@ const filteredTreeData = computed<TreeRow[]>(() => {
   if (filterStatus.value) {
     tasks = tasks.filter(t => t.completeStatus === filterStatus.value)
   }
-  // 我的任务筛选
+  // 我的任务筛选（仅责任人）
   if (filterAssignee.value === 'mine') {
-    const userInfo = useCache().wsCache.get('userInfo')
-    const currentUserId = userInfo?.id
-    if (currentUserId) {
-      tasks = tasks.filter(t => String(t.mainOwnerId) === String(currentUserId))
+    const uid = currentUserId.value
+    if (uid) {
+      tasks = tasks.filter(t => String(t.mainOwnerId) === String(uid))
     }
   }
   if (filterAssignee.value === 'involved') {
-    const userInfo = useCache().wsCache.get('userInfo')
-    const currentUserId = userInfo?.id
-    if (currentUserId) {
+    const uid = currentUserId.value
+    if (uid) {
       tasks = tasks.filter(t => {
-        const isOwner = String(t.mainOwnerId) === String(currentUserId)
-        const isHelper = t.helperIds ? t.helperIds.split(',').some((id: string) => String(id.trim()) === String(currentUserId)) : false
+        const isOwner = String(t.mainOwnerId) === String(uid)
+        const isHelper = t.helperIds ? t.helperIds.split(',').some((id: string) => String(id.trim()) === String(uid)) : false
         return isOwner || isHelper
       })
     }
   }
-  // 仅看我负责的开关过滤
+  // 仅看我负责的开关过滤（责任人 = 登录人）
   if (onlyMyTasks.value) {
-    const userInfo = useCache().wsCache.get('userInfo')
-    const uid = userInfo?.id
+    const uid = currentUserId.value
     if (uid) {
       tasks = tasks.filter(t => String(t.mainOwnerId) === String(uid))
     }
