@@ -110,18 +110,20 @@
             <el-input v-model="roleForm.roleName" disabled maxlength="64" show-word-limit />
           </template>
           <template v-else>
-            <el-select v-model="roleForm.roleName" filterable placeholder="请选择角色..." class="w-full" @change="onRoleNameChange">
+            <el-select v-model="roleForm.roleName" filterable placeholder="请选择角色..." class="w-full" @change="onRoleNameChange" :empty-values="[null, undefined]">
               <el-option
                 v-for="opt in availableRoleOptions"
                 :key="opt.value"
                 :label="opt.label"
                 :value="opt.label"
+                :disabled="opt.exists"
               >
-                <span>{{ opt.label }}</span>
+                <span :style="{ color: opt.exists ? '#c0c4cc' : '#303133' }">{{ opt.label }}</span>
                 <span style="color: #909399; font-size: 12px; margin-left: 8px">{{ opt.value }}</span>
+                <el-tag v-if="opt.exists" size="small" type="info" effect="plain" style="margin-left: 8px">已创建</el-tag>
               </el-option>
             </el-select>
-            <div class="form-tip">从成员管理的标准角色中选择，已创建的角色不会重复出现</div>
+            <div class="form-tip">从成员管理的标准角色中选择，已创建的角色会标记为「已创建」不可选</div>
           </template>
         </el-form-item>
         <el-form-item label="角色编码" required>
@@ -192,11 +194,17 @@ const granted = ref<Set<string>>(new Set())
 
 const { clearPermCache } = useProjectPerm()
 
-// ==================== 角色下拉选项（过滤已创建的角色） ====================
-/** 新建模式下可选的角色：标准角色中排除本项目已存在的 */
+// ==================== 角色下拉选项 ====================
+/**
+ * 新建模式下可选的角色：展示全部标准角色，已创建的角色标记 exists=true 供 el-option 禁用
+ * 不用 roleName 比较（中文名可能有空格/简繁体差异），用 roleCode 精确匹配
+ */
 const availableRoleOptions = computed(() => {
-  const existingNames = new Set(roles.value.map(r => r.roleName))
-  return STANDARD_ROLE_OPTIONS.filter(opt => !existingNames.has(opt.label))
+  const existingCodes = new Set(roles.value.map(r => r.roleCode).filter(Boolean))
+  return STANDARD_ROLE_OPTIONS.map(opt => ({
+    ...opt,
+    exists: existingCodes.has(opt.value)
+  }))
 })
 
 /** 新建模式下选择角色名 → 自动填充 roleCode */
