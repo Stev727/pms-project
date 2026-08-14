@@ -69,11 +69,11 @@ export const useRenderLayout = () => {
         <div
           class={[
             `${prefixCls}-content`,
-            'absolute top-0 h-[100%]',
+            'absolute top-0 h-[100%] !h-screen',
             {
-              'w-[calc(100%-var(--left-menu-min-width))] left-[var(--left-menu-min-width)]':
+              'w-[calc(100%-var(--left-menu-min-width))] !left-[var(--left-menu-min-width)]':
                 collapse.value && !mobile.value && !mobile.value,
-              'w-[calc(100%-var(--left-menu-max-width))] left-[var(--left-menu-max-width)]':
+              'w-[calc(100%-var(--left-menu-max-width))] !left-[var(--left-menu-max-width)]':
                 !collapse.value && !mobile.value && !mobile.value,
               'fixed !w-full !left-0': mobile.value
             }
