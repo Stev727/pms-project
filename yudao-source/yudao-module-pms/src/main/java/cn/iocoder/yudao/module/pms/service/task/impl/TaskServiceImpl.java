@@ -82,9 +82,9 @@ public class TaskServiceImpl implements TaskService {
 
     /**
      * 前端基础 URL（用于拼接任务详情跳转地址，与钉钉通知卡片/待办配合实现"点击直达"）
-     * 配置项：pms.notify.frontend-base-url，默认 https://pms.topsun.com
+     * 配置项：pms.notify.frontend-base-url，默认 https://pms.topsunpower.cc
      */
-    @org.springframework.beans.factory.annotation.Value("${pms.notify.frontend-base-url:https://pms.topsun.com}")
+    @org.springframework.beans.factory.annotation.Value("${pms.notify.frontend-base-url:https://pms.topsunpower.cc}")
     private String frontendBaseUrl;
 
     /**
