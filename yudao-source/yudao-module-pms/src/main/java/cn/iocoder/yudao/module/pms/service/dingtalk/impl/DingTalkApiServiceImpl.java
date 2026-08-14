@@ -256,9 +256,11 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
                 }
             } else {
                 // 纯文本（无详情链接时降级）
+                // 注意：钉钉 sampleText 模板的变量名是 "content"（不是 "text"），
+                //       若字段不匹配钉钉会原样显示模板占位符 #content#
                 body.set("msgKey", "sampleText");
                 JSONObject textParam = new JSONObject();
-                textParam.set("text", title + "\n\n" + content);
+                textParam.set("content", title + "\n\n" + content);
                 body.set("msgParam", textParam.toString());
             }
             try {
