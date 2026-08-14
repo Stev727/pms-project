@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.pms.job;
 
+import cn.iocoder.yudao.framework.tenant.core.util.TenantUtils;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
 import javax.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +26,8 @@ public class PmsDingTalkNotifyJob {
     public void executeDailyNotify() {
         log.info("[PmsDingTalkNotifyJob] 开始执行每日通知检查...");
         try {
-            dingTalkNotifyService.executeDailyNotifyCheck();
+            // 定时任务线程无租户上下文，需显式指定租户，否则 TenantContextHolder 抛异常
+            TenantUtils.execute(1L, () -> dingTalkNotifyService.executeDailyNotifyCheck());
         } catch (Exception e) {
             log.error("[PmsDingTalkNotifyJob] 每日通知检查异常", e);
         }
