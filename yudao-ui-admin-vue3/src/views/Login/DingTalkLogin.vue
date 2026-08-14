@@ -37,6 +37,9 @@ import { useRouter } from 'vue-router'
 import { Loading, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import * as LoginApi from '@/api/login'
 import * as authUtil from '@/utils/auth'
+import { useUserStoreWithOut } from '@/store/modules/user'
+import { usePermissionStoreWithOut } from '@/store/modules/permission'
+import { getFirstMenuPath } from '@/utils/loginRedirect'
 
 defineOptions({ name: 'DingTalkLogin' })
 
@@ -113,13 +116,17 @@ async function dingTalkLogin() {
       return
     }
 
-    // 5. 存储 token，跳转首页
+    // 5. 存储 token，按权限跳转到第一个菜单页（替代固定 dashboard 首页）
     status.value = 'success'
     statusText.value = '登录成功，正在跳转...'
     authUtil.setToken(res)
-    setTimeout(() => {
-      router.push('/')
-    }, 500)
+    const userStore = useUserStoreWithOut()
+    const permissionStore = usePermissionStoreWithOut()
+    if (!userStore.getIsSetUser) {
+      await userStore.setUserInfoAction()
+    }
+    await permissionStore.generateRoutes()
+    router.push(getFirstMenuPath())
 
   } catch (err: any) {
     status.value = 'error'
