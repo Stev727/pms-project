@@ -1,9 +1,9 @@
 <template>
   <div
     :class="prefixCls"
-    class="relative h-[100%] lt-md:px-10px lt-sm:px-10px lt-xl:px-10px lt-xl:px-10px"
+    class="relative h-[100%] w-full lt-md:px-10px lt-sm:px-10px lt-xl:px-10px lt-xl:px-10px"
   >
-    <div class="relative mx-auto h-full flex">
+    <div class="relative mx-auto h-full w-full flex">
       <div
         :class="`${prefixCls}__left flex-1 bg-gray-500 bg-opacity-20 relative p-30px lt-xl:hidden overflow-x-hidden overflow-y-auto`"
       >
