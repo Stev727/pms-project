@@ -393,9 +393,10 @@ async function submitCreate() {
 
 async function handleDownloadTemplate() {
   try {
-    // request.download 返回完整 axios 响应，response.data 为 Excel 的 Blob
-    const response = (await getMaterialImportTemplate(props.projectId)) as any
-    const blob = response.data as Blob
+    // request.download 设 responseType=blob，axios 拦截器对非JSON blob 直接返回 Blob 本身
+    // （见 service.ts:153-161：blob 且 type!=='application/json' 时 return response.data）
+    // 所以 getMaterialImportTemplate() 的返回值就是 Blob，无需再取 .data
+    const blob = (await getMaterialImportTemplate(props.projectId)) as Blob
     download.excel(blob, '物料跟踪导入模板.xlsx')
     ElMessage.success('模板下载成功')
   } catch (e: any) {
@@ -418,14 +419,17 @@ async function handleImportFileChange(event: Event) {
 
   try {
     ElMessage.info('正在导入，请稍候...')
-    // request.upload 返回完整 axios 响应，按 content-type 区分 JSON 成功回执 / blob 错误 Excel
-    const response = (await importMaterialTrack(props.projectId, file)) as any
-    const blob = response.data as Blob
-    const contentType = (response.headers?.['content-type'] || '') as string
+    // postOriginal + responseType=blob：
+    //   成功 → 拦截器解析 JSON blob，返回 { code:0, data:{success, successCount} }
+    //   失败(校验不通过) → 拦截器透传 Excel Blob
+    const result = (await importMaterialTrack(props.projectId, file)) as any
 
-    if (contentType.includes('application/json')) {
+    if (result instanceof Blob) {
+      // 校验失败 → 后端返回错误 Excel（blob），触发浏览器下载
+      download.excel(result, '物料跟踪导入错误.xlsx')
+      ElMessage.warning('导入数据校验未通过，已自动下载错误明细，请修正后重试')
+    } else {
       // 成功回执：CommonResult<MaterialTrackImportRespVO>
-      const result = JSON.parse(await blob.text())
       if (result.code !== 0) throw new Error(result.msg || '导入失败')
       if (result.data?.success) {
         ElMessage.success(`导入成功！共导入 ${result.data.successCount || 0} 条物料`)
@@ -433,10 +437,6 @@ async function handleImportFileChange(event: Event) {
       } else {
         ElMessage.warning('导入数据校验未通过，请检查数据')
       }
-    } else {
-      // 校验失败 → 后端返回错误 Excel（blob），触发浏览器下载
-      download.excel(blob, '物料跟踪导入错误.xlsx')
-      ElMessage.warning('导入数据校验未通过，已自动下载错误明细，请修正后重试')
     }
   } catch (e: any) {
     console.error('导入失败', e)
