@@ -50,15 +50,38 @@
     <ContentWrap>
       <div class="list-toolbar">
         <span>共 {{ filteredData.length }} 条物料记录</span>
-        <el-button
-          type="primary"
-          size="small"
-          @click="openCreateDialog"
-          v-if="checkPermi(['pms:material:create']) && can(PERM.MATERIAL_ADD)"
-          class="mr-8px"
-        >
-          <el-icon><Plus /></el-icon> 新增物料
-        </el-button>
+        <div class="toolbar-actions">
+          <el-button
+            size="small"
+            @click="handleDownloadTemplate"
+            v-if="checkPermi(['pms:material:query'])"
+          >
+            <el-icon><Download /></el-icon> 下载模板
+          </el-button>
+          <el-button
+            size="small"
+            @click="triggerImport"
+            v-if="checkPermi(['pms:material:create']) && can(PERM.MATERIAL_ADD)"
+          >
+            <el-icon><Upload /></el-icon> 导入
+          </el-button>
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".xlsx,.xls"
+            style="display: none"
+            @change="handleImportFileChange"
+          />
+          <el-button
+            type="primary"
+            size="small"
+            @click="openCreateDialog"
+            v-if="checkPermi(['pms:material:create']) && can(PERM.MATERIAL_ADD)"
+            class="ml-8px"
+          >
+            <el-icon><Plus /></el-icon> 新增物料
+          </el-button>
+        </div>
       </div>
       <el-table :data="filteredData" border size="small" v-loading="loading" @row-click="openDetail">
         <el-table-column label="状态" width="90" align="center">
@@ -123,17 +146,17 @@
 
     <!-- 新增物料弹窗（无项目选择字段） -->
     <el-dialog v-model="createDialogVisible" title="新增物料" width="560px" :close-on-click-modal="false">
-      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
+      <el-form :model="createForm" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="24">
-            <el-form-item label="物料名称" prop="materialName" required>
+            <el-form-item label="物料名称" required>
               <el-input v-model="createForm.materialName" placeholder="请输入物料名称" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="物料编码" prop="materialCode" required>
+            <el-form-item label="物料编码">
               <el-input v-model="createForm.materialCode" placeholder="请输入物料编码" />
             </el-form-item>
           </el-col>
@@ -145,7 +168,7 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="数量" prop="quantity" required>
+            <el-form-item label="数量">
               <el-input-number v-model="createForm.quantity" :min="0" :precision="2" style="width: 100%" />
             </el-form-item>
           </el-col>
@@ -187,11 +210,13 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Close } from '@element-plus/icons-vue'
+import { Plus, Close, Download, Upload } from '@element-plus/icons-vue'
 import {
   getMaterialTrackList,
   createMaterialTrack,
   updateMaterialTrack,
+  getMaterialImportTemplate,
+  importMaterialTrack,
   MaterialTrackVO
 } from '@/api/pms/material'
 import { formatDate } from '../pms-utils'
@@ -212,13 +237,7 @@ const loading = ref(false)
 const tableData = ref<MaterialTrackVO[]>([])
 const createDialogVisible = ref(false)
 const submitting = ref(false)
-const createFormRef = ref()
-const createRules = {
-  materialName: [{ required: true, message: '请输入物料名称', trigger: 'blur' }],
-  materialCode: [{ required: true, message: '请输入物料编码', trigger: 'blur' }],
-  quantity: [{ required: true, message: '请输入数量', trigger: 'blur' }]
-}
-
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const createForm = reactive({
   materialName: '',
   materialCode: '',
@@ -239,11 +258,15 @@ const filteredData = computed(() => {
 
 const statCards = computed(() => {
   const data = filteredData.value
+  // 按 currentStatus 业务状态分类（与表格数据一致）
+  const notOrdered = data.filter(m => !m.currentStatus || m.currentStatus === 'not_ordered').length
+  const ordered = data.filter(m => m.currentStatus === 'ordered' || m.currentStatus === 'delayed').length
+  const delivered = data.filter(m => m.currentStatus === 'delivered').length
   return [
-    { key: 'total', label: '总物料数', value: data.length, iconRef: 'ep:box', color: '#2468F2', bg: '#DCE7FF' },
-    { key: 'normal', label: '正常', value: data.filter(m => m.warningStatus === 'normal').length, iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' },
-    { key: 'warning', label: '预警中', value: data.filter(m => m.warningStatus === 'warning').length, iconRef: 'ep:warning', color: '#FF7D00', bg: '#FFF7E8' },
-    { key: 'urgent', label: '紧急', value: data.filter(m => m.warningStatus === 'urgent').length, iconRef: 'ep:circle-close', color: '#F53F3F', bg: '#FFECE8' }
+    { key: 'total', label: '总物料', value: data.length, iconRef: 'ep:box', color: '#2468F2', bg: '#DCE7FF' },
+    { key: 'not_ordered', label: '未下单', value: notOrdered, iconRef: 'ep:document', color: '#86909C', bg: '#F2F3F5' },
+    { key: 'ordered', label: '已采购', value: ordered, iconRef: 'ep:shopping-cart', color: '#00B42A', bg: '#E8FFEA' },
+    { key: 'delivered', label: '已到货', value: delivered, iconRef: 'ep:circle-check', color: '#2468F2', bg: '#DCE7FF' }
   ]
 })
 
@@ -335,9 +358,10 @@ function openCreateDialog() {
 }
 
 async function submitCreate() {
-  try {
-    await createFormRef.value?.validate()
-  } catch(e) { return }
+  if (!createForm.materialName) {
+    ElMessage.warning('请填写物料名称')
+    return
+  }
   submitting.value = true
   try {
     await createMaterialTrack({
@@ -361,6 +385,53 @@ async function submitCreate() {
     ElMessage.error(e?.message || '创建失败')
   } finally {
     submitting.value = false
+  }
+}
+
+// ==================== 导入模板功能 ====================
+
+async function handleDownloadTemplate() {
+  try {
+    await getMaterialImportTemplate(props.projectId)
+    ElMessage.success('模板下载成功')
+  } catch (e: any) {
+    console.error('下载模板失败', e)
+    ElMessage.error(e?.message || '模板下载失败')
+  }
+}
+
+function triggerImport() {
+  fileInputRef.value?.click()
+}
+
+async function handleImportFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  // 重置 input 以便同一文件可重复选择
+  input.value = ''
+
+  try {
+    ElMessage.info('正在导入，请稍候...')
+    const res = await importMaterialTrack(props.projectId, file) as any
+    if (res && res.data) {
+      if (res.data.success) {
+        ElMessage.success(`导入成功！共导入 ${res.data.successCount || 0} 条物料`)
+        await loadData()
+      } else {
+        // 校验失败 → 浏览器会自动下载错误 Excel（响应为文件流）
+        ElMessage.warning('部分数据校验失败，已自动下载错误报告，请修正后重试')
+      }
+    }
+  } catch (e: any) {
+    // 如果是 Blob 类型响应（错误 Excel），浏览器应该已经自动下载了
+    if (e?.responseType === 'blob' || e instanceof Blob) {
+      ElMessage.warning('导入数据有误，已下载错误报告，请修正后重试')
+    } else {
+      console.error('导入失败', e)
+      ElMessage.error(e?.message || '导入失败')
+    }
   }
 }
 
@@ -407,10 +478,11 @@ defineExpose({ refresh: loadData })
   .list-toolbar {
     display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
   }
+  .toolbar-actions { display: flex; gap: 8px; align-items: center; }
+  .ml-8px { margin-left: 8px; }
   .drawer-header { display: flex; align-items: center; gap: 12px; width: 100%; }
   .material-title { font-size: 16px; font-weight: 600; flex: 1; }
 }
 .mb-16px { margin-bottom: 16px; }
 .mr-8px { margin-right: 8px; }
 </style>
-

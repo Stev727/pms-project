@@ -1,6 +1,11 @@
 package cn.iocoder.yudao.module.pms.controller.admin.materialtrack;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.framework.excel.core.util.ExcelUtils;
+import cn.iocoder.yudao.module.pms.controller.admin.materialtrack.vo.MaterialTrackImportErrorExcel;
+import cn.iocoder.yudao.module.pms.controller.admin.materialtrack.vo.MaterialTrackImportExcel;
+import cn.iocoder.yudao.module.pms.controller.admin.materialtrack.vo.MaterialTrackImportRespVO;
+import cn.iocoder.yudao.module.pms.dal.dataobject.materialtrack.PmsMaterialTrackDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.materialtrack.PmsMaterialTrackDO;
 import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
 import cn.iocoder.yudao.module.pms.service.materialtrack.MaterialTrackService;
@@ -29,6 +34,15 @@ import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
  *  - ProjectPermissionService 以 @Autowired(required=false) 注入，#2 未部署时为 null，
  *    菜单级 @PreAuthorize 兜底（与 README_任务模块.md §3.2 一致）
  */
+
+import cn.hutool.json.JSONUtil;
+import org.springframework.web.multipart.MultipartFile;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
 @Tag(name = "管理后台 - 物料跟踪")
 @RestController
 @RequestMapping("/pms/material-track")
@@ -100,6 +114,59 @@ public class MaterialTrackController {
             requireProjectPerm(projectId, PmsPermKeyEnum.MATERIAL_VIEW.getKey());
         }
         return success(materialTrackService.getMaterialTrackList(projectId));
+    }
+
+
+
+    // ==================== Excel 批量导入 ====================
+
+    @GetMapping("/get-import-template")
+    @Operation(summary = "下载物料跟踪导入模板")
+    @Parameter(name = "projectId", description = "项目ID（可选，仅用于权限校验）", required = false)
+    @PreAuthorize("@ss.hasPermission('pms:material:query')")
+    public void getImportTemplate(HttpServletResponse response,
+                                  @RequestParam(value = "projectId", required = false) Long projectId) throws IOException {
+        if (projectId != null) {
+            requireProjectPerm(projectId, PmsPermKeyEnum.MATERIAL_VIEW.getKey());
+        }
+        List<MaterialTrackImportExcel> demo = Arrays.asList(
+                MaterialTrackImportExcel.builder()
+                        .materialName("示例：无刷电机 60V 2000W")
+                        .materialCode("WCL-001")
+                        .supplier("示例供应商")
+                        .quantity(new java.math.BigDecimal("10"))
+                        .unit("个")
+                        .planOrderDate(java.time.LocalDate.of(2026, 8, 20))
+                        .planDeliveryDate(java.time.LocalDate.of(2026, 9, 1))
+                        .currentStatus("not_ordered")
+                        .build()
+        );
+        ExcelUtils.write(response, "物料跟踪导入模板.xlsx", "物料跟踪", MaterialTrackImportExcel.class, demo);
+    }
+
+    @PostMapping("/import")
+    @Operation(summary = "Excel 批量导入物料跟踪")
+    @io.swagger.v3.oas.annotations.Parameters({
+            @io.swagger.v3.oas.annotations.Parameter(name = "file", description = "Excel 文件", required = true),
+            @io.swagger.v3.oas.annotations.Parameter(name = "projectId", description = "项目ID（导入归属项目）", required = true)
+    })
+    @PreAuthorize("@ss.hasPermission('pms:material:create')")
+    public void importExcel(@RequestParam("file") MultipartFile file,
+                            @RequestParam("projectId") Long projectId,
+                            HttpServletResponse response) throws IOException {
+        requireProjectPerm(projectId, PmsPermKeyEnum.MATERIAL_ADD.getKey());
+
+        List<MaterialTrackImportExcel> rows = ExcelUtils.read(file, MaterialTrackImportExcel.class);
+        MaterialTrackImportRespVO result = materialTrackService.importMaterialTrackList(projectId, rows);
+
+        if (result.getSuccess()) {
+            response.setContentType("application/json;charset=UTF-8");
+            CommonResult<MaterialTrackImportRespVO> cr = CommonResult.success(result);
+            response.getWriter().write(JSONUtil.toJsonStr(cr));
+        } else {
+            ExcelUtils.write(response, "物料跟踪导入错误.xlsx", "错误行",
+                    MaterialTrackImportErrorExcel.class, result.getFailureRows());
+        }
     }
 
 }

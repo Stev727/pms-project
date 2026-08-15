@@ -58,3 +58,25 @@ export const getMaterialTrackList = (projectId?: string | number) => {
   return request.get({ url })
 }
 
+/**
+ * 下载物料跟踪导入模板
+ * @param projectId 项目ID（可选，用于权限校验）
+ */
+export const getMaterialImportTemplate = (projectId?: string | number) => {
+  const url = projectId
+    ? '/pms/material-track/get-import-template?projectId=' + projectId
+    : '/pms/material-track/get-import-template'
+  return request.download({ url })
+}
+
+/**
+ * Excel 批量导入物料跟踪
+ * @param projectId 项目ID（导入归属项目）
+ * @param file Excel 文件
+ */
+export const importMaterialTrack = (projectId: string | number, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('projectId', String(projectId))
+  return request.post({ url: '/pms/material-track/import', data: formData, headers: { 'Content-Type': 'multipart/form-data' } })
+}

@@ -1,5 +1,7 @@
 package cn.iocoder.yudao.module.pms.service.materialtrack;
 
+import cn.iocoder.yudao.module.pms.controller.admin.materialtrack.vo.MaterialTrackImportExcel;
+import cn.iocoder.yudao.module.pms.controller.admin.materialtrack.vo.MaterialTrackImportRespVO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.materialtrack.PmsMaterialTrackDO;
 import java.util.List;
 
@@ -27,5 +29,11 @@ public interface MaterialTrackService {
      */
     List<PmsMaterialTrackDO> getMaterialTrackList(Long projectId);
 
-}
+    /**
+     * Excel 批量导入物料跟踪
+     *  - 整批校验 + 整批回滚（任一行校验失败则全部不落库）
+     *  - 校验失败返回错误行集合（含原始数据 + 错误信息），由 Controller 生成错误 Excel
+     */
+    MaterialTrackImportRespVO importMaterialTrackList(Long projectId, List<MaterialTrackImportExcel> rows);
 
+}

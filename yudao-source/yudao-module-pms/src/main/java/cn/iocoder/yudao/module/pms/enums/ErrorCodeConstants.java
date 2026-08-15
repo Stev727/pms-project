@@ -54,6 +54,7 @@ public interface ErrorCodeConstants {
 
     // ========== #10 物料跟踪 030 ==========
     ErrorCode MATERIAL_NOT_EXISTS = new ErrorCode(1_040_000_030, "物料跟踪记录不存在");
+    ErrorCode MATERIAL_IMPORT_EMPTY = new ErrorCode(1_040_000_031, "导入文件中没有数据行");
 
     // ========== #4 消息提醒 031 ==========
     ErrorCode DINGTALK_TODO_FAILED = new ErrorCode(1_040_000_031, "钉钉待办创建失败");
