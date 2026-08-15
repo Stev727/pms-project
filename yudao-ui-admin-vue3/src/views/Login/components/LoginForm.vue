@@ -95,8 +95,6 @@ import { useIcon } from '@/hooks/web/useIcon'
 
 import * as authUtil from '@/utils/auth'
 import { usePermissionStore } from '@/store/modules/permission'
-import { useUserStoreWithOut } from '@/store/modules/user'
-import { getFirstMenuPath } from '@/utils/loginRedirect'
 import * as LoginApi from '@/api/login'
 import { LoginStateEnum, useFormValid, useLoginState } from './useLogin'
 
@@ -214,13 +212,7 @@ const handleLogin = async (params: any) => {
     }
     authUtil.setToken(res)
     if (!redirect.value) {
-      // 按当前用户权限，默认进入第一个菜单页（替代固定 dashboard 首页）
-      const userStore = useUserStoreWithOut()
-      if (!userStore.getIsSetUser) {
-        await userStore.setUserInfoAction()
-      }
-      await permissionStore.generateRoutes()
-      redirect.value = getFirstMenuPath()
+      redirect.value = '/'
     }
     // 判断是否为SSO登录
     if (redirect.value.indexOf('sso') !== -1) {
