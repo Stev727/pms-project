@@ -206,7 +206,7 @@ async function closeIssue(row: any) {
       '关闭确认',
       { confirmButtonText: '确认关闭', cancelButtonText: '取消', type: 'warning' }
     )
-    await updateQualityIssue({ issueId: row.issueId, status: 'closed', closeTime: new Date().toISOString().split('T')[0] } as any)
+    await updateQualityIssue({ issueId: row.issueId, status: 'closed', closeTime: new Date().toISOString().slice(0, 19) } as any)
     await fetchList()
     ElMessage.success('问题已关闭')
   } catch (e) { if (e !== 'cancel') console.error(e) }
