@@ -222,6 +222,7 @@ import {
 import { formatDate } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useProjectPerm, PERM } from '@/hooks/pms/useProjectPerm'
+import download from '@/utils/download'
 
 defineOptions({ name: 'PmsMaterialTrackTab' })
 
@@ -392,7 +393,10 @@ async function submitCreate() {
 
 async function handleDownloadTemplate() {
   try {
-    await getMaterialImportTemplate(props.projectId)
+    // request.download 返回完整 axios 响应，response.data 为 Excel 的 Blob
+    const response = (await getMaterialImportTemplate(props.projectId)) as any
+    const blob = response.data as Blob
+    download.excel(blob, '物料跟踪导入模板.xlsx')
     ElMessage.success('模板下载成功')
   } catch (e: any) {
     console.error('下载模板失败', e)
@@ -414,24 +418,29 @@ async function handleImportFileChange(event: Event) {
 
   try {
     ElMessage.info('正在导入，请稍候...')
-    const res = await importMaterialTrack(props.projectId, file) as any
-    if (res && res.data) {
-      if (res.data.success) {
-        ElMessage.success(`导入成功！共导入 ${res.data.successCount || 0} 条物料`)
+    // request.upload 返回完整 axios 响应，按 content-type 区分 JSON 成功回执 / blob 错误 Excel
+    const response = (await importMaterialTrack(props.projectId, file)) as any
+    const blob = response.data as Blob
+    const contentType = (response.headers?.['content-type'] || '') as string
+
+    if (contentType.includes('application/json')) {
+      // 成功回执：CommonResult<MaterialTrackImportRespVO>
+      const result = JSON.parse(await blob.text())
+      if (result.code !== 0) throw new Error(result.msg || '导入失败')
+      if (result.data?.success) {
+        ElMessage.success(`导入成功！共导入 ${result.data.successCount || 0} 条物料`)
         await loadData()
       } else {
-        // 校验失败 → 浏览器会自动下载错误 Excel（响应为文件流）
-        ElMessage.warning('部分数据校验失败，已自动下载错误报告，请修正后重试')
+        ElMessage.warning('导入数据校验未通过，请检查数据')
       }
+    } else {
+      // 校验失败 → 后端返回错误 Excel（blob），触发浏览器下载
+      download.excel(blob, '物料跟踪导入错误.xlsx')
+      ElMessage.warning('导入数据校验未通过，已自动下载错误明细，请修正后重试')
     }
   } catch (e: any) {
-    // 如果是 Blob 类型响应（错误 Excel），浏览器应该已经自动下载了
-    if (e?.responseType === 'blob' || e instanceof Blob) {
-      ElMessage.warning('导入数据有误，已下载错误报告，请修正后重试')
-    } else {
-      console.error('导入失败', e)
-      ElMessage.error(e?.message || '导入失败')
-    }
+    console.error('导入失败', e)
+    ElMessage.error(e?.message || '导入失败')
   }
 }
 

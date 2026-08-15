@@ -71,6 +71,8 @@ export const getMaterialImportTemplate = (projectId?: string | number) => {
 
 /**
  * Excel 批量导入物料跟踪
+ *  - 用 request.upload 返回完整 axios 响应（含 response.data Blob 与 headers）
+ *    以便组件根据 content-type 区分「JSON 成功回执」与「blob 错误 Excel」
  * @param projectId 项目ID（导入归属项目）
  * @param file Excel 文件
  */
@@ -78,5 +80,5 @@ export const importMaterialTrack = (projectId: string | number, file: File) => {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('projectId', String(projectId))
-  return request.post({ url: '/pms/material-track/import', data: formData, headers: { 'Content-Type': 'multipart/form-data' } })
+  return request.upload({ url: '/pms/material-track/import', data: formData })
 }
