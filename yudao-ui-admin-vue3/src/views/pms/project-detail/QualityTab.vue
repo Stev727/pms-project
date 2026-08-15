@@ -38,7 +38,7 @@
         </template>
       </el-table-column>
       <el-table-column label="发现日期" width="100">
-        <template #default="{ row }">{{ formatDate(row.foundDate) }}</template>
+        <template #default="{ row }">{{ formatDate(row.discoveredDate) }}</template>
       </el-table-column>
       <el-table-column label="操作" width="180" align="center">
         <template #default="{ row }">
@@ -69,7 +69,7 @@
           <el-descriptions-item label="来源">{{ selected.source || '-' }}</el-descriptions-item>
           <el-descriptions-item label="责任人">{{ getUserName(selected.responsiblePerson) || selected.responsiblePerson || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ getStatusLabel(selected.status) }}</el-descriptions-item>
-          <el-descriptions-item label="发现日期">{{ formatDate(selected.foundDate) }}</el-descriptions-item>
+          <el-descriptions-item label="发现日期">{{ formatDate(selected.discoveredDate) }}</el-descriptions-item>
           <el-descriptions-item label="关闭日期">{{ formatDate(selected.closeTime) }}</el-descriptions-item>
           <el-descriptions-item label="问题描述" :span="2">{{ selected.issueDescription || '-' }}</el-descriptions-item>
           <el-descriptions-item label="根因分析" :span="2">{{ selected.rootCauseDetail || '-' }}</el-descriptions-item>
@@ -98,7 +98,7 @@
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="来源"><el-input v-model="newIssue.source" placeholder="测试/评审/现场" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="发现日期">
-            <el-date-picker v-model="newIssue.foundDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" class="w-full" />
+            <el-date-picker v-model="newIssue.discoveredDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" class="w-full" />
           </el-form-item></el-col>
         </el-row>
         <el-form-item label="根因分析"><el-input v-model="newIssue.rootCause" type="textarea" :rows="2" /></el-form-item>
@@ -142,7 +142,7 @@ const filteredList = computed(() => {
   return r
 })
 
-const newIssue = reactive({ description: '', severity: '', category: '', responsiblePerson: '', source: '', rootCause: '', solution: '', foundDate: '' })
+const newIssue = reactive({ description: '', severity: '', category: '', responsiblePerson: '', source: '', rootCause: '', solution: '', discoveredDate: '' })
 
 // ==================== 字典数据 ====================
 const allDictData = ref<any[]>([])
@@ -227,7 +227,7 @@ async function submitIssue() {
         rootCauseDetail: newIssue.rootCause,
         solution: newIssue.solution,
         source: newIssue.source,
-        foundDate: newIssue.foundDate || undefined
+        discoveredDate: newIssue.discoveredDate || undefined
       } as any)
       ElMessage.success('问题已更新')
     } else {
@@ -244,7 +244,7 @@ async function submitIssue() {
         impactScope: '',
         projectId: props.projectId,
         status: 'open',
-        foundDate: new Date().toISOString().split('T')[0]
+        discoveredDate: new Date().toISOString().split('T')[0]
       } as any)
       ElMessage.success('问题已录入')
     }
@@ -252,7 +252,7 @@ async function submitIssue() {
     editingIssue.value = null
     const defaultSeverity = severityOptions.value[0]?.value || ''
     const defaultCategory = categoryOptions.value[0]?.value || ''
-    Object.assign(newIssue, { description: '', severity: defaultSeverity, category: defaultCategory, responsiblePerson: '', source: '', foundDate: '', rootCause: '', solution: '' })
+    Object.assign(newIssue, { description: '', severity: defaultSeverity, category: defaultCategory, responsiblePerson: '', source: '', discoveredDate: '', rootCause: '', solution: '' })
     await fetchList()
   } catch (e) { console.error(e) }
   finally { saving.value = false }
@@ -268,7 +268,7 @@ function editIssue(row: any) {
     category: row.rootCauseCategory || defaultCategory,
     responsiblePerson: row.responsiblePerson || '',
     source: row.source || '',
-    foundDate: row.foundDate || '',
+    discoveredDate: row.discoveredDate || '',
     rootCause: row.rootCauseDetail || '',
     solution: row.solution || ''
   })
