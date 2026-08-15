@@ -68,6 +68,9 @@
             <el-button link type="primary" @click="handleCopy(row)" v-hasPermi="['pms:template:create']">
               <Icon icon="ep:copy-document" />复制
             </el-button>
+            <el-button link type="danger" @click="handleDeleteTemplate(row)">
+              <Icon icon="ep:delete" />删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -104,6 +107,9 @@
                 <el-button link type="primary" @click="openEdit(tpl)" v-hasPermi="['pms:template:update']"><Icon icon="ep:edit" />编辑</el-button>
                 <el-button link type="primary" @click="handleCopy(tpl)" v-hasPermi="['pms:template:create']">
                   <Icon icon="ep:copy-document" />复制
+                </el-button>
+                <el-button link type="danger" @click="handleDeleteTemplate(tpl)">
+                  <Icon icon="ep:delete" />删除
                 </el-button>
               </div>
             </div>
@@ -365,7 +371,7 @@
 </template>
 
 <script setup lang="ts">
-import { getProjectList, updateProject, createProject, getTemplateUsageCount, ProjectVO } from '@/api/pms/project'
+import { getProjectList, updateProject, createProject, deleteProject, getTemplateUsageCount, ProjectVO } from '@/api/pms/project'
 import { getTaskList, updateTask, createTask, deleteTask, TaskVO } from '@/api/pms/task'
 import { getStageList, createStage, updateStage, deleteStage, StageVO } from '@/api/pms/stage'
 import { dateFormatter } from '@/utils/formatTime'
@@ -955,6 +961,20 @@ const confirmCopy = async () => {
   } finally {
     copySaving.value = false
   }
+}
+
+// 删除模板（超管可用）
+const handleDeleteTemplate = async (row: ProjectVO) => {
+  try {
+    await message.confirm(`确认删除模板「${row.projectName}」？删除后不可恢复，关联的阶段和任务也将被清除。`, '删除确认', {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deleteProject(row.projectId as any)
+    message.success('模板已删除')
+    getList()
+  } catch {}
 }
 
 onMounted(() => {

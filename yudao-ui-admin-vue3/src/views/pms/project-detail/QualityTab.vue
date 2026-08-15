@@ -24,7 +24,7 @@
         </template>
       </el-table-column>
       <el-table-column label="分类" width="100">
-        <template #default="{ row }">{{ getCategoryLabel(row.category) }}</template>
+        <template #default="{ row }">{{ getCategoryLabel(row.rootCauseCategory) }}</template>
       </el-table-column>
       <el-table-column label="来源" width="80">
         <template #default="{ row }">{{ row.source || '-' }}</template>
@@ -65,7 +65,7 @@
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="问题编号">{{ selected.issueCode }}</el-descriptions-item>
           <el-descriptions-item label="严重程度">{{ getSeverityLabel(selected.severity) }}</el-descriptions-item>
-          <el-descriptions-item label="分类">{{ getCategoryLabel(selected.category) }}</el-descriptions-item>
+          <el-descriptions-item label="分类">{{ getCategoryLabel(selected.rootCauseCategory) }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ selected.source || '-' }}</el-descriptions-item>
           <el-descriptions-item label="责任人">{{ getUserName(selected.responsiblePerson) || selected.responsiblePerson || '-' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ getStatusLabel(selected.status) }}</el-descriptions-item>
@@ -97,6 +97,9 @@
             </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="来源"><el-input v-model="newIssue.source" placeholder="测试/评审/现场" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="发现日期">
+            <el-date-picker v-model="newIssue.foundDate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" class="w-full" />
+          </el-form-item></el-col>
         </el-row>
         <el-form-item label="根因分析"><el-input v-model="newIssue.rootCause" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="解决方案"><el-input v-model="newIssue.solution" type="textarea" :rows="2" /></el-form-item>
@@ -139,7 +142,7 @@ const filteredList = computed(() => {
   return r
 })
 
-const newIssue = reactive({ description: '', severity: '', category: '', responsiblePerson: '', source: '', rootCause: '', solution: '' })
+const newIssue = reactive({ description: '', severity: '', category: '', responsiblePerson: '', source: '', rootCause: '', solution: '', foundDate: '' })
 
 // ==================== 字典数据 ====================
 const allDictData = ref<any[]>([])
@@ -223,7 +226,8 @@ async function submitIssue() {
         responsiblePerson: newIssue.responsiblePerson,
         rootCauseDetail: newIssue.rootCause,
         solution: newIssue.solution,
-        source: newIssue.source
+        source: newIssue.source,
+        foundDate: newIssue.foundDate || undefined
       } as any)
       ElMessage.success('问题已更新')
     } else {
@@ -239,7 +243,8 @@ async function submitIssue() {
         source: newIssue.source,
         impactScope: '',
         projectId: props.projectId,
-        status: 'open'
+        status: 'open',
+        foundDate: new Date().toISOString().split('T')[0]
       } as any)
       ElMessage.success('问题已录入')
     }
@@ -247,7 +252,7 @@ async function submitIssue() {
     editingIssue.value = null
     const defaultSeverity = severityOptions.value[0]?.value || ''
     const defaultCategory = categoryOptions.value[0]?.value || ''
-    Object.assign(newIssue, { description: '', severity: defaultSeverity, category: defaultCategory, responsiblePerson: '', source: '', rootCause: '', solution: '' })
+    Object.assign(newIssue, { description: '', severity: defaultSeverity, category: defaultCategory, responsiblePerson: '', source: '', foundDate: '', rootCause: '', solution: '' })
     await fetchList()
   } catch (e) { console.error(e) }
   finally { saving.value = false }
@@ -263,6 +268,7 @@ function editIssue(row: any) {
     category: row.rootCauseCategory || defaultCategory,
     responsiblePerson: row.responsiblePerson || '',
     source: row.source || '',
+    foundDate: row.foundDate || '',
     rootCause: row.rootCauseDetail || '',
     solution: row.solution || ''
   })
