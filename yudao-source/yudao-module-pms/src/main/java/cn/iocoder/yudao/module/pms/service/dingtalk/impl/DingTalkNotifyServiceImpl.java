@@ -121,11 +121,11 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
     @Override
     public boolean sendNotifyByRule(Long ruleId, Map<String, Object> templateVars, List<Long> receiverUserIds) {
         // 1. 获取通知规则
-        return sendNotifyByRule(ruleId, templateVars, receiverUserIds, null, null);
+        return sendNotifyByRule(ruleId, templateVars, receiverUserIds, null, null, null);
     }
 
     boolean sendNotifyByRule(Long ruleId, Map<String, Object> templateVars, List<Long> receiverUserIds,
-                             String businessType, Long businessId) {
+                             String businessType, Long businessId, String detailUrl) {
         PmsNotifyRuleDO rule = notifyRuleMapper.selectById(ruleId);
         if (rule == null || !"enabled".equals(rule.getStatus())) {
             log.warn("[DingTalkNotify] 通知规则不存在或未启用: ruleId={}", ruleId);
@@ -169,9 +169,9 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         String taskId;
         if (StrUtil.isNotBlank(config.getRobotCode())) {
             List<String> userIdArr = Arrays.asList(userIdList.split(","));
-            taskId = dingTalkApiService.sendRobotMessage(userIdArr, title, content, null);
+            taskId = dingTalkApiService.sendRobotMessage(userIdArr, title, content, detailUrl);
         } else {
-            taskId = dingTalkApiService.sendWorkNotification(userIdList, title, content, null);
+            taskId = dingTalkApiService.sendWorkNotification(userIdList, title, content, detailUrl);
         }
 
         // 6. 记录通知日志
@@ -184,7 +184,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
         // 8. #4 钉钉待办（按 triggerEvent 决定创建/完成，规则触发路径暂不支持详情 URL）
         handleDingTalkTodoSafely(rule.getTriggerEvent(), businessType, businessId,
-                receiverUserIds, title, content, null);
+                receiverUserIds, title, content, detailUrl);
 
         return taskId != null;
     }
@@ -278,17 +278,19 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
         LocalDate today = LocalDate.now();
 
+        // 跨规则去重：同一任务+同一人+同一事件+同一天只发一次
+        Set<String> sentKeys = new HashSet<>();
         for (PmsNotifyRuleDO rule : rules) {
-            processRule(rule, tasks, today);
+            processRule(rule, tasks, today, sentKeys);
         }
 
-        log.info("[DingTalkNotify] 每日通知检查完成");
+        log.info("[DingTalkNotify] 每日通知检查完成，当日已发送 {} 条(去重后)", sentKeys.size());
     }
 
     /**
      * 按规则统一分发处理（支持 T-N 提前提醒、逾期每日、逾期满 N 天、项目级作用域）
      */
-    private void processRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today) {
+    private void processRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today, Set<String> sentKeys) {
         String triggerEvent = rule.getTriggerEvent();
         if (StrUtil.isBlank(triggerEvent)) {
             return;
@@ -308,12 +310,12 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
         if (triggerEvent.startsWith("task_t_minus_")) {
             int days = parseSuffixDays(triggerEvent, "task_t_minus_", 3);
-            processAdvanceRule(rule, scopedTasks, today, days);
+            processAdvanceRule(rule, scopedTasks, today, days, sentKeys);
         } else if ("task_overdue".equals(triggerEvent)) {
-            processOverdueRule(rule, scopedTasks, today, 1);
+            processOverdueRule(rule, scopedTasks, today, 1, sentKeys);
         } else if (triggerEvent.startsWith("task_overdue_")) {
             int days = parseSuffixDays(triggerEvent, "task_overdue_", 1);
-            processOverdueRule(rule, scopedTasks, today, days);
+            processOverdueRule(rule, scopedTasks, today, days, sentKeys);
         } else {
             log.info("[DingTalkNotify] 跳过非定时扫描事件: triggerEvent={}", triggerEvent);
         }
@@ -334,7 +336,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
     /**
      * 处理提前提醒规则（计划结束前 N 个工作日）
      */
-    private void processAdvanceRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today, int daysBefore) {
+    private void processAdvanceRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today, int daysBefore, Set<String> sentKeys) {
         LocalDate targetDate = addWorkDays(today, daysBefore);
         String targetDateStr = targetDate.format(DATE_FMT);
 
@@ -350,16 +352,33 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             List<Long> receiverIds = computeReceivers(rule, task);
             if (receiverIds.isEmpty()) continue;
 
+            // 跨规则去重：跳过已发送的 (taskId + userId + event + date)
+            String dateStr = today.format(DATE_FMT);
+            receiverIds = receiverIds.stream()
+                    .filter(r -> {
+                        String key = task.getTaskId() + ":" + r + ":" + rule.getTriggerEvent() + ":" + dateStr;
+                        return sentKeys.add(key);
+                    })
+                    .collect(Collectors.toList());
+            if (receiverIds.isEmpty()) continue;
+
             PmsProjectDO project = projectMapper.selectById(task.getProjectId());
             String projectName = project != null ? project.getProjectName() : "";
 
-            Map<String, Object> vars = new HashMap<>();
-            vars.put("task_name", task.getTaskName());
-            vars.put("plan_end_date", taskEndDateStr);
-            vars.put("project_name", projectName);
-            vars.put("user_name", "");
+            String detailUrl = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + task.getTaskId();
 
-            boolean success = sendNotifyByRule(rule.getRuleId(), vars, receiverIds);
+            // 逐人构建模板变量（支持 user_name 个性化）
+            boolean success = true;
+            for (Long receiverId : receiverIds) {
+                Map<String, Object> vars = new HashMap<>();
+                vars.put("task_name", task.getTaskName());
+                vars.put("plan_end_date", taskEndDateStr);
+                vars.put("project_name", projectName);
+                vars.put("user_name", resolveUserName(receiverId));
+                if (!sendNotifyByRule(rule.getRuleId(), vars, Collections.singletonList(receiverId), "task", task.getTaskId(), detailUrl)) {
+                    success = false;
+                }
+            }
             log.info("[DingTalkNotify] 提前{}天提醒: task={}, receivers={}, success={}",
                     daysBefore, task.getTaskName(), receiverIds, success);
         }
@@ -368,7 +387,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
     /**
      * 处理逾期规则（延期满 minDelayDays 天触发；minDelayDays=1 即每日逾期提醒）
      */
-    private void processOverdueRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today, int minDelayDays) {
+    private void processOverdueRule(PmsNotifyRuleDO rule, List<PmsTaskDO> tasks, LocalDate today, int minDelayDays, Set<String> sentKeys) {
         for (PmsTaskDO task : tasks) {
             if (task.getPlanEndDate() == null) continue;
             if (task.getPlanEndDate().isAfter(today)) continue; // 未逾期
@@ -382,16 +401,34 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             List<Long> receiverIds = computeReceivers(rule, task);
             if (receiverIds.isEmpty()) continue;
 
+            // 跨规则去重：跳过已发送的 (taskId + userId + event + date)
+            String dateStr = today.format(DATE_FMT);
+            receiverIds = receiverIds.stream()
+                    .filter(r -> {
+                        String key = task.getTaskId() + ":" + r + ":" + rule.getTriggerEvent() + ":" + dateStr;
+                        return sentKeys.add(key);
+                    })
+                    .collect(Collectors.toList());
+            if (receiverIds.isEmpty()) continue;
+
             PmsProjectDO project = projectMapper.selectById(task.getProjectId());
             String projectName = project != null ? project.getProjectName() : "";
 
-            Map<String, Object> vars = new HashMap<>();
-            vars.put("task_name", task.getTaskName());
-            vars.put("delay_days", String.valueOf(delayDays));
-            vars.put("project_name", projectName);
-            vars.put("plan_end_date", task.getPlanEndDate().format(DATE_FMT));
+            String detailUrl = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + task.getTaskId();
 
-            boolean success = sendNotifyByRule(rule.getRuleId(), vars, receiverIds, "task", task.getTaskId());
+            // 逐人构建模板变量（支持 user_name 个性化）
+            boolean success = true;
+            for (Long receiverId : receiverIds) {
+                Map<String, Object> vars = new HashMap<>();
+                vars.put("task_name", task.getTaskName());
+                vars.put("delay_days", String.valueOf(delayDays));
+                vars.put("project_name", projectName);
+                vars.put("plan_end_date", task.getPlanEndDate().format(DATE_FMT));
+                vars.put("user_name", resolveUserName(receiverId));
+                if (!sendNotifyByRule(rule.getRuleId(), vars, Collections.singletonList(receiverId), "task", task.getTaskId(), detailUrl)) {
+                    success = false;
+                }
+            }
             log.info("[DingTalkNotify] 逾期提醒(满{}天): task={}, delayDays={}, rule={}, success={}",
                     minDelayDays, task.getTaskName(), delayDays, rule.getRuleName(), success);
         }
@@ -610,7 +647,28 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         }
     }
 
-    @Override
+
+    /**
+     * 根据系统用户ID解析用户昵称；查不到时返回空字符串
+     */
+    private String resolveUserName(Long userId) {
+        if (userId == null) return "";
+        try {
+            // 先从钉钉映射表查（有缓存），fallback 到 system_users
+            PmsDingTalkUserDO dingUser = dingTalkUserMapper.selectByUserId(userId);
+            if (dingUser != null && StrUtil.isNotBlank(dingUser.getName())) {
+                return dingUser.getName();
+            }
+            String nickname = jdbcTemplate.queryForObject(
+                    "SELECT nickname FROM system_users WHERE id = ? AND deleted = 0",
+                    String.class, userId);
+            return nickname != null ? nickname : "";
+        } catch (Exception e) {
+            log.warn("[DingTalkNotify] 解析用户名失败: userId={}", userId, e);
+            return "";
+        }
+    }
+
     public String renderTemplate(String template, Map<String, Object> vars) {
         if (StrUtil.isBlank(template) || vars == null || vars.isEmpty()) {
             return template;

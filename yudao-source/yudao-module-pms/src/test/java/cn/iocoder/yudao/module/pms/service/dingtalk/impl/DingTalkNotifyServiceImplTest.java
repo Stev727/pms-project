@@ -68,7 +68,7 @@ class DingTalkNotifyServiceImplTest {
         when(userMapper.selectListByUserIds(List.of(1353L))).thenReturn(List.of(user));
         when(apiService.sendWorkNotification(any(), any(), any(), any())).thenReturn("ding-task-1");
 
-        service.sendNotifyByRule(1L, Map.of(), List.of(1353L), "task", 20L);
+        service.sendNotifyByRule(1L, Map.of(), List.of(1353L), "task", 20L, null);
 
         org.mockito.ArgumentCaptor<PmsNotifyLogDO> captor =
                 org.mockito.ArgumentCaptor.forClass(PmsNotifyLogDO.class);
