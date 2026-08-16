@@ -17,6 +17,9 @@ import java.time.LocalDate;
 import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
+import org.springframework.beans.factory.annotation.Value;
+import java.util.Collections;
 
 @Service
 public class ChangeRecordServiceImpl implements ChangeRecordService {
@@ -29,13 +32,68 @@ public class ChangeRecordServiceImpl implements ChangeRecordService {
     private TaskMapper taskMapper;
     @Resource
     private SecurityFrameworkService securityFrameworkService;
+    @Resource
+    private DingTalkNotifyService dingTalkNotifyService;
+    @Value("${pms.notify.frontend-base-url:https://pms.topsunpower.cc}")
+    private String frontendBaseUrl;
 
     @Override
     public Long createChangeRecord(PmsChangeRecordDO entity) {
         entity.setApprovalStatus("pending");
         entity.setChangeStatus("pending_review");
+        // 自动指派审批人：优先任务审核人(reviewerId)，回退项目PM(projectManagerId)
+        if (entity.getApproverId() == null) {
+            Long approverId = resolveApprover(entity.getProjectId(), entity.getAffectedTasks());
+            entity.setApproverId(approverId);
+        }
         changeRecordMapper.insert(entity);
+        // 提交变更后通知审批人审核（钉钉工作通知 + 站内信 + 待办）
+        notifyApprover(entity);
         return entity.getChangeId();
+    }
+
+    /**
+     * 解析变更审批人：优先取任务审核人(reviewerId)，回退项目PM(projectManagerId)
+     */
+    private Long resolveApprover(Long projectId, String taskIdStr) {
+        if (taskIdStr != null && !taskIdStr.trim().isEmpty()) {
+            try {
+                PmsTaskDO task = taskMapper.selectById(Long.parseLong(taskIdStr.trim()));
+                if (task != null && task.getReviewerId() != null) {
+                    return task.getReviewerId();
+                }
+            } catch (NumberFormatException ignored) { }
+        }
+        PmsProjectDO project = projectMapper.selectById(projectId);
+        if (project != null && project.getProjectManagerId() != null) {
+            return project.getProjectManagerId();
+        }
+        return null;
+    }
+
+    /**
+     * 变更提交后通知审批人审核（钉钉工作通知 + 站内信 + 待办）
+     */
+    private void notifyApprover(PmsChangeRecordDO entity) {
+        if (entity.getApproverId() == null) return;
+        String taskName = "";
+        if (entity.getAffectedTasks() != null && !entity.getAffectedTasks().trim().isEmpty()) {
+            try {
+                PmsTaskDO task = taskMapper.selectById(Long.parseLong(entity.getAffectedTasks().trim()));
+                if (task != null && task.getTaskName() != null) taskName = task.getTaskName();
+            } catch (NumberFormatException ignored) { }
+        }
+        String title = "任务变更待审核";
+        String content = "任务【" + taskName + "】发起变更，变更编号 " + entity.getChangeCode() + "，请登录系统审核。";
+        String detailUrl = frontendBaseUrl + "/pms/project-detail/" + entity.getProjectId()
+                + "?taskId=" + entity.getAffectedTasks() + "&tab=changes";
+        try {
+            dingTalkNotifyService.sendNotifyDirect(title, content,
+                    Collections.singletonList(entity.getApproverId()),
+                    "task_change_submitted", "change", entity.getChangeId(), detailUrl);
+        } catch (Exception e) {
+            System.err.println("[PMS] 变更审核通知发送失败, changeId=" + entity.getChangeId() + ", error=" + e.getMessage());
+        }
     }
 
     @Override
@@ -135,6 +193,9 @@ public class ChangeRecordServiceImpl implements ChangeRecordService {
     private void requireProjectManager(PmsChangeRecordDO record, Long operatorId) {
         // super_admin 豁免
         if (securityFrameworkService.hasAnyRoles("super_admin")) return;
+        // 被指派的审批人本人可审核变更
+        if (record.getApproverId() != null && java.util.Objects.equals(record.getApproverId(), operatorId)) return;
+        // 项目管理员也可审核（兼容旧逻辑）
         PmsProjectDO project = projectMapper.selectById(record.getProjectId());
         if (project == null || !java.util.Objects.equals(project.getProjectManagerId(), operatorId)) {
             throw new ServiceException(cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);

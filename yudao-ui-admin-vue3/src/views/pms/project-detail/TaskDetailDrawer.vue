@@ -301,7 +301,7 @@
             <Icon icon="ep:user" class="mr-4px" />修改责任人
           </el-button>
         </template>
-        <el-button @click="handleCreateChange" v-if="task?.completeStatus === 'completed'">
+        <el-button @click="handleCreateChange" v-if="ALLOW_CHANGE_STATUSES.includes(task?.completeStatus)">
           <Icon icon="ep:edit-pen" class="mr-4px" />发起变更
         </el-button>
       </div>
@@ -501,6 +501,8 @@ const canApproveReview = computed(() => {
   return canReviewTask.value
 })
 const canRejectReview = computed(() => canApproveReview.value)
+// 允许发起变更的任务状态：任务创建后即可发起变更（走审核流程），不限于已完成
+const ALLOW_CHANGE_STATUSES = ['not_started', 'pending_accept', 'in_progress', 'delayed', 'paused', 'rejected', 'completion_pending_review', 'completed']
 // 添加子任务：层级未满 3 级且拥有任务创建菜单权限
 const canCreateSubtask = computed(() => {
   if (!task.value) return false

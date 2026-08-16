@@ -165,9 +165,9 @@
               v-if="canTransition(row, 'resume')"
               link type="primary" size="small" @click.stop="handleTransition(row, 'resume')"
             >恢复</el-button>
-            <!-- 已完成任务：发起变更入口 -->
+            <!-- 任务创建后即可发起变更（走审核流程），不限于已完成 -->
             <el-button
-              v-if="row.completeStatus === 'completed'"
+              v-if="ALLOW_CHANGE_STATUSES.includes(row.completeStatus)"
               link type="warning" size="small" @click.stop="handleChangeRequest(row)"
             >发起变更</el-button>
             <!-- 添加子任务（#1）：层级未达上限且拥有任务创建权限 -->
@@ -590,6 +590,9 @@ const transitionRules: Record<string, { from: string[]; to: string; label: strin
   pause: { from: ['in_progress'], to: 'paused', label: '暂停', roles: ['assignee', 'pm'] },
   resume: { from: ['delayed', 'paused'], to: 'in_progress', label: '恢复', roles: ['assignee', 'pm'] }
 }
+
+// 允许发起变更的任务状态：任务创建后即可发起变更（走审核流程），不限于已完成
+const ALLOW_CHANGE_STATUSES = ['not_started', 'pending_accept', 'in_progress', 'delayed', 'paused', 'rejected', 'completion_pending_review', 'completed']
 
 function canTransition(row: TreeRow, action: string): boolean {
   if (row.isStageRow) return false
