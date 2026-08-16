@@ -106,12 +106,29 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" align="center">
+        <el-table-column label="操作" width="240" align="center">
           <template #default="{ row }">
             <el-button link type="warning" size="small" @click.stop="urge(row)" v-if="row.warningStatus !== 'normal'">
               催交
             </el-button>
-            <el-button link type="primary" size="small" @click.stop="openEditDialog(row)">编辑</el-button>
+            <el-button
+              link
+              type="primary"
+              size="small"
+              @click.stop="openEditDialog(row)"
+              v-if="checkPermi(['pms:material:update']) && can(PERM.MATERIAL_EDIT)"
+            >
+              编辑
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              @click.stop="handleDelete(row)"
+              v-if="checkPermi(['pms:material:delete']) && can(PERM.MATERIAL_DELETE)"
+            >
+              删除
+            </el-button>
             <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button>
           </template>
         </el-table-column>
@@ -143,7 +160,20 @@
           </el-descriptions-item>
         </el-descriptions>
         <div style="margin-top: 16px; text-align: right">
-          <el-button type="primary" @click="openEditDialog(selectedMaterial)">编辑</el-button>
+          <el-button
+            type="primary"
+            @click="openEditDialog(selectedMaterial)"
+            v-if="checkPermi(['pms:material:update']) && can(PERM.MATERIAL_EDIT)"
+          >
+            编辑
+          </el-button>
+          <el-button
+            type="danger"
+            @click="handleDelete(selectedMaterial)"
+            v-if="checkPermi(['pms:material:delete']) && can(PERM.MATERIAL_DELETE)"
+          >
+            删除
+          </el-button>
         </div>
       </template>
     </el-drawer>
@@ -213,12 +243,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Close, Download, Upload } from '@element-plus/icons-vue'
 import {
   getMaterialTrackList,
   createMaterialTrack,
   updateMaterialTrack,
+  deleteMaterialTrack,
   getMaterialImportTemplate,
   importMaterialTrack,
   MaterialTrackVO
@@ -440,6 +471,27 @@ async function submitCreate() {
     ElMessage.error(e?.message || (isEdit.value ? '修改失败' : '创建失败'))
   } finally {
     submitting.value = false
+  }
+}
+
+async function handleDelete(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除物料「${row.materialName || row.trackId}」吗？删除后不可恢复。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '确定删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return // 用户取消
+  }
+  try {
+    await deleteMaterialTrack(row.trackId)
+    ElMessage.success('删除成功')
+    drawerVisible.value = false
+    await loadData()
+  } catch (e: any) {
+    console.error(e)
+    ElMessage.error(e?.message || '删除失败')
   }
 }
 
