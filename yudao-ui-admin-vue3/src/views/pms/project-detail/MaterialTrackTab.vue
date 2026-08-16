@@ -106,11 +106,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" align="center">
+        <el-table-column label="操作" width="180" align="center">
           <template #default="{ row }">
             <el-button link type="warning" size="small" @click.stop="urge(row)" v-if="row.warningStatus !== 'normal'">
               催交
             </el-button>
+            <el-button link type="primary" size="small" @click.stop="openEditDialog(row)">编辑</el-button>
             <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button>
           </template>
         </el-table-column>
@@ -141,11 +142,14 @@
             {{ selectedMaterial.quantity }} {{ selectedMaterial.unit }}
           </el-descriptions-item>
         </el-descriptions>
+        <div style="margin-top: 16px; text-align: right">
+          <el-button type="primary" @click="openEditDialog(selectedMaterial)">编辑</el-button>
+        </div>
       </template>
     </el-drawer>
 
     <!-- 新增物料弹窗（无项目选择字段） -->
-    <el-dialog v-model="createDialogVisible" title="新增物料" width="560px" :close-on-click-modal="false">
+    <el-dialog v-model="createDialogVisible" :title="isEdit ? '编辑物料' : '新增物料'" width="560px" :close-on-click-modal="false">
       <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="24">
@@ -238,6 +242,8 @@ const loading = ref(false)
 const tableData = ref<MaterialTrackVO[]>([])
 const createDialogVisible = ref(false)
 const submitting = ref(false)
+const isEdit = ref(false)
+const editTrackId = ref<string | number | null>(null)
 const createFormRef = ref<any>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const createForm = reactive({
@@ -355,17 +361,36 @@ function resetFilters() {
 }
 
 function openCreateDialog() {
+  isEdit.value = false
+  editTrackId.value = null
   Object.assign(createForm, {
     materialName: '',
     materialCode: '',
     supplier: '',
     quantity: undefined,
     unit: '',
-    planOrderDate: '',
+    planOrderDate: new Date().toISOString().split('T')[0], // 需求日期默认今天
     planDeliveryDate: '',
     currentStatus: 'not_ordered'
   })
   createFormRef.value?.resetFields()
+  createDialogVisible.value = true
+}
+
+function openEditDialog(row: any) {
+  isEdit.value = true
+  editTrackId.value = row.trackId
+  Object.assign(createForm, {
+    materialName: row.materialName || '',
+    materialCode: row.materialCode || '',
+    supplier: row.supplier || '',
+    quantity: row.quantity ?? undefined,
+    unit: row.unit || '',
+    planOrderDate: row.planOrderDate || '',
+    planDeliveryDate: row.planDeliveryDate || '',
+    currentStatus: row.currentStatus || 'not_ordered'
+  })
+  createFormRef.value?.clearValidate()
   createDialogVisible.value = true
 }
 
@@ -377,25 +402,42 @@ async function submitCreate() {
   }
   submitting.value = true
   try {
-    await createMaterialTrack({
-      // #10 关键：projectId 强制从 props 取（string，避免雪花ID精度丢失）
-      projectId: String(props.projectId),
-      materialName: createForm.materialName,
-      materialCode: createForm.materialCode || undefined,
-      supplier: createForm.supplier || undefined,
-      quantity: createForm.quantity,
-      unit: createForm.unit || undefined,
-      planOrderDate: createForm.planOrderDate || undefined,
-      planDeliveryDate: createForm.planDeliveryDate || undefined,
-      currentStatus: createForm.currentStatus,
-      warningStatus: 'normal'
-    } as any)
-    ElMessage.success('物料创建成功')
+    // 编辑：补齐 trackId + projectId（projectId 来自 props，不可改）
+    if (isEdit.value && editTrackId.value != null) {
+      await updateMaterialTrack({
+        trackId: editTrackId.value,
+        projectId: String(props.projectId),
+        materialName: createForm.materialName,
+        materialCode: createForm.materialCode || undefined,
+        supplier: createForm.supplier || undefined,
+        quantity: createForm.quantity,
+        unit: createForm.unit || undefined,
+        planOrderDate: createForm.planOrderDate || undefined,
+        planDeliveryDate: createForm.planDeliveryDate || undefined,
+        currentStatus: createForm.currentStatus
+      } as any)
+      ElMessage.success('物料修改成功')
+    } else {
+      await createMaterialTrack({
+        // #10 关键：projectId 强制从 props 取（string，避免雪花ID精度丢失）
+        projectId: String(props.projectId),
+        materialName: createForm.materialName,
+        materialCode: createForm.materialCode || undefined,
+        supplier: createForm.supplier || undefined,
+        quantity: createForm.quantity,
+        unit: createForm.unit || undefined,
+        planOrderDate: createForm.planOrderDate || undefined,
+        planDeliveryDate: createForm.planDeliveryDate || undefined,
+        currentStatus: createForm.currentStatus,
+        warningStatus: 'normal'
+      } as any)
+      ElMessage.success('物料创建成功')
+    }
     createDialogVisible.value = false
     await loadData()
   } catch (e: any) {
     console.error(e)
-    ElMessage.error(e?.message || '创建失败')
+    ElMessage.error(e?.message || (isEdit.value ? '修改失败' : '创建失败'))
   } finally {
     submitting.value = false
   }
