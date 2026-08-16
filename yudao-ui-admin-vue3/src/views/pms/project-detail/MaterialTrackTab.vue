@@ -156,24 +156,24 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="物料编码">
+            <el-form-item label="物料编码" prop="materialCode">
               <el-input v-model="createForm.materialCode" placeholder="请输入物料编码" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="供应商">
+            <el-form-item label="供应商" prop="supplier">
               <el-input v-model="createForm.supplier" placeholder="请输入供应商" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="数量">
+            <el-form-item label="数量" prop="quantity">
               <el-input-number v-model="createForm.quantity" :min="0" :precision="2" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="单位">
+            <el-form-item label="单位" prop="unit">
               <el-input v-model="createForm.unit" placeholder="如：个/套/件" />
             </el-form-item>
           </el-col>
@@ -254,8 +254,10 @@ const createForm = reactive({
 /** 新增物料表单校验规则 */
 const createRules = {
   materialName: [{ required: true, message: '请填写物料名称', trigger: 'blur' }],
+  materialCode: [{ required: true, message: '请填写物料编码', trigger: 'blur' }],
   supplier: [{ required: true, message: '请填写供应商', trigger: 'blur' }],
-  quantity: [{ required: true, message: '请填写数量', trigger: 'blur' }]
+  quantity: [{ required: true, message: '请填写数量', trigger: 'blur' }],
+  unit: [{ required: true, message: '请填写单位', trigger: 'blur' }]
 }
 
 const filteredData = computed(() => {
