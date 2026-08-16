@@ -146,10 +146,10 @@
 
     <!-- 新增物料弹窗（无项目选择字段） -->
     <el-dialog v-model="createDialogVisible" title="新增物料" width="560px" :close-on-click-modal="false">
-      <el-form :model="createForm" label-width="100px">
+      <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="24">
-            <el-form-item label="物料名称" required>
+            <el-form-item label="物料名称" prop="materialName">
               <el-input v-model="createForm.materialName" placeholder="请输入物料名称" />
             </el-form-item>
           </el-col>
@@ -238,6 +238,7 @@ const loading = ref(false)
 const tableData = ref<MaterialTrackVO[]>([])
 const createDialogVisible = ref(false)
 const submitting = ref(false)
+const createFormRef = ref<any>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const createForm = reactive({
   materialName: '',
@@ -249,6 +250,13 @@ const createForm = reactive({
   planDeliveryDate: '',
   currentStatus: 'not_ordered'
 })
+
+/** 新增物料表单校验规则 */
+const createRules = {
+  materialName: [{ required: true, message: '请填写物料名称', trigger: 'blur' }],
+  supplier: [{ required: true, message: '请填写供应商', trigger: 'blur' }],
+  quantity: [{ required: true, message: '请填写数量', trigger: 'blur' }]
+}
 
 const filteredData = computed(() => {
   let result = tableData.value
@@ -355,13 +363,15 @@ function openCreateDialog() {
     planDeliveryDate: '',
     currentStatus: 'not_ordered'
   })
+  createFormRef.value?.resetFields()
   createDialogVisible.value = true
 }
 
 async function submitCreate() {
-  if (!createForm.materialName) {
-    ElMessage.warning('请填写物料名称')
-    return
+  try {
+    await createFormRef.value?.validate()
+  } catch {
+    return // 校验未通过，Element Plus 自动展示错误提示
   }
   submitting.value = true
   try {
