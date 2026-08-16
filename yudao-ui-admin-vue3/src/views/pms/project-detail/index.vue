@@ -173,9 +173,7 @@
 
         <!-- 变更 Tab (NEW - SEVERE-4 修复) -->
         <el-tab-pane label="变更记录" name="changes">
-          <template v-show="activeTab === 'changes'">
-            <ChangesTab :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
-          </template>
+          <ChangesTab v-show="activeTab === 'changes'" :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
         </el-tab-pane>
 
         <!-- 物料跟踪 Tab (NEW - #10 物料跟踪嵌入项目详情) -->
