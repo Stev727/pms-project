@@ -173,7 +173,7 @@
 
         <!-- 变更 Tab (NEW - SEVERE-4 修复) -->
         <el-tab-pane label="变更记录" name="changes">
-          <template v-if="activeTab === 'changes'">
+          <template v-show="activeTab === 'changes'">
             <ChangesTab :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
           </template>
         </el-tab-pane>
@@ -743,7 +743,6 @@ const handleEdit = () => {
 }
 
 const handleStartChange = (task?: any) => {
-  activeTab.value = 'changes'
   nextTick(() => {
     changesTabRef.value?.refresh?.()
     // 如果传了任务，自动打开发起变更对话框并预填任务
