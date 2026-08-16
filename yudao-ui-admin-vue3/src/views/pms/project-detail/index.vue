@@ -173,7 +173,7 @@
 
         <!-- 变更 Tab (NEW - SEVERE-4 修复) -->
         <el-tab-pane label="变更记录" name="changes">
-          <ChangesTab v-if="activeTab === 'changes'" :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" @form-closed="onFormClosed" />
+          <ChangesTab v-if="activeTab === 'changes'" :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
         </el-tab-pane>
 
         <!-- 物料跟踪 Tab (NEW - #10 物料跟踪嵌入项目详情) -->
@@ -194,6 +194,7 @@
 
     <!-- 任务详情抽屉 -->
     <TaskDetailDrawer ref="taskDrawerRef" :project="project" @refresh="onTaskDataRefresh" @create-change="handleStartChange" @create-subtask="handleAddSubtask" />
+    <ChangeFormDialog ref="changeFormRef" :project-id="projectId" :tasks="projectTasks" @submitted="onTaskDataRefresh" />
 
     <!-- P0: 项目编辑弹窗 -->
     <ProjectForm ref="projectFormRef" @success="loadProjectData" />
@@ -320,6 +321,7 @@ import MembersTab from './MembersTab.vue'
 import DocumentsTab from './DocumentsTab.vue'
 import ApprovalTab from './ApprovalTab.vue'
 import ChangesTab from './ChangesTab.vue'
+import ChangeFormDialog from './ChangeFormDialog.vue'
 import QualityTab from './QualityTab.vue'
 import ReviewCenterTab from './ReviewCenterTab.vue'
 import MaterialTrackTab from './MaterialTrackTab.vue' // #10 物料跟踪嵌入项目详情
@@ -391,6 +393,7 @@ const documentsTabRef = ref()
 const approvalTabRef = ref()
 const qualityTabRef = ref()
 const changesTabRef = ref()
+const changeFormRef = ref()
 const materialTrackTabRef = ref() // #10 物料跟踪 Tab
 const projectFormRef = ref()
 
@@ -740,24 +743,9 @@ const handleEdit = () => {
   }
 }
 
-const prevTabRef = ref('tasks')
-const fromTaskListFlag = ref(false)
 const handleStartChange = (task?: any) => {
-  prevTabRef.value = activeTab.value
-  fromTaskListFlag.value = true
-  activeTab.value = 'changes'
-  nextTick(() => {
-    changesTabRef.value?.refresh?.()
-    if (task?.taskId) {
-      nextTick(() => changesTabRef.value?.openChangeForm?.(String(task.taskId)))
-    }
-  })
-}
-const onFormClosed = () => {
-  if (fromTaskListFlag.value) {
-    activeTab.value = prevTabRef.value
-    fromTaskListFlag.value = false
-  }
+  // 直接弹出独立变更对话框，不切换 Tab，停留在当前页面
+  changeFormRef.value?.open(task?.taskId ? String(task.taskId) : undefined)
 }
 
 const handleCopyProject = () => {
