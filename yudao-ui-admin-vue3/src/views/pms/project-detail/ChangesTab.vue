@@ -484,6 +484,8 @@ const openChangeForm = (taskId?: string) => {
   showForm.value = true
 }
 
+const emit = defineEmits(['form-closed'])
+watch(showForm, (val) => { if (!val) emit('form-closed') })
 defineExpose({ refresh: fetchList, openChangeForm })
 </script>
 

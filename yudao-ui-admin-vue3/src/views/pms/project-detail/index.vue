@@ -173,7 +173,7 @@
 
         <!-- 变更 Tab (NEW - SEVERE-4 修复) -->
         <el-tab-pane label="变更记录" name="changes">
-          <ChangesTab v-show="activeTab === 'changes'" :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
+          <ChangesTab v-if="activeTab === 'changes'" :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" @form-closed="onFormClosed" />
         </el-tab-pane>
 
         <!-- 物料跟踪 Tab (NEW - #10 物料跟踪嵌入项目详情) -->
@@ -740,14 +740,24 @@ const handleEdit = () => {
   }
 }
 
+const prevTabRef = ref('tasks')
+const fromTaskListFlag = ref(false)
 const handleStartChange = (task?: any) => {
+  prevTabRef.value = activeTab.value
+  fromTaskListFlag.value = true
+  activeTab.value = 'changes'
   nextTick(() => {
     changesTabRef.value?.refresh?.()
-    // 如果传了任务，自动打开发起变更对话框并预填任务
     if (task?.taskId) {
       nextTick(() => changesTabRef.value?.openChangeForm?.(String(task.taskId)))
     }
   })
+}
+const onFormClosed = () => {
+  if (fromTaskListFlag.value) {
+    activeTab.value = prevTabRef.value
+    fromTaskListFlag.value = false
+  }
 }
 
 const handleCopyProject = () => {
