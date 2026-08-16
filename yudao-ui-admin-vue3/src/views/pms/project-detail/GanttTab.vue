@@ -200,9 +200,14 @@ const buildGanttData = () => {
   const links: any[] = []
   const isTaskMode = viewMode.value === 'task'
 
+  // 阶段按 sortOrder 排序，与任务列表(TaskListTab)保持一致，确保甘特图阶段顺序同步
+  const sortedStages = [...(props.stages || [])].sort(
+    (a: any, b: any) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)
+  )
+
   // 创建阶段作为父节点
   const stageMap = new Map<string, any>()
-  for (const stage of props.stages) {
+  for (const stage of sortedStages) {
     const stageId = `stage_${stage.stageId}`
     // 从子任务计算阶段开始/结束/工期
     const stageTasks = props.tasks.filter(t => String(t.stageId) === String(stage.stageId))
@@ -233,7 +238,19 @@ const buildGanttData = () => {
   if (isTaskMode) {
     let matchedCount = 0
     let orphanCount = 0
-    for (const task of props.tasks) {
+    // 任务按 (所属阶段 sortOrder, 任务自身 sortOrder) 排序，与任务列表顺序保持一致；
+    // 无阶段归属的任务排到最后（与 TaskListTab 处理一致）
+    const stageOrderOf = (task: any) => {
+      const idx = sortedStages.findIndex((s: any) => String(s.stageId) === String(task.stageId))
+      return idx === -1 ? Number.MAX_SAFE_INTEGER : idx
+    }
+    const sortedTasks = [...(props.tasks || [])].sort((a: any, b: any) => {
+      const sa = stageOrderOf(a)
+      const sb = stageOrderOf(b)
+      if (sa !== sb) return sa - sb
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)
+    })
+    for (const task of sortedTasks) {
       const parentStage = stageMap.get(String(task.stageId || ''))
       if (parentStage) { matchedCount++ } else { orphanCount++ }
       const isDelayed = calcDelayDays(task.planEndDate, task.completeStatus) > 0
