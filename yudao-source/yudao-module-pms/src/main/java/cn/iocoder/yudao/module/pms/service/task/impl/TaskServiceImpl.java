@@ -18,7 +18,10 @@ import cn.iocoder.yudao.module.pms.enums.PmsReviewPolicyEnum;
 import cn.iocoder.yudao.module.pms.enums.PmsTaskReviewStatusEnum;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskExportExcel;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
+import cn.iocoder.yudao.module.pms.dal.dataobject.projectstage.PmsProjectStageDO;
+import cn.iocoder.yudao.module.pms.service.projectstage.ProjectStageService;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
 import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
@@ -35,6 +38,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.DayOfWeek;
 import java.time.temporal.ChronoUnit;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -47,6 +51,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.function.Consumer;
+import java.util.HashMap;
+import java.util.Collections;
+import java.util.HashSet;
 import cn.hutool.core.util.StrUtil;
 
 /**
@@ -97,6 +104,54 @@ public class TaskServiceImpl implements TaskService {
      */
     private static final int ANCESTOR_GUARD = 32;
 
+    /**
+     * 任务类型 → 中文标签（与前端 pms-utils taskTypeOptions 保持一致）
+     */
+    private static final Map<String, String> TASK_TYPE_LABEL = new HashMap<>();
+    static {
+        TASK_TYPE_LABEL.put("design", "设计任务");
+        TASK_TYPE_LABEL.put("review", "评审任务");
+        TASK_TYPE_LABEL.put("testing", "测试任务");
+        TASK_TYPE_LABEL.put("procurement", "采购任务");
+        TASK_TYPE_LABEL.put("prototyping", "试制任务");
+        TASK_TYPE_LABEL.put("documentation", "文档任务");
+        TASK_TYPE_LABEL.put("approval", "审批任务");
+        TASK_TYPE_LABEL.put("supplier_synergy", "供应商协同");
+        TASK_TYPE_LABEL.put("other", "其他");
+        TASK_TYPE_LABEL.put("standard", "标准任务"); // 兼容历史数据占位值
+    }
+
+    /**
+     * 优先级 → 中文标签（与前端 pms-utils priorityOptions 保持一致）
+     */
+    private static final Map<String, String> PRIORITY_LABEL = new HashMap<>();
+    static {
+        PRIORITY_LABEL.put("urgent", "紧急");
+        PRIORITY_LABEL.put("high", "高");
+        PRIORITY_LABEL.put("medium", "中");
+        PRIORITY_LABEL.put("normal", "普通");
+        PRIORITY_LABEL.put("low", "低");
+    }
+
+    /**
+     * 完成状态 → 中文标签（与前端 pms-utils taskStatusMap 保持一致）
+     */
+    private static final Map<String, String> COMPLETE_STATUS_LABEL = new HashMap<>();
+    static {
+        COMPLETE_STATUS_LABEL.put("not_started", "未开始");
+        COMPLETE_STATUS_LABEL.put("pending_accept", "待接收");
+        COMPLETE_STATUS_LABEL.put("in_progress", "进行中");
+        COMPLETE_STATUS_LABEL.put("pending_review", "待审核");
+        COMPLETE_STATUS_LABEL.put("completion_pending_review", "待审核");
+        COMPLETE_STATUS_LABEL.put("completed", "已完成");
+        COMPLETE_STATUS_LABEL.put("delayed", "已延期");
+        COMPLETE_STATUS_LABEL.put("rejected", "已退回");
+        COMPLETE_STATUS_LABEL.put("paused", "已暂停");
+        COMPLETE_STATUS_LABEL.put("cancelled", "已取消");
+    }
+
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
     @Resource
     private TaskMapper taskMapper;
     @Resource
@@ -125,6 +180,12 @@ public class TaskServiceImpl implements TaskService {
      */
     @Resource
     private AdminUserApi adminUserApi;
+
+    /**
+     * 项目阶段 Service（#任务导出）：解析任务所属阶段名称
+     */
+    @Resource
+    private ProjectStageService projectStageService;
 
     /**
      * 项目级权限服务（#2 权限分级）。
@@ -1665,6 +1726,137 @@ public class TaskServiceImpl implements TaskService {
         if (hasStart) {
             task.setCycle((int) ChronoUnit.DAYS.between(task.getPlanStartDate(), task.getPlanEndDate()) + 1);
         }
+    }
+
+    // ==================== 任务导出（新增） ====================
+
+    @Override
+    public List<TaskExportExcel> exportTaskByProject(Long projectId) {
+        // 导出该项目全部任务（忽略页面筛选），与 getTaskTreeByProject 行为一致
+        List<PmsTaskDO> tasks = getTaskTreeByProject(projectId);
+        if (tasks == null || tasks.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 收集需要解析的用户 / 部门 / 阶段
+        Set<Long> userIds = new HashSet<>();
+        Set<Long> deptIds = new HashSet<>();
+        for (PmsTaskDO t : tasks) {
+            if (t.getMainOwnerId() != null) {
+                userIds.add(t.getMainOwnerId());
+            }
+            if (t.getDeptId() != null) {
+                deptIds.add(t.getDeptId());
+            }
+            if (StrUtil.isNotBlank(t.getHelperIds())) {
+                for (String s : t.getHelperIds().split(",")) {
+                    String id = s.trim();
+                    if (id.isEmpty()) {
+                        continue;
+                    }
+                    try {
+                        userIds.add(Long.parseLong(id));
+                    } catch (NumberFormatException ignored) {
+                        // 忽略非法 ID
+                    }
+                }
+            }
+        }
+
+        Map<Long, AdminUserRespDTO> userMap = userIds.isEmpty()
+                ? Collections.emptyMap() : adminUserApi.getUserMap(userIds);
+        Map<Long, DeptRespDTO> deptMap = deptIds.isEmpty()
+                ? Collections.emptyMap() : deptApi.getDeptMap(deptIds);
+
+        // 阶段名称映射（按项目过滤）
+        Map<Long, String> stageNameMap = new HashMap<>();
+        for (PmsProjectStageDO stage : projectStageService.getProjectStageList()) {
+            if (projectId.equals(stage.getProjectId())) {
+                stageNameMap.put(stage.getStageId(), stage.getStageName());
+            }
+        }
+
+        List<TaskExportExcel> rows = new ArrayList<>(tasks.size());
+        for (PmsTaskDO t : tasks) {
+            rows.add(TaskExportExcel.builder()
+                    .taskCode(t.getTaskCode())
+                    .taskName(t.getTaskName())
+                    .stageName(safe(stageNameMap.get(t.getStageId())))
+                    .mainOwnerName(nicknameOf(userMap, t.getMainOwnerId()))
+                    .helperNames(helperNames(userMap, t.getHelperIds()))
+                    .deptName(safe(deptNameOf(deptMap, t.getDeptId())))
+                    .taskTypeLabel(labelOf(TASK_TYPE_LABEL, t.getTaskType()))
+                    .priorityLabel(labelOf(PRIORITY_LABEL, t.getPriority()))
+                    .levelLabel((t.getLevel() == null ? 1 : t.getLevel()) + "级")
+                    .completeStatusLabel(labelOf(COMPLETE_STATUS_LABEL, t.getCompleteStatus()))
+                    .reviewStatusLabel(PmsTaskReviewStatusEnum.labelOf(t.getReviewStatus()))
+                    .progress(t.getProgress())
+                    .planStartDate(formatDate(t.getPlanStartDate()))
+                    .planEndDate(formatDate(t.getPlanEndDate()))
+                    .actualCompleteDate(formatDate(t.getActualCompleteDate()))
+                    .isMilestoneLabel(boolLabel(t.getIsMilestone()))
+                    .isCriticalPathLabel(boolLabel(t.getIsCriticalPath()))
+                    .build());
+        }
+        return rows;
+    }
+
+    private static String safe(String v) {
+        return v == null ? "" : v;
+    }
+
+    private static String nicknameOf(Map<Long, AdminUserRespDTO> userMap, Long userId) {
+        if (userId == null) {
+            return "";
+        }
+        AdminUserRespDTO u = userMap.get(userId);
+        return u != null && u.getNickname() != null ? u.getNickname() : "";
+    }
+
+    private static String deptNameOf(Map<Long, DeptRespDTO> deptMap, Long deptId) {
+        if (deptId == null) {
+            return null;
+        }
+        DeptRespDTO d = deptMap.get(deptId);
+        return d != null ? d.getName() : null;
+    }
+
+    private static String helperNames(Map<Long, AdminUserRespDTO> userMap, String helperIds) {
+        if (StrUtil.isBlank(helperIds)) {
+            return "";
+        }
+        List<String> names = new ArrayList<>();
+        for (String s : helperIds.split(",")) {
+            String id = s.trim();
+            if (id.isEmpty()) {
+                continue;
+            }
+            try {
+                AdminUserRespDTO u = userMap.get(Long.parseLong(id));
+                if (u != null && u.getNickname() != null) {
+                    names.add(u.getNickname());
+                }
+            } catch (NumberFormatException ignored) {
+                // 忽略非法 ID
+            }
+        }
+        return String.join("、", names);
+    }
+
+    private static String labelOf(Map<String, String> map, String value) {
+        if (value == null) {
+            return "";
+        }
+        String label = map.get(value);
+        return label != null ? label : value;
+    }
+
+    private static String formatDate(LocalDate date) {
+        return date != null ? DATE_FMT.format(date) : "";
+    }
+
+    private static String boolLabel(Boolean b) {
+        return Boolean.TRUE.equals(b) ? "是" : "否";
     }
 
 }

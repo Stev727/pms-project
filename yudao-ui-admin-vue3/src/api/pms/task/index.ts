@@ -220,3 +220,9 @@ export interface WeeklyReportVO {
 export const getWeeklyReport = (params: { date?: string; userId?: number | string }) => {
   return request.get({ url: '/pms/task/weekly-report', params })
 }
+
+// ==================== 任务导出（新增） ====================
+/** 导出项目全部任务为 Excel（忽略页面筛选），浏览器自动下载 */
+export const exportTask = (projectId: string | number) => {
+  return request.download({ url: '/pms/task/export', params: { projectId } })
+}

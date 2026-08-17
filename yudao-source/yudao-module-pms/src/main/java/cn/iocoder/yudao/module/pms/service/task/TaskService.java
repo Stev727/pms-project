@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.pms.service.task;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskExportExcel;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
 
 import java.time.LocalDate;
@@ -185,6 +186,15 @@ public interface TaskService {
      * 部门审核中心：查询待当前用户（责任人直属领导）审核的日常任务列表
      */
     List<PmsTaskDO> getDeptReviewTaskList();
+
+    /**
+     * 导出项目全部任务为 Excel（忽略页面筛选）。
+     * 负责 / 协助人解析为昵称、责任部门解析为部门名、状态 / 类型 / 优先级解析为中文标签。
+     *
+     * @param projectId 项目ID
+     * @return 导出行列表（TaskExportExcel）
+     */
+    List<TaskExportExcel> exportTaskByProject(Long projectId);
 
 }
 

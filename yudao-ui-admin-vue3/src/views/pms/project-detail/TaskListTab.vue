@@ -24,6 +24,9 @@
         </el-select>
       </div>
       <div>
+        <el-button size="small" :loading="exporting" @click="handleExport" v-if="checkPermi(['pms:task:query'])">
+          <Icon icon="ep:download" class="mr-4px" />导出
+        </el-button>
         <el-button size="small" @click="expandAll = !expandAll">
           <Icon :icon="expandAll ? 'ep:folder-opened' : 'ep:folder'" class="mr-4px" />
           {{ expandAll ? '折叠全部' : '展开全部' }}
@@ -249,7 +252,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress } from '@/api/pms/task'
+import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress, exportTask } from '@/api/pms/task'
 import { getDocumentList } from '@/api/pms/document'
 import { StageVO, createStage, updateStage, deleteStage } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays, getReviewStatusLabel, getReviewStatusStyle } from '../pms-utils'
@@ -423,6 +426,7 @@ const filterStage = ref<string | undefined>()
 const filterStatus = ref('')
 const filterAssignee = ref('')
 const expandAll = ref(true)
+const exporting = ref(false)
 const onlyMyTasks = ref(false)
 
 
@@ -685,6 +689,20 @@ const getProgressColor = (task: TaskVO) => {
 }
 const isDelayed = (task: TaskVO) => calcDelayDays(task.planEndDate, task.completeStatus) > 0
 const getDelayDays = (task: TaskVO) => calcDelayDays(task.planEndDate, task.completeStatus)
+
+// ==================== 导出任务（新增） ====================
+async function handleExport() {
+  if (!props.projectId) return
+  exporting.value = true
+  try {
+    await exportTask(props.projectId)
+    ElMessage.success('导出成功，文件已开始下载')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
 
 onMounted(async () => {
   ensureUsersLoaded()

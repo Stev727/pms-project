@@ -1,10 +1,12 @@
 package cn.iocoder.yudao.module.pms.controller.admin.task;
 
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
+import cn.iocoder.yudao.framework.excel.core.util.ExcelUtils;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskExportExcel;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
 import cn.iocoder.yudao.module.pms.service.task.TaskService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,6 +17,8 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.format.annotation.DateTimeFormat;
 import javax.annotation.Resource;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
@@ -267,6 +271,18 @@ public class TaskController {
     @PreAuthorize("@ss.hasPermission('pms:daily-task:review')")
     public CommonResult<List<PmsTaskDO>> deptReviewList() {
         return success(taskService.getDeptReviewTaskList());
+    }
+
+    // ==================== 任务导出（新增） ====================
+
+    @GetMapping("/export")
+    @Operation(summary = "导出项目全部任务（Excel，忽略页面筛选）")
+    @Parameter(name = "projectId", description = "项目编号", required = true)
+    @PreAuthorize("@ss.hasPermission('pms:task:query')")
+    public void export(HttpServletResponse response,
+                       @RequestParam("projectId") Long projectId) throws IOException {
+        List<TaskExportExcel> list = taskService.exportTaskByProject(projectId);
+        ExcelUtils.write(response, "项目任务.xlsx", "任务", TaskExportExcel.class, list);
     }
 
 }
