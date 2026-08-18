@@ -135,7 +135,16 @@ const byPhaseChartRef = ref<HTMLElement>()
 let charts: echarts.ECharts[] = []
 
 const delayTasks = computed(() => {
-  let tasks = allTasks.value.filter(t => t.completeStatus === 'delayed' || (t.planEndDate && calcDelayDays(t.planEndDate, t.completeStatus) > 0))
+  // 仅统计进行中/已完成的真实项目(排除模板与归档项目)的延期任务
+  const activeProjectIds = new Set(
+    projects.value
+      .filter(p => p.projectType !== 'standard_template' && p.status !== 'archived')
+      .map(p => String(p.projectId))
+  )
+  let tasks = allTasks.value.filter(t =>
+    activeProjectIds.has(String(t.projectId)) &&
+    (t.completeStatus === 'delayed' || (t.planEndDate && calcDelayDays(t.planEndDate, t.completeStatus) > 0))
+  )
   // 按时间范围过滤
   if (timeRange.value && tasks.length > 0) {
     const now = new Date()

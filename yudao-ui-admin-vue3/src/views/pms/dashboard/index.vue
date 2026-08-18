@@ -283,8 +283,9 @@ const matchingProjectIds = computed<Set<string> | null>(() => {
 // 搜索范围内的项目（仅项目名称过滤 + 排除模板，不含时间过滤；供健康度/月度趋势等使用）
 const scopedProjects = computed(() => {
   const ids = matchingProjectIds.value
+  // 排除模板与归档项目：BI 看板只反映进行中/已完成的真实项目
   return projectList.value.filter(p =>
-    p.projectType !== 'standard_template' && (ids == null || ids.has(String(p.projectId)))
+    p.projectType !== 'standard_template' && p.status !== 'archived' && (ids == null || ids.has(String(p.projectId)))
   )
 })
 
