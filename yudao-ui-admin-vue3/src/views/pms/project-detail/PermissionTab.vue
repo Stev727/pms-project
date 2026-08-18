@@ -126,7 +126,7 @@
             <div class="form-tip">从成员管理的标准角色中选择，已创建的角色会标记为「已创建」不可选</div>
           </template>
         </el-form-item>
-        <el-form-item label="角色编码" required>
+        <el-form-item label="角色编码" required v-show="false">
           <el-input
             v-model="roleForm.roleCode"
             placeholder="选择角色名后自动生成"
