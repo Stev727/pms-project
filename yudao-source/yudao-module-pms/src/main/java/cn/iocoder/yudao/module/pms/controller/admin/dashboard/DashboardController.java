@@ -27,6 +27,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import cn.iocoder.yudao.module.pms.controller.admin.dashboard.vo.DeptStatVO;
+import cn.iocoder.yudao.module.pms.dal.dataobject.projectmember.PmsProjectMemberDO;
+import cn.iocoder.yudao.module.pms.dal.mysql.projectmember.ProjectMemberMapper;
+import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
+import cn.iocoder.yudao.module.system.api.user.dto.AdminUserRespDTO;
 
 import static cn.iocoder.yudao.framework.common.pojo.CommonResult.success;
 
@@ -71,6 +79,10 @@ public class DashboardController {
 
     @Resource
     private DeptApi deptApi;
+    @Resource
+    private ProjectMemberMapper projectMemberMapper;
+    @Resource
+    private AdminUserApi adminUserApi;
 
     /**
      * 获取当前用户可见的部门树（前端筛选器用）。
@@ -160,6 +172,137 @@ public class DashboardController {
                 new LambdaQueryWrapperX<PmsProjectStageDO>()
                         .in(PmsProjectStageDO::getProjectId, visibleProjectIds));
         return success(stages);
+    }
+
+    /**
+     * 部门协作分析：按部门聚合成员参与 + 任务完成率/延期占比。
+     * <p>数据口径：
+     * <ul>
+     *   <li>参与部门/成员数：项目成员(pms_project_member, active) → 成员 system_users.dept_id</li>
+     *   <li>任务完成/延期：任务 main_owner_id → 负责人 system_users.dept_id</li>
+     * </ul>
+     * deptId 传入时仅返回该部门及其子部门的行。
+     */
+    @GetMapping("/dept-stats")
+    @Operation(summary = "部门协作分析：按部门聚合任务完成率/延期占比")
+    @Parameter(name = "deptId", description = "部门ID（含下级，只返回该部门及其子部门的数据，可空）")
+    @Parameter(name = "projectName", description = "项目名称模糊过滤，可空")
+    @PreAuthorize("@ss.hasPermission('pms:dept-analysis:query')")
+    public CommonResult<List<DeptStatVO>> getDeptStats(
+            @RequestParam(value = "deptId", required = false) Long deptId,
+            @RequestParam(value = "projectName", required = false) String projectName) {
+        Long userId = cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils.getLoginUserId();
+        List<Long> visibleProjectIds = pmsDataScopeService.getVisibleProjectIds(userId);
+
+        // 1. 可见项目（数据范围 + 排除模板 + 项目名称模糊）
+        // 注意：LambdaQueryWrapperX 的 .ne() 返回父类 LambdaQueryWrapper，不能链式赋值，
+        //       必须拆成独立语句调用（wrapper 内部可变，方法返回值可丢弃）。
+        LambdaQueryWrapperX<PmsProjectDO> pw = new LambdaQueryWrapperX<>();
+        pw.ne(PmsProjectDO::getProjectType, "standard_template");
+        if (visibleProjectIds != null) {
+            if (visibleProjectIds.isEmpty()) {
+                return success(Collections.emptyList());
+            }
+            pw.in(PmsProjectDO::getProjectId, visibleProjectIds);
+        }
+        if (projectName != null && !projectName.trim().isEmpty()) {
+            pw.like(PmsProjectDO::getProjectName, projectName.trim());
+        }
+        List<PmsProjectDO> projects = projectMapper.selectList(pw);
+        if (projects.isEmpty()) {
+            return success(Collections.emptyList());
+        }
+        List<Long> projectIds = projects.stream().map(PmsProjectDO::getProjectId).collect(Collectors.toList());
+
+        // 2. 项目成员（active）→ 部门参与
+        List<PmsProjectMemberDO> members = projectMemberMapper.selectList(
+                new LambdaQueryWrapperX<PmsProjectMemberDO>().in(PmsProjectMemberDO::getProjectId, projectIds));
+        members = members.stream()
+                .filter(m -> m.getStatus() == null || "active".equals(m.getStatus()))
+                .collect(Collectors.toList());
+
+        // 3. 任务 → 负责人 → 部门（完成/延期）
+        List<PmsTaskDO> tasks = taskMapper.selectList(
+                new LambdaQueryWrapperX<PmsTaskDO>().in(PmsTaskDO::getProjectId, projectIds));
+
+        // 4. 批量解析 user → deptId
+        Set<Long> userIds = new HashSet<>();
+        for (PmsProjectMemberDO m : members) {
+            if (m.getUserId() != null) userIds.add(m.getUserId());
+        }
+        for (PmsTaskDO t : tasks) {
+            if (t.getMainOwnerId() != null) userIds.add(t.getMainOwnerId());
+        }
+        Map<Long, Long> userDeptMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            List<AdminUserRespDTO> users = adminUserApi.getUserList(userIds);
+            for (AdminUserRespDTO u : users) {
+                userDeptMap.put(u.getId(), u.getDeptId());
+            }
+        }
+        // 部门名
+        Set<Long> deptIds = new HashSet<>();
+        for (Long d : userDeptMap.values()) {
+            if (d != null) deptIds.add(d);
+        }
+        Map<Long, DeptRespDTO> deptMap = deptIds.isEmpty()
+                ? Collections.emptyMap() : deptApi.getDeptMap(deptIds);
+
+        // 5. 聚合：部门 → 参与项目集合 / 成员集合 / 任务[总,完成,延期]
+        Map<Long, Set<Long>> deptProjects = new HashMap<>();
+        Map<Long, Set<Long>> deptMembers = new HashMap<>();
+        for (PmsProjectMemberDO m : members) {
+            Long did = userDeptMap.get(m.getUserId());
+            if (did == null) did = 0L;
+            deptProjects.computeIfAbsent(did, k -> new HashSet<>()).add(m.getProjectId());
+            deptMembers.computeIfAbsent(did, k -> new HashSet<>()).add(m.getUserId());
+        }
+        Map<Long, int[]> deptTask = new HashMap<>();
+        java.time.LocalDate today = java.time.LocalDate.now();
+        for (PmsTaskDO t : tasks) {
+            Long did = userDeptMap.get(t.getMainOwnerId());
+            if (did == null) did = 0L;
+            int[] arr = deptTask.computeIfAbsent(did, k -> new int[3]);
+            arr[0]++;
+            if ("completed".equals(t.getCompleteStatus())) arr[1]++;
+            if (t.getPlanEndDate() != null && t.getPlanEndDate().isBefore(today)
+                    && !"completed".equals(t.getCompleteStatus())
+                    && (t.getProgress() == null || t.getProgress() < 100)) {
+                arr[2]++;
+            }
+        }
+        int totalDelayed = 0;
+        for (int[] a : deptTask.values()) totalDelayed += a[2];
+
+        // 6. 组装 VO（deptId 过滤：只保留选中部门及其子部门）
+        Set<Long> allowedDepts = null;
+        if (deptId != null) {
+            allowedDepts = new HashSet<>();
+            allowedDepts.add(deptId);
+            collectChildDeptIds(deptId, allowedDepts);
+        }
+        Set<Long> allDepts = new HashSet<>();
+        allDepts.addAll(deptProjects.keySet());
+        allDepts.addAll(deptTask.keySet());
+        List<DeptStatVO> result = new ArrayList<>();
+        for (Long did : allDepts) {
+            if (allowedDepts != null && !allowedDepts.contains(did)) continue;
+            DeptStatVO vo = new DeptStatVO();
+            vo.setDeptId(did);
+            DeptRespDTO dept = deptMap.get(did);
+            vo.setDeptName(did == 0L ? "未分配部门" : (dept == null ? ("部门#" + did) : dept.getName()));
+            vo.setProjectCount(deptProjects.getOrDefault(did, Collections.emptySet()).size());
+            vo.setMemberCount(deptMembers.getOrDefault(did, Collections.emptySet()).size());
+            int[] arr = deptTask.getOrDefault(did, new int[3]);
+            vo.setTaskTotal(arr[0]);
+            vo.setTaskCompleted(arr[1]);
+            vo.setTaskDelayed(arr[2]);
+            vo.setCompletionRate(arr[0] == 0 ? 0.0 : Math.round(arr[1] * 1000.0 / arr[0]) / 10.0);
+            vo.setDelayRate(totalDelayed == 0 ? 0.0 : Math.round(arr[2] * 1000.0 / totalDelayed) / 10.0);
+            result.add(vo);
+        }
+        result.sort((a, b) -> Integer.compare(b.getTaskTotal(), a.getTaskTotal()));
+        return success(result);
     }
 
     // ==================================================================

@@ -77,3 +77,24 @@ export const buildDeptTree = (list: PmsDeptVO[] = []): PmsDeptTreeNode[] => {
   return roots
 }
 
+/** 部门协作分析统计 VO（与后端 DeptStatVO 对齐） */
+export interface DeptStatVO {
+  deptId: number | string
+  deptName: string
+  projectCount: number
+  memberCount: number
+  taskTotal: number
+  taskCompleted: number
+  taskDelayed: number
+  completionRate: number
+  delayRate: number
+}
+
+/**
+ * 部门协作分析：按部门聚合成员参与 + 任务完成率/延期占比。
+ * @param params.deptId 部门ID（含下级，可空）
+ * @param params.projectName 项目名称模糊过滤（可空）
+ */
+export const getDeptStats = (params: { deptId?: number | string; projectName?: string }): Promise<DeptStatVO[]> => {
+  return request.get({ url: '/pms/dashboard/dept-stats', params })
+}

@@ -166,6 +166,20 @@
         </ContentWrap>
       </el-col>
     </el-row>
+
+    <!-- 图表行 5：按部门维度（部门数据权限） -->
+    <el-row :gutter="16">
+      <el-col :span="12">
+        <ContentWrap title="部门任务完成率">
+          <div ref="deptCompletionChartRef" style="width: 100%; height: 280px"></div>
+        </ContentWrap>
+      </el-col>
+      <el-col :span="12">
+        <ContentWrap title="延期任务 - 按部门分布">
+          <div ref="deptDelayChartRef" style="width: 100%; height: 280px"></div>
+        </ContentWrap>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -189,6 +203,8 @@ import {
   getDashboardStages,
   getVisibleDeptTree,
   buildDeptTree,
+  getDeptStats,
+  DeptStatVO,
   PmsDeptTreeNode
 } from '@/api/pms/dashboard'
 import * as echarts from 'echarts'
@@ -306,6 +322,9 @@ const delayTrendChartRef = ref<HTMLElement>()
 const taskStatusChartRef = ref<HTMLElement>()
 const delayByUserChartRef = ref<HTMLElement>()
 const delayByPhaseChartRef = ref<HTMLElement>()
+const deptCompletionChartRef = ref<HTMLElement>()
+const deptDelayChartRef = ref<HTMLElement>()
+const deptStatsData = ref<DeptStatVO[]>([])
 
 // 图表实例
 const chartInstances: echarts.ECharts[] = []
@@ -468,6 +487,7 @@ const loadData = async () => {
     taskList.value = tasks || []
     stageList.value = stages || []
     await ensureUsersLoaded()
+    await fetchDeptStats()
     nextTick(() => renderAllCharts())
   } catch (e) {
     console.error('加载仪表盘数据失败', e)
@@ -483,6 +503,8 @@ const renderAllCharts = () => {
   renderTaskStatusChart()
   renderDelayByUserChart()
   renderDelayByPhaseChart()
+  renderDeptCompletionChart()
+  renderDeptDelayChart()
 }
 
 const getOrCreateChart = (ref: HTMLElement | undefined): echarts.ECharts | null => {
@@ -691,6 +713,54 @@ const renderDelayByPhaseChart = () => {
   })
 }
 
+// ==================== 部门维度（消费 /pms/dashboard/dept-stats） ====================
+const fetchDeptStats = async () => {
+  try {
+    deptStatsData.value = await getDeptStats({
+      deptId: selectedDeptId.value ? Number(selectedDeptId.value) : undefined,
+      projectName: searchProjectName.value.trim() || undefined
+    }) || []
+    nextTick(() => { renderDeptCompletionChart(); renderDeptDelayChart() })
+  } catch (e) {
+    console.warn('部门统计加载失败', e)
+  }
+}
+
+const renderDeptCompletionChart = () => {
+  const chart = getOrCreateChart(deptCompletionChartRef.value)
+  if (!chart) return
+  const sorted = [...deptStatsData.value].sort((a, b) => (a.completionRate || 0) - (b.completionRate || 0)).slice(-12)
+  chart.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (p: any) => p[0].name + '<br/>完成率 ' + p[0].value + '%' },
+    grid: { left: '3%', right: '8%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+    yAxis: { type: 'category', data: sorted.map(d => d.deptName), axisLabel: { fontSize: 12 } },
+    series: [{
+      type: 'bar', barWidth: 14,
+      data: sorted.map(d => d.completionRate || 0),
+      itemStyle: { color: '#2468F2', borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: 'right', formatter: '{c}%' }
+    }]
+  })
+}
+
+const renderDeptDelayChart = () => {
+  const chart = getOrCreateChart(deptDelayChartRef.value)
+  if (!chart) return
+  const data = deptStatsData.value.filter(d => d.taskDelayed > 0)
+  const hasData = data.length > 0
+  chart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} 个 ({d}%)' },
+    legend: { bottom: 0, icon: 'circle', type: 'scroll' },
+    series: [{
+      type: 'pie', radius: ['38%', '68%'], center: ['50%', '45%'],
+      label: { show: true, formatter: '{b}\n{c}个', fontSize: 12 },
+      data: data.map(d => ({ name: d.deptName, value: d.taskDelayed }))
+    }],
+    graphic: hasData ? undefined : [{ type: 'text', left: 'center', top: 'middle', style: { text: '暂无延期任务', fontSize: 14, fill: '#86909C' } }]
+  })
+}
+
 // ==================== 辅助函数 ====================
 const getProjectName = (projectId?: string | number) => {
   const p = projectList.value.find(p => String(p.projectId) === String(projectId))
@@ -711,6 +781,7 @@ const getProgressColor = (project: any) => {
 // ==================== 项目名称搜索 ====================
 const handleSearch = () => {
   // 统计卡片/健康度/里程碑/进度概览是 computed 自动更新；echarts 需手动重绘
+  fetchDeptStats()
   nextTick(() => renderAllCharts())
 }
 // 输入防抖：停止输入 300ms 后刷新图表
