@@ -22,6 +22,7 @@ import cn.iocoder.yudao.module.pms.dal.mysql.projectstage.ProjectStageMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.taskdependency.TaskDependencyMapper;
 import cn.iocoder.yudao.module.pms.service.project.ProjectService;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +54,8 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private SecurityFrameworkService securityFrameworkService;
+    @Resource
+    private JdbcTemplate jdbcTemplate;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -287,7 +290,22 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteProject(Long id) {
+        // 级联软删所有子表数据，避免删除项目后产生孤儿任务/阶段/成员/文档等导致统计虚高
+        String[] childTables = {
+            "pms_task", "pms_project_stage", "pms_project_member", "pms_document",
+            "pms_change_record", "pms_quality_issue", "pms_approval_record",
+            "pms_external_worklog", "pms_material_track", "pms_notify_log",
+            "pms_notify_rule", "pms_project_permission", "pms_project_role"
+        };
+        for (String tbl : childTables) {
+            try {
+                jdbcTemplate.update("UPDATE " + tbl + " SET deleted=1, update_time=NOW() WHERE project_id=? AND deleted=0", id);
+            } catch (Exception e) {
+                // 某些表可能无 project_id/deleted 列，跳过；不影响主流程
+            }
+        }
         projectMapper.deleteById(id);
     }
 
