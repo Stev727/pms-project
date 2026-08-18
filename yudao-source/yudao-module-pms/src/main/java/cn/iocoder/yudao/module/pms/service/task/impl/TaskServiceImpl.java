@@ -508,11 +508,14 @@ public class TaskServiceImpl implements TaskService {
             Long userId = SecurityFrameworkUtils.getLoginUserId();
             if (task != null) {
                 PmsProjectDO project = projectMapper.selectById(task.getProjectId());
-                boolean isPM = project != null && Objects.equals(project.getProjectManagerId(), userId);
-                boolean isOwner = Objects.equals(task.getMainOwnerId(), userId);
-                boolean hasPerm = hasProjectPerm(task.getProjectId(), PmsPermKeyEnum.TASK_DELETE.getKey());
-                if (!isPM && !isOwner && !hasPerm) {
-                    throw new ServiceException(ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
+                // 模板项目不校验项目经理/主责任人/项目级权限，由菜单权限控制
+                if (project == null || !"standard_template".equals(project.getProjectType())) {
+                    boolean isPM = project != null && Objects.equals(project.getProjectManagerId(), userId);
+                    boolean isOwner = Objects.equals(task.getMainOwnerId(), userId);
+                    boolean hasPerm = hasProjectPerm(task.getProjectId(), PmsPermKeyEnum.TASK_DELETE.getKey());
+                    if (!isPM && !isOwner && !hasPerm) {
+                        throw new ServiceException(ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
+                    }
                 }
             }
         }

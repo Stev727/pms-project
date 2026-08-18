@@ -70,6 +70,8 @@ public class ProjectStageServiceImpl implements ProjectStageService {
         if (securityFrameworkService.hasAnyRoles("super_admin")) return;
         Long userId = SecurityFrameworkUtils.getLoginUserId();
         PmsProjectDO project = projectMapper.selectById(projectId);
+        // 模板项目不校验项目经理，由菜单权限控制
+        if (project != null && "standard_template".equals(project.getProjectType())) return;
         if (project == null || !java.util.Objects.equals(project.getProjectManagerId(), userId)) {
             throw new ServiceException(ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);
         }
