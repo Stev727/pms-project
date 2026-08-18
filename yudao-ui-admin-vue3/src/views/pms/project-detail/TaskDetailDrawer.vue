@@ -68,6 +68,16 @@
                 <el-form-item label="任务名称">
                   <el-input v-model="editForm.taskName" placeholder="请输入任务名称" />
                 </el-form-item>
+                <el-form-item label="任务阶段">
+                  <el-select v-model="editForm.stageId" filterable clearable placeholder="选择所属阶段" class="w-full">
+                    <el-option
+                      v-for="s in (props.stages || [])"
+                      :key="s.stageId"
+                      :label="s.stageName"
+                      :value="String(s.stageId)"
+                    />
+                  </el-select>
+                </el-form-item>
                 <el-form-item label="责任人">
                   <el-select v-model="editForm.mainOwnerId" filterable placeholder="选择责任人" class="w-full">
                     <el-option v-for="m in projectMembers" :key="m.userId" :label="getUserName(m.userId)" :value="String(m.userId)" />
@@ -114,6 +124,7 @@
             <!-- 查看模式 -->
             <el-descriptions v-else :column="2" border size="small">
               <el-descriptions-item label="任务名称" :span="2">{{ task?.taskName }}</el-descriptions-item>
+              <el-descriptions-item label="任务阶段">{{ getStageName(task?.stageId) }}</el-descriptions-item>
               <el-descriptions-item label="任务类型">{{ getTaskTypeLabel(task?.taskType) }}</el-descriptions-item>
               <el-descriptions-item label="优先级">
                 <el-tag :color="priorityMap[task?.priority || 'normal']?.color" effect="plain" size="small">
@@ -423,6 +434,7 @@ const { getUserName, getUserNamesFromStr } = useUserNames()
 
 const props = defineProps<{
   project?: any  // 项目整体，用于日期范围校验
+  stages?: any[] // 项目阶段列表（用于基本信息编辑/查看阶段字段）
 }>()
 
 const drawerVisible = ref(false)
@@ -652,6 +664,13 @@ const getStatusLabel = (status?: string) => taskStatusMap[status || '']?.label |
 const getOwnerName = (t?: TaskVO) => getUserName(t?.mainOwnerId)
 const getHelperNames = (t?: TaskVO) => getUserNamesFromStr(t?.helperIds)
 const getTaskTypeLabel = (type?: string) => taskTypeOptions.find(o => o.value === type)?.label || type || '-'
+
+// 从 props.stages 中按 stageId 解析阶段名称（查看模式展示用）
+const getStageName = (stageId?: any): string => {
+  if (stageId == null || stageId === '') return '-'
+  const s = (props.stages || []).find((x: any) => String(x.stageId) === String(stageId))
+  return s ? s.stageName : '-'
+}
 const getChangeTypeLabel = (type: string) => ({ schedule: '工期变更', scope: '范围变更', cost: '成本变更' }[type] || type)
 const getChangeStatusLabel = (status: string) => ({ pending: '待审批', approved: '已通过', rejected: '已驳回' }[status] || status)
 

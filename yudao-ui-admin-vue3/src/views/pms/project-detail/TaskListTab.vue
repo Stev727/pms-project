@@ -24,6 +24,32 @@
         </el-select>
       </div>
       <div>
+        <!-- 任务操作区：选中行后显示，按选中行 canTransition 动态展示 -->
+        <template v-if="selectedTask && !selectedTask.isStageRow">
+          <span class="task-op-label" :title="selectedTask.taskName">已选：{{ selectedTask.taskName }}</span>
+          <el-button v-if="canTransition(selectedTask, 'start')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'start')">开始任务</el-button>
+          <el-button v-if="canTransition(selectedTask, 'dispatch')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'dispatch')">派发</el-button>
+          <el-button v-if="canTransition(selectedTask, 'accept')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'accept')">接收</el-button>
+          <el-button v-if="canTransition(selectedTask, 'reject')" size="small" type="danger" @click.stop="handleTransition(selectedTask, 'reject')">拒绝</el-button>
+          <el-button v-if="canTransition(selectedTask, 'redispatch')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'redispatch')">重新派发</el-button>
+          <el-button v-if="canTransition(selectedTask, 'submit')" size="small" type="success" @click.stop="handleTransition(selectedTask, 'submit')">提交完成</el-button>
+          <el-button v-if="canTransition(selectedTask, 'approve')" size="small" type="success" @click.stop="handleTransition(selectedTask, 'approve')">审核通过</el-button>
+          <el-button v-if="canTransition(selectedTask, 'reject_review')" size="small" type="danger" @click.stop="handleTransition(selectedTask, 'reject_review')">驳回</el-button>
+          <el-button v-if="canTransition(selectedTask, 'pause')" size="small" type="warning" @click.stop="handleTransition(selectedTask, 'pause')">暂停</el-button>
+          <el-button v-if="canTransition(selectedTask, 'resume')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'resume')">恢复</el-button>
+          <el-button v-if="canReportProgress(selectedTask)" size="small" type="primary" @click.stop="$emit('taskClick', selectedTask)">进度填报</el-button>
+          <el-button v-if="canAddSubtask(selectedTask)" size="small" type="primary" @click.stop="$emit('add-subtask', selectedTask)">添加子任务</el-button>
+          <el-button v-if="ALLOW_CHANGE_STATUSES.includes(selectedTask.completeStatus)" size="small" type="warning" @click.stop="handleChangeRequest(selectedTask)">发起变更</el-button>
+          <el-button v-if="checkPermi(['pms:task:delete']) && (isPM || String(selectedTask.mainOwnerId) === currentUserId)" size="small" type="danger" @click.stop="handleDeleteTask(selectedTask)">删除</el-button>
+          <el-button size="small" text @click.stop="clearSelection">取消选择</el-button>
+          <span class="task-op-divider"></span>
+        </template>
+        <template v-else>
+          <span class="task-op-hint">
+            <Icon icon="ep:info-filled" class="mr-4px" />点击任务行后可在此操作（开始/派发/提交/审核/进度填报/变更 等）
+          </span>
+          <span class="task-op-divider"></span>
+        </template>
         <el-button size="small" :loading="exporting" @click="handleExport" v-if="checkPermi(['pms:task:query'])">
           <Icon icon="ep:download" class="mr-4px" />导出
         </el-button>
@@ -48,6 +74,9 @@
       :default-expand-all="expandAll"
       :expand-row-keys="expandedRowKeys"
       border stripe style="width: 100%"
+      highlight-current-row
+      :current-row-key="selectedRowKey"
+      @row-click="handleRowClick"
     >
       <el-table-column label="任务名称" prop="taskName" min-width="250" show-overflow-tooltip>
         <template #default="{ row }">
@@ -123,68 +152,11 @@
           </template>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="300" fixed="right">
+      <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
-            <!-- 状态流转按钮 -->
-            <el-button
-              v-if="canTransition(row, 'start')"
-              link type="primary" size="small" @click.stop="handleTransition(row, 'start')"
-            >开始任务</el-button>
-            <el-button
-              v-if="canTransition(row, 'dispatch')"
-              link type="primary" size="small" @click.stop="handleTransition(row, 'dispatch')"
-            >派发</el-button>
-            <el-button
-              v-if="canTransition(row, 'accept')"
-              link type="primary" size="small" @click.stop="handleTransition(row, 'accept')"
-            >接收</el-button>
-            <el-button
-              v-if="canTransition(row, 'reject')"
-              link type="danger" size="small" @click.stop="handleTransition(row, 'reject')"
-            >拒绝</el-button>
-            <el-button
-              v-if="canTransition(row, 'redispatch')"
-              link type="primary" size="small" @click.stop="handleTransition(row, 'redispatch')"
-            >重新派发</el-button>
-            <el-button
-              v-if="canTransition(row, 'submit')"
-              link type="success" size="small" @click.stop="handleTransition(row, 'submit')"
-            >提交完成</el-button>
-            <el-button
-              v-if="canTransition(row, 'approve')"
-              link type="success" size="small" @click.stop="handleTransition(row, 'approve')"
-            >审核通过</el-button>
-            <el-button
-              v-if="canTransition(row, 'reject_review')"
-              link type="danger" size="small" @click.stop="handleTransition(row, 'reject_review')"
-            >驳回</el-button>
-
-            <el-button
-              v-if="canTransition(row, 'pause')"
-              link type="warning" size="small" @click.stop="handleTransition(row, 'pause')"
-            >暂停</el-button>
-            <el-button
-              v-if="canTransition(row, 'resume')"
-              link type="primary" size="small" @click.stop="handleTransition(row, 'resume')"
-            >恢复</el-button>
-            <!-- 任务创建后即可发起变更（走审核流程），不限于已完成 -->
-            <el-button
-              v-if="ALLOW_CHANGE_STATUSES.includes(row.completeStatus)"
-              link type="warning" size="small" @click.stop="handleChangeRequest(row)"
-            >发起变更</el-button>
-            <!-- 添加子任务（#1）：层级未达上限且拥有任务创建权限 -->
-            <el-button
-              v-if="canAddSubtask(row)"
-              link type="primary" size="small" @click.stop="$emit('add-subtask', row)"
-            >添加子任务</el-button>
-            <!-- 详情 -->
+            <!-- 方案 A：操作列只保留「详情」，其余操作在工具条按选中行展示 -->
             <el-button link type="primary" size="small" @click.stop="$emit('taskClick', row)">详情</el-button>
-            <!-- 删除任务：需 pms:task:delete 权限；PM可删所有，非PM只能删自己负责的 -->
-            <el-button
-              v-if="checkPermi(['pms:task:delete']) && (isPM || String(row.mainOwnerId) === currentUserId)"
-              link type="danger" size="small" @click.stop="handleDeleteTask(row)"
-            >删除</el-button>
           </template>
           <!-- 阶段行操作：编辑/删除（权限可配置） -->
           <template v-if="row.isStageRow">
@@ -253,6 +225,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { TaskVO } from '@/api/pms/task'
 import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress, exportTask } from '@/api/pms/task'
+import download from '@/utils/download'
 import { getDocumentList } from '@/api/pms/document'
 import { StageVO, createStage, updateStage, deleteStage } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays, getReviewStatusLabel, getReviewStatusStyle } from '../pms-utils'
@@ -695,13 +668,49 @@ async function handleExport() {
   if (!props.projectId) return
   exporting.value = true
   try {
-    await exportTask(props.projectId)
+    const res = await exportTask(props.projectId)
+    // request.download 返回 axios Response，文件本体在 res.data(Blob)
+    const blob = res && (res as any).data ? (res as any).data : res
+    download.excel(blob as Blob, '项目任务.xlsx')
     ElMessage.success('导出成功，文件已开始下载')
   } catch (e: any) {
     ElMessage.error(e?.message || '导出失败')
   } finally {
     exporting.value = false
   }
+}
+
+// ==================== 方案 A：选中行 + 顶部任务操作区 ====================
+const selectedTask = ref<any>(null)
+const selectedRowKey = ref<string | null>(null)
+const handleRowClick = (row: any) => {
+  if (row.isStageRow) {
+    // 阶段行不参与任务操作；点阶段行会清除之前的选中
+    if (selectedRowKey.value) {
+      selectedTask.value = null
+      selectedRowKey.value = null
+    }
+    return
+  }
+  // 再次点击同一行 → 取消选中
+  if (selectedRowKey.value === row.rowKey) {
+    clearSelection()
+    return
+  }
+  selectedTask.value = row
+  selectedRowKey.value = row.rowKey
+}
+const clearSelection = () => {
+  selectedTask.value = null
+  selectedRowKey.value = null
+}
+// 进度填报可见性（与 TaskDetailDrawer 中的 canReportProgress 语义保持一致）
+const canReportProgress = (row: any): boolean => {
+  if (!row) return false
+  if (!checkPermi(['pms:task:update'])) return false
+  const s = row.completeStatus
+  if (s === 'completed' || s === 'paused') return false
+  return true
 }
 
 onMounted(async () => {
@@ -718,6 +727,24 @@ onMounted(async () => {
 <style scoped>
 .task-toolbar {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
+  position: sticky; top: 0; z-index: 10; background: #fff;
+  padding: 8px 12px; margin-left: -12px; margin-right: -12px;
+  border-bottom: 1px solid #ebeef5;
+}
+.task-op-label {
+  display: inline-flex; align-items: center; margin-right: 4px;
+  padding: 0 8px; font-size: 12px; color: #2468F2; background: #e8f0ff;
+  border-radius: 4px; line-height: 24px; max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.task-op-divider {
+  display: inline-block; width: 1px; height: 20px; background: #ebeef5;
+  margin: 0 6px; vertical-align: middle;
+}
+.task-op-hint {
+  display: inline-flex; align-items: center;
+  font-size: 12px; color: #909399;
+  padding: 0 8px; line-height: 24px;
 }
 .mb-16px { margin-bottom: 16px; }
 .submit-confirm-content { }

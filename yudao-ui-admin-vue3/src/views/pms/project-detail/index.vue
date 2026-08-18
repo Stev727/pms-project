@@ -193,7 +193,7 @@
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
-    <TaskDetailDrawer ref="taskDrawerRef" :project="project" @refresh="onTaskDataRefresh" @create-change="handleStartChange" @create-subtask="handleAddSubtask" />
+    <TaskDetailDrawer ref="taskDrawerRef" :project="project" :stages="projectStages" @refresh="onTaskDataRefresh" @create-change="handleStartChange" @create-subtask="handleAddSubtask" />
     <ChangeFormDialog ref="changeFormRef" :project-id="projectId" :tasks="projectTasks" @submitted="onTaskDataRefresh" />
 
     <!-- P0: 项目编辑弹窗 -->
