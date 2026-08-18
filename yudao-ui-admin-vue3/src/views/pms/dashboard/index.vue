@@ -1,36 +1,44 @@
 <template>
   <div class="p-20px">
-    <!-- 时间范围筛选 + 部门筛选器（#9 BI 部门数据权限） -->
+    <!-- 筛选区：时间范围 + 部门 + 项目名称（#9 BI 部门数据权限 + 项目维度） -->
     <ContentWrap>
-      <div style="display: flex; justify-content: space-between; align-items: center">
-        <el-form :inline="true" class="mb-0">
-          <el-form-item label="时间范围">
-            <el-select v-model="timeRange" style="width: 120px" @change="loadData">
-              <el-option label="本周" value="week" />
-              <el-option label="本月" value="month" />
-              <el-option label="本季度" value="quarter" />
-              <el-option label="本年" value="year" />
-            </el-select>
-          </el-form-item>
-          <!-- #9 部门筛选器：只显示自己有权看的部门树，默认选中自己所在部门 -->
-          <el-form-item v-if="deptTreeData.length > 0" label="部门">
-            <el-tree-select
-              v-model="selectedDeptId"
-              :data="deptTreeData"
-              :props="{ value: 'id', label: 'name', children: 'children' }"
-              node-key="id"
-              placeholder="全部可见部门"
-              clearable
-              check-strictly
-              style="width: 220px"
-              @change="loadData"
-            />
-          </el-form-item>
-          <el-form-item>
-            <el-button @click="handleExport" v-if="false"><Icon icon="ep:download" class="mr-5px" />导出</el-button>
-          </el-form-item>
-        </el-form>
-      </div>
+      <el-form :inline="true" class="mb-0">
+        <el-form-item label="时间范围">
+          <el-select v-model="timeRange" style="width: 120px" @change="loadData">
+            <el-option label="本周" value="week" />
+            <el-option label="本月" value="month" />
+            <el-option label="本季度" value="quarter" />
+            <el-option label="本年" value="year" />
+          </el-select>
+        </el-form-item>
+        <!-- #9 部门筛选器：只显示自己有权看的部门树，默认选中自己所在部门 -->
+        <el-form-item v-if="deptTreeData.length > 0" label="部门">
+          <el-tree-select
+            v-model="selectedDeptId"
+            :data="deptTreeData"
+            :props="{ value: 'id', label: 'name', children: 'children' }"
+            node-key="id"
+            placeholder="全部可见部门"
+            clearable
+            check-strictly
+            style="width: 220px"
+            @change="loadData"
+          />
+        </el-form-item>
+        <!-- 项目名称搜索：统计卡片/图表/列表全部联动过滤 -->
+        <el-form-item label="项目名称">
+          <el-input
+            v-model="searchProjectName"
+            placeholder="输入项目名称搜索"
+            clearable
+            style="width: 220px"
+            @clear="handleSearch"
+            @keyup.enter="handleSearch"
+          >
+            <template #prefix><Icon icon="ep:search" /></template>
+          </el-input>
+        </el-form-item>
+      </el-form>
     </ContentWrap>
 
     <!-- 统计卡片 -->
@@ -89,12 +97,12 @@
 
     <!-- 图表行 2：延期趋势 + 里程碑 -->
     <el-row :gutter="16" class="mb-16px">
-      <el-col :span="14">
+      <el-col :span="12">
         <ContentWrap title="延期项目分析（按月趋势）">
-          <div ref="delayTrendChartRef" style="width: 100%; height: 300px"></div>
+          <div ref="delayTrendChartRef" style="width: 100%; height: 280px"></div>
         </ContentWrap>
       </el-col>
-      <el-col :span="10">
+      <el-col :span="12">
         <ContentWrap title="近期里程碑（30天内）">
           <el-table :data="milestones" size="small" stripe style="width: 100%" max-height="280">
             <el-table-column label="日期" width="80">
@@ -208,6 +216,8 @@ const stageList = ref<any[]>([])
 const deptTreeData = ref<PmsDeptTreeNode[]>([])
 const selectedDeptId = ref<number | string | undefined>(undefined)
 const userDeptIdLoaded = ref(false)
+// 项目名称搜索（新增筛选维度，联动全部统计卡片/图表/列表）
+const searchProjectName = ref('')
 
 // P0-1: 根据 timeRange 计算时间范围起止日期
 const timeRangeDates = computed(() => {
@@ -243,21 +253,46 @@ const timeRangeDates = computed(() => {
   }
 })
 
-// P0-1: 按时间范围过滤后的项目列表
+// 项目名称搜索命中的项目ID集合（null = 未搜索）
+const matchingProjectIds = computed<Set<string> | null>(() => {
+  const kw = searchProjectName.value.trim().toLowerCase()
+  if (!kw) return null
+  return new Set(
+    projectList.value
+      .filter(p => p.projectName && p.projectName.toLowerCase().includes(kw))
+      .map(p => String(p.projectId))
+  )
+})
+
+// 搜索范围内的项目（仅项目名称过滤 + 排除模板，不含时间过滤；供健康度/月度趋势等使用）
+const scopedProjects = computed(() => {
+  const ids = matchingProjectIds.value
+  return projectList.value.filter(p =>
+    p.projectType !== 'standard_template' && (ids == null || ids.has(String(p.projectId)))
+  )
+})
+
+// 搜索范围内的任务（仅项目名称过滤，不含时间过滤）
+const scopedTasks = computed(() => {
+  const ids = matchingProjectIds.value
+  if (ids == null) return taskList.value
+  return taskList.value.filter(t => ids.has(String(t.projectId)))
+})
+
+// P0-1: 按时间范围 + 项目名称过滤后的项目列表
 const filteredProjects = computed(() => {
   const { start, end } = timeRangeDates.value
-  return projectList.value.filter(p => {
-    if (p.projectType === 'standard_template') return false
+  return scopedProjects.value.filter(p => {
     if (!p.createTime) return true // 无创建时间的不做过滤
     const t = new Date(p.createTime)
     return t >= start && t <= end
   })
 })
 
-// P0-1: 按时间范围过滤后的任务列表
+// P0-1: 按时间范围 + 项目名称过滤后的任务列表
 const filteredTasks = computed(() => {
   const { start, end } = timeRangeDates.value
-  return taskList.value.filter(t => {
+  return scopedTasks.value.filter(t => {
     if (!t.createTime) return true
     const ct = new Date(t.createTime)
     return ct >= start && ct <= end
@@ -342,7 +377,7 @@ const parseDate = (d: any): Date => {
 }
 
 const projectHealthList = computed(() => {
-  return projectList.value.map(p => {
+  return scopedProjects.value.map(p => {
     // 优先使用后端实时计算的 progress，确保各页面口径统一
     let progress = p.progress || 0
     if (progress === 0) {
@@ -531,7 +566,7 @@ const renderDelayTrendChart = () => {
   }
 
   const delayedProjectByMonth = new Array(5).fill(0)
-  projectList.value.forEach(p => {
+  scopedProjects.value.forEach(p => {
     if (p.status === 'completed' || !p.planEndDate) return
     if (new Date(p.planEndDate) >= now || (p.progress || 0) >= 100) return
     const endDate = new Date(p.planEndDate)
@@ -541,7 +576,7 @@ const renderDelayTrendChart = () => {
   })
 
   const delayedTaskByMonth = new Array(5).fill(0)
-  taskList.value.forEach(t => {
+  scopedTasks.value.forEach(t => {
     if (calcDelayDays(t.planEndDate, t.completeStatus) <= 0) return
     const endDate = new Date(t.planEndDate!)
     const mKey = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}`
@@ -673,9 +708,17 @@ const getProgressColor = (project: any) => {
   return '#2468F2'
 }
 
-const handleExport = () => {
-  // 导出逻辑
+// ==================== 项目名称搜索 ====================
+const handleSearch = () => {
+  // 统计卡片/健康度/里程碑/进度概览是 computed 自动更新；echarts 需手动重绘
+  nextTick(() => renderAllCharts())
 }
+// 输入防抖：停止输入 300ms 后刷新图表
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchProjectName, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => handleSearch(), 300)
+})
 
 // ==================== 生命周期 ====================
 onMounted(async () => {
