@@ -1168,6 +1168,14 @@ public class TaskServiceImpl implements TaskService {
         List<String> unfinished = List.of("not_started", "pending_accept", "in_progress",
                 "completion_pending_review", "pending_review", "delayed", "rejected", "paused");
 
+        // 【口径对齐】我的任务看板 = 项目管理-任务列表(项目任务) + 日常任务 的汇总；
+        // 与任务列表页面一致，排除 standard_template 模板项目的任务（模板任务不进看板）
+        List<Long> templateProjectIds = projectMapper.selectList(new LambdaQueryWrapperX<PmsProjectDO>()
+                .select(PmsProjectDO::getProjectId)
+                .eq(PmsProjectDO::getProjectType, "standard_template"))
+                .stream().map(PmsProjectDO::getProjectId).filter(Objects::nonNull).collect(Collectors.toList());
+        Set<Long> templateProjectIdSet = new HashSet<>(templateProjectIds);
+
         List<PmsTaskDO> legacy;
         List<PmsTaskDO> inRange;
         List<PmsTaskDO> dailyTasks;
@@ -1208,6 +1216,16 @@ public class TaskServiceImpl implements TaskService {
                     .and(w -> w.isNull(PmsTaskDO::getPlanStartDate)
                             .or().between(PmsTaskDO::getPlanStartDate, dateFrom, dateTo))
                     .orderByAsc(PmsTaskDO::getPlanStartDate));
+        }
+
+        // 排除模板项目的任务（legacy/inRange 查询口径不含模板；dailyTasks 均无项目不受影响）
+        if (!templateProjectIdSet.isEmpty()) {
+            legacy = legacy.stream()
+                    .filter(t -> t.getProjectId() == null || !templateProjectIdSet.contains(t.getProjectId()))
+                    .collect(Collectors.toList());
+            inRange = inRange.stream()
+                    .filter(t -> t.getProjectId() == null || !templateProjectIdSet.contains(t.getProjectId()))
+                    .collect(Collectors.toList());
         }
 
         Map<Long, List<PmsTaskDO>> projectMap = new LinkedHashMap<>();
