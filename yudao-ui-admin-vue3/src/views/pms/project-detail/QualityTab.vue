@@ -30,7 +30,7 @@
         <template #default="{ row }">{{ row.source || '-' }}</template>
       </el-table-column>
       <el-table-column label="责任人" width="90">
-        <template #default="{ row }">{{ getUserName(row.responsiblePerson) || row.responsiblePerson || '-' }}</template>
+        <template #default="{ row }">{{ getUserName(row.responsiblePerson) || (row.responsiblePerson ? '已移除' : '-') }}</template>
       </el-table-column>
       <el-table-column label="状态" width="80" align="center">
         <template #default="{ row }">
@@ -67,7 +67,7 @@
           <el-descriptions-item label="严重程度">{{ getSeverityLabel(selected.severity) }}</el-descriptions-item>
           <el-descriptions-item label="分类">{{ getCategoryLabel(selected.rootCauseCategory) }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ selected.source || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="责任人">{{ getUserName(selected.responsiblePerson) || selected.responsiblePerson || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="责任人">{{ getUserName(selected.responsiblePerson) || (selected.responsiblePerson ? '已移除' : '-') }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ getStatusLabel(selected.status) }}</el-descriptions-item>
           <el-descriptions-item label="发现日期">{{ formatDate(selected.discoveredDate) }}</el-descriptions-item>
           <el-descriptions-item label="关闭日期">{{ formatDate(selected.closeTime) }}</el-descriptions-item>

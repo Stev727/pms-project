@@ -7,6 +7,9 @@ import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.framework.web.core.util.WebFrameworkUtils;
 
 import cn.iocoder.yudao.module.pms.service.project.ProjectService;
+import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
+import cn.iocoder.yudao.module.pms.service.projectpermission.ProjectPermissionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +29,19 @@ public class ProjectController {
 
     @Resource
     private ProjectService projectService;
+
+    @Autowired(required = false)
+    private ProjectPermissionService projectPermissionService;
+
+    /**
+     * 项目级权限校验兜底：删除项目需 project_edit 权限点（默认仅 pm/admin/dept_head）。
+     */
+    private void requireProjectPerm(Long projectId, String permKey) {
+        if (projectPermissionService == null || projectId == null) {
+            return;
+        }
+        projectPermissionService.checkPermission(projectId, permKey);
+    }
 
     @PostMapping("/create")
     @Operation(summary = "创建项目")
@@ -68,6 +84,7 @@ public class ProjectController {
     @Parameter(name = "id", description = "编号", required = true)
     @PreAuthorize("@ss.hasPermission('pms:project:delete')")
     public CommonResult<Boolean> delete(@RequestParam("id") Long id) {
+        requireProjectPerm(id, PmsPermKeyEnum.PROJECT_EDIT.getKey());
         projectService.deleteProject(id);
         return success(true);
     }

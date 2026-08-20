@@ -75,7 +75,7 @@
         </el-table-column>
         <el-table-column label="操作" width="120" align="center">
           <template #default="{ row }">
-            <el-button link type="warning" size="small" @click.stop="urge(row)" v-if="row.warningStatus !== 'normal'">催交</el-button>
+            <el-button link type="warning" size="small" @click.stop="urge(row)" v-if="calcWarningStatus(row) !== 'normal'">催交</el-button>
             <el-button link type="primary" size="small" @click.stop="openDetail(row)">详情</el-button>
           </template>
         </el-table-column>
@@ -226,7 +226,7 @@ const filteredData = computed(() => {
   let result = tableData.value
   if (filters.name) result = result.filter(m => m.materialName?.includes(filters.name))
   if (filters.projectId) result = result.filter(m => m.projectId === filters.projectId)
-  if (filters.status) result = result.filter(m => m.warningStatus === filters.status)
+  if (filters.status) result = result.filter(m => calcWarningStatus(m) === filters.status)
   return result
 })
 
@@ -234,9 +234,9 @@ const statCards = computed(() => {
   const data = filteredData.value
   return [
     { key: 'total', label: '总物料数', value: data.length, iconRef: 'ep:box', color: '#2468F2', bg: '#DCE7FF' },
-    { key: 'normal', label: '正常', value: data.filter(m => m.warningStatus === 'normal').length, iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' },
-    { key: 'warning', label: '预警中', value: data.filter(m => m.warningStatus === 'warning').length, iconRef: 'ep:warning', color: '#FF7D00', bg: '#FFF7E8' },
-    { key: 'urgent', label: '紧急', value: data.filter(m => m.warningStatus === 'urgent').length, iconRef: 'ep:circle-close', color: '#F53F3F', bg: '#FFECE8' }
+    { key: 'normal', label: '正常', value: data.filter(m => calcWarningStatus(m) === 'normal').length, iconRef: 'ep:circle-check', color: '#00B42A', bg: '#E8FFEA' },
+    { key: 'warning', label: '预警中', value: data.filter(m => calcWarningStatus(m) === 'warning').length, iconRef: 'ep:warning', color: '#FF7D00', bg: '#FFF7E8' },
+    { key: 'urgent', label: '紧急', value: data.filter(m => calcWarningStatus(m) === 'urgent').length, iconRef: 'ep:circle-close', color: '#F53F3F', bg: '#FFECE8' }
   ]
 })
 

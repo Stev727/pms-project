@@ -9,6 +9,9 @@ import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskExportExcel;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
 import cn.iocoder.yudao.module.pms.service.task.TaskService;
+import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
+import cn.iocoder.yudao.module.pms.service.projectpermission.ProjectPermissionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -51,10 +54,31 @@ public class TaskController {
     @Resource
     private TaskService taskService;
 
+    @Autowired(required = false)
+    private ProjectPermissionService projectPermissionService;
+
+    /**
+     * 项目级权限校验兜底（与 QualityIssueController 一致）：
+     * 日常任务（projectId=null）跳过，仅菜单级 @PreAuthorize 把关。
+     */
+    private void requireProjectPerm(Long projectId, String permKey) {
+        if (projectPermissionService == null || projectId == null) {
+            return;
+        }
+        projectPermissionService.checkPermission(projectId, permKey);
+    }
+
+    private Long getTaskProjectId(Long taskId) {
+        if (taskId == null) return null;
+        PmsTaskDO task = taskService.getTask(taskId);
+        return task == null ? null : task.getProjectId();
+    }
+
     @PostMapping("/create")
     @Operation(summary = "创建任务")
     @PreAuthorize("@ss.hasPermission('pms:task:create')")
     public CommonResult<Long> create(@RequestBody PmsTaskDO entity) {
+        requireProjectPerm(entity.getProjectId(), PmsPermKeyEnum.TASK_CREATE.getKey());
         return success(taskService.createTask(entity));
     }
 
@@ -69,6 +93,7 @@ public class TaskController {
     @Operation(summary = "派发任务并通知负责人")
     @PreAuthorize("@ss.hasPermission('pms:task:update')")
     public CommonResult<Boolean> dispatch(@RequestParam("taskId") Long taskId) {
+        requireProjectPerm(getTaskProjectId(taskId), PmsPermKeyEnum.TASK_ASSIGN.getKey());
         taskService.dispatchTask(taskId);
         return success(true);
     }
@@ -97,6 +122,7 @@ public class TaskController {
             @RequestParam("taskId") Long taskId,
             @RequestParam("approved") Boolean approved,
             @RequestParam(value = "reviewOpinion", required = false) String reviewOpinion) {
+        requireProjectPerm(getTaskProjectId(taskId), PmsPermKeyEnum.TASK_REVIEW.getKey());
         taskService.reviewCompletion(taskId, approved, reviewOpinion,
                 SecurityFrameworkUtils.getLoginUserId());
         return success(true);
@@ -106,6 +132,7 @@ public class TaskController {
     @Operation(summary = "更新任务")
     @PreAuthorize("@ss.hasPermission('pms:task:update')")
     public CommonResult<Boolean> update(@RequestBody PmsTaskDO entity) {
+        requireProjectPerm(entity.getProjectId(), PmsPermKeyEnum.TASK_EDIT.getKey());
         taskService.updateTask(entity);
         return success(true);
     }
@@ -133,6 +160,7 @@ public class TaskController {
     @Parameter(name = "id", description = "编号", required = true)
     @PreAuthorize("@ss.hasPermission('pms:task:delete')")
     public CommonResult<Boolean> delete(@RequestParam("id") Long id) {
+        requireProjectPerm(getTaskProjectId(id), PmsPermKeyEnum.TASK_DELETE.getKey());
         taskService.deleteTask(id);
         return success(true);
     }
@@ -192,6 +220,7 @@ public class TaskController {
     @PreAuthorize("@ss.hasPermission('pms:task:update')")
     public CommonResult<Boolean> progress(@RequestParam("taskId") Long taskId,
                                           @RequestParam("progress") Integer progress) {
+        requireProjectPerm(getTaskProjectId(taskId), PmsPermKeyEnum.TASK_EDIT.getKey());
         taskService.updateTaskProgress(taskId, progress);
         return success(true);
     }
@@ -215,6 +244,7 @@ public class TaskController {
     public CommonResult<Boolean> approveReview(
             @RequestParam("taskId") Long taskId,
             @RequestParam(value = "reviewComment", required = false) String reviewComment) {
+        requireProjectPerm(getTaskProjectId(taskId), PmsPermKeyEnum.TASK_REVIEW.getKey());
         taskService.approveReview(taskId, reviewComment);
         return success(true);
     }
@@ -227,6 +257,7 @@ public class TaskController {
     public CommonResult<Boolean> rejectReview(
             @RequestParam("taskId") Long taskId,
             @RequestParam("reviewComment") String reviewComment) {
+        requireProjectPerm(getTaskProjectId(taskId), PmsPermKeyEnum.TASK_REVIEW.getKey());
         taskService.rejectReview(taskId, reviewComment);
         return success(true);
     }

@@ -1,8 +1,10 @@
 <template>
   <div>
-    <!-- 工具栏 -->
-    <div class="task-toolbar">
-      <div style="display: flex; gap: 8px; align-items: center">
+    <!-- 方案A sticky group：tabs(40px) 下方整组冻结（筛选行 + 操作行/提示行） -->
+    <div class="sticky-toolbar-group">
+    <!-- 上层工具栏：新建/搜索/筛选 + 导出/折叠（始终显示） -->
+    <div class="task-toolbar task-toolbar-top">
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
         <el-button type="primary" size="small" @click="$emit('create-task')" v-if="checkPermi(['pms:task:create']) && canProject(PERM.TASK_CREATE)">
           <Icon icon="ep:plus" class="mr-4px" />新建任务
         </el-button>
@@ -24,32 +26,6 @@
         </el-select>
       </div>
       <div>
-        <!-- 任务操作区：选中行后显示，按选中行 canTransition 动态展示 -->
-        <template v-if="selectedTask && !selectedTask.isStageRow">
-          <span class="task-op-label" :title="selectedTask.taskName">已选：{{ selectedTask.taskName }}</span>
-          <el-button v-if="canTransition(selectedTask, 'start')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'start')">开始任务</el-button>
-          <el-button v-if="canTransition(selectedTask, 'dispatch')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'dispatch')">派发</el-button>
-          <el-button v-if="canTransition(selectedTask, 'accept')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'accept')">接收</el-button>
-          <el-button v-if="canTransition(selectedTask, 'reject')" size="small" type="danger" @click.stop="handleTransition(selectedTask, 'reject')">拒绝</el-button>
-          <el-button v-if="canTransition(selectedTask, 'redispatch')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'redispatch')">重新派发</el-button>
-          <el-button v-if="canTransition(selectedTask, 'submit')" size="small" type="success" @click.stop="handleTransition(selectedTask, 'submit')">提交完成</el-button>
-          <el-button v-if="canTransition(selectedTask, 'approve')" size="small" type="success" @click.stop="handleTransition(selectedTask, 'approve')">审核通过</el-button>
-          <el-button v-if="canTransition(selectedTask, 'reject_review')" size="small" type="danger" @click.stop="handleTransition(selectedTask, 'reject_review')">驳回</el-button>
-          <el-button v-if="canTransition(selectedTask, 'pause')" size="small" type="warning" @click.stop="handleTransition(selectedTask, 'pause')">暂停</el-button>
-          <el-button v-if="canTransition(selectedTask, 'resume')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'resume')">恢复</el-button>
-          <el-button v-if="canReportProgress(selectedTask)" size="small" type="primary" @click.stop="$emit('taskClick', selectedTask)">进度填报</el-button>
-          <el-button v-if="canAddSubtask(selectedTask)" size="small" type="primary" @click.stop="$emit('add-subtask', selectedTask)">添加子任务</el-button>
-          <el-button v-if="ALLOW_CHANGE_STATUSES.includes(selectedTask.completeStatus)" size="small" type="warning" @click.stop="handleChangeRequest(selectedTask)">发起变更</el-button>
-          <el-button v-if="checkPermi(['pms:task:delete']) && (isPM || String(selectedTask.mainOwnerId) === currentUserId)" size="small" type="danger" @click.stop="handleDeleteTask(selectedTask)">删除</el-button>
-          <el-button size="small" text @click.stop="clearSelection">取消选择</el-button>
-          <span class="task-op-divider"></span>
-        </template>
-        <template v-else>
-          <span class="task-op-hint">
-            <Icon icon="ep:info-filled" class="mr-4px" />点击任务行后可在此操作（开始/派发/提交/审核/进度填报/变更 等）
-          </span>
-          <span class="task-op-divider"></span>
-        </template>
         <el-button size="small" :loading="exporting" @click="handleExport" v-if="checkPermi(['pms:task:query'])">
           <Icon icon="ep:download" class="mr-4px" />导出
         </el-button>
@@ -59,6 +35,38 @@
         </el-button>
       </div>
     </div>
+
+    <!-- 下层工具栏：选中任务后的操作按钮（独立 sticky 行，滚动时始终可见） -->
+    <div v-if="selectedTask && !selectedTask.isStageRow" class="task-toolbar task-toolbar-action">
+      <div class="task-op-actions">
+        <span class="task-op-label" :title="selectedTask.taskName">
+          <Icon icon="ep:select" class="mr-4px" />已选：{{ selectedTask.taskName }}
+        </span>
+        <el-button v-if="canTransition(selectedTask, 'start')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'start')">开始任务</el-button>
+        <el-button v-if="canTransition(selectedTask, 'dispatch')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'dispatch')">派发</el-button>
+        <el-button v-if="canTransition(selectedTask, 'accept')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'accept')">接收</el-button>
+        <el-button v-if="canTransition(selectedTask, 'reject')" size="small" type="danger" @click.stop="handleTransition(selectedTask, 'reject')">拒绝</el-button>
+        <el-button v-if="canTransition(selectedTask, 'redispatch')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'redispatch')">重新派发</el-button>
+        <el-button v-if="canTransition(selectedTask, 'submit')" size="small" type="success" @click.stop="handleTransition(selectedTask, 'submit')">提交完成</el-button>
+        <el-button v-if="canTransition(selectedTask, 'approve')" size="small" type="success" @click.stop="handleTransition(selectedTask, 'approve')">审核通过</el-button>
+        <el-button v-if="canTransition(selectedTask, 'reject_review')" size="small" type="danger" @click.stop="handleTransition(selectedTask, 'reject_review')">驳回</el-button>
+        <el-button v-if="canTransition(selectedTask, 'pause')" size="small" type="warning" @click.stop="handleTransition(selectedTask, 'pause')">暂停</el-button>
+        <el-button v-if="canTransition(selectedTask, 'resume')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'resume')">恢复</el-button>
+        <el-button v-if="canReportProgress(selectedTask)" size="small" type="primary" @click.stop="$emit('taskClick', selectedTask)">进度填报</el-button>
+        <el-button v-if="canAddSubtask(selectedTask)" size="small" type="primary" @click.stop="$emit('add-subtask', selectedTask)">添加子任务</el-button>
+        <el-button v-if="ALLOW_CHANGE_STATUSES.includes(selectedTask.completeStatus)" size="small" type="warning" @click.stop="handleChangeRequest(selectedTask)">发起变更</el-button>
+        <el-button v-if="checkPermi(['pms:task:delete']) && (isPM || String(selectedTask.mainOwnerId) === currentUserId)" size="small" type="danger" @click.stop="handleDeleteTask(selectedTask)">删除</el-button>
+        <el-button size="small" text @click.stop="clearSelection">
+          <Icon icon="ep:close" class="mr-4px" />取消选择
+        </el-button>
+      </div>
+    </div>
+    <div v-else class="task-toolbar task-toolbar-hint">
+      <span class="task-op-hint">
+        <Icon icon="ep:info-filled" class="mr-4px" />点击任务行后可在此操作（开始/派发/提交/审核/进度填报/变更 等）
+      </span>
+    </div>
+    </div><!-- /sticky-toolbar-group -->
 
     <!-- 任务计数 + 仅看我负责的开关 -->
     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
@@ -725,26 +733,74 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.task-toolbar {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
-  position: sticky; top: 0; z-index: 10; background: #fff;
-  padding: 8px 12px; margin-left: -12px; margin-right: -12px;
+/* 工具栏拆双层：上层（筛选+导出）普通布局；操作行（选中后）独立 sticky */
+.task-toolbar { margin-bottom: 8px; }
+
+/* 方案A 二次加固：与 el-tabs header 同方案（fixed + var），
+   top = navbar(50) + tags view(35) + tabs header(40) = 125px */
+/* 终极方案：sticky 与 .sticky-tabs-area 同滚动上下文。
+   top: 40px = el-tabs header 高度，sticky 后正好在 tabs 下方连续两段冻结 */
+.sticky-toolbar-group {
+  position: sticky;
+  top: 40px;
+  z-index: 997;
+  background: var(--el-bg-color, #fff);
+  padding: 4px 16px 0;
+}
+
+/* 上层：搜索/筛选/新建/导出/折叠。允许多行换行 */
+.task-toolbar-top {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 8px;
+  padding: 6px 12px; background: #fff;
   border-bottom: 1px solid #ebeef5;
 }
-.task-op-label {
-  display: inline-flex; align-items: center; margin-right: 4px;
-  padding: 0 8px; font-size: 12px; color: #2468F2; background: #e8f0ff;
-  border-radius: 4px; line-height: 24px; max-width: 220px;
+
+/* 操作行（选中任务后）：fixed 钉视口底部 + 阴影悬浮
+   一次性修复：sticky 链路在 el-tabs/el-tab-pane 内不可靠，
+   改用 fixed 永远可见。bottom 避开 el-backtop（右下角 50px 处的回顶按钮）。
+   不与顶部 sticky tabs/toolbar 冲突（顶部 sticky，底部 fixed，分两个区）。 */
+.task-toolbar-action {
+  position: fixed;
+  bottom: 16px;
+  /* +20px 对齐项目详情页 .p-20px 内边距，让 action bar 左右与表格内容完全对齐 */
+  left: calc(var(--left-menu-min-width, 64px) + 20px);
+  right: 20px;
+  z-index: 999;
+  background: linear-gradient(135deg, #ecf5ff 0%, #f0f9ff 100%);
+  border: 1px solid #b3d8ff;
+  border-radius: 8px;
+  padding: 10px 16px;
+  box-shadow: 0 8px 24px rgba(36, 104, 242, 0.25);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.task-toolbar-action .task-op-actions {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.task-toolbar-action .task-op-label {
+  font-weight: 600; color: #2468F2;
+  margin-right: 4px;
+  padding: 0 8px;
+  border-right: 1px solid #b3d8ff;
+  max-width: 260px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* 提示行（未选中）：轻量提示 */
+.task-toolbar-hint {
+  padding: 6px 12px; background: #fafafa;
+  border: 1px dashed #e4e7ed;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+.task-toolbar-hint .task-op-hint {
+  color: #909399; font-size: 12px;
+}
+
+/* 兼容旧类名（导出按钮/折叠按钮容器内还在用） */
 .task-op-divider {
   display: inline-block; width: 1px; height: 20px; background: #ebeef5;
   margin: 0 6px; vertical-align: middle;
-}
-.task-op-hint {
-  display: inline-flex; align-items: center;
-  font-size: 12px; color: #909399;
-  padding: 0 8px; line-height: 24px;
 }
 .mb-16px { margin-bottom: 16px; }
 .submit-confirm-content { }

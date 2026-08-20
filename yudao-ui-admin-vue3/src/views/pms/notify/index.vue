@@ -28,7 +28,7 @@
         </el-table-column>
         <el-table-column label="升级规则" width="140">
           <template #default="{ row }">
-            <span v-if="row.escalationFlag">{{ row.escalationCondition || '有升级' }} → {{ row.escalationTarget || '' }}</span>
+            <span v-if="row.escalationFlag">{{ row.escalationCondition || '有升级' }} → {{ escalationTargetMap[row.escalationTarget] || row.escalationTarget || '' }}</span>
             <span v-else style="color: var(--el-text-color-placeholder)">无</span>
           </template>
         </el-table-column>
@@ -207,6 +207,13 @@ function parseChannels(ch: string): string[] {
 function getChannelLabel(ch: string): string {
   const map: Record<string, string> = { dingtalk: '钉钉', email: '邮件', sms: '短信', system_msg: '系统' }
   return map[ch] || ch
+}
+
+// 升级通知人角色编码 → 中文标签
+const escalationTargetMap: Record<string, string> = {
+  project_manager: '项目经理',
+  dept_head: '部门负责人',
+  director: '总监'
 }
 
 function getEventLabel(e: string): string {

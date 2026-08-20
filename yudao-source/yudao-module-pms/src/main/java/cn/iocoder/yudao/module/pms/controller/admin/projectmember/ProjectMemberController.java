@@ -3,6 +3,9 @@ package cn.iocoder.yudao.module.pms.controller.admin.projectmember;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.pms.dal.dataobject.projectmember.PmsProjectMemberDO;
 import cn.iocoder.yudao.module.pms.service.projectmember.ProjectMemberService;
+import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
+import cn.iocoder.yudao.module.pms.service.projectpermission.ProjectPermissionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,10 +25,30 @@ public class ProjectMemberController {
     @Resource
     private ProjectMemberService projectMemberService;
 
+    @Autowired(required = false)
+    private ProjectPermissionService projectPermissionService;
+
+    /**
+     * 项目级权限校验兜底：管理项目成员需 member_manage 权限点。
+     */
+    private void requireProjectPerm(Long projectId, String permKey) {
+        if (projectPermissionService == null || projectId == null) {
+            return;
+        }
+        projectPermissionService.checkPermission(projectId, permKey);
+    }
+
+    private Long getMemberProjectId(Long memberId) {
+        if (memberId == null) return null;
+        PmsProjectMemberDO member = projectMemberService.getProjectMember(memberId);
+        return member == null ? null : member.getProjectId();
+    }
+
     @PostMapping("/create")
     @Operation(summary = "创建项目成员")
     @PreAuthorize("@ss.hasPermission('pms:member:create')")
     public CommonResult<Long> create(@RequestBody PmsProjectMemberDO entity) {
+        requireProjectPerm(entity.getProjectId(), PmsPermKeyEnum.MEMBER_MANAGE.getKey());
         return success(projectMemberService.createProjectMember(entity));
     }
 
@@ -33,6 +56,7 @@ public class ProjectMemberController {
     @Operation(summary = "更新项目成员")
     @PreAuthorize("@ss.hasPermission('pms:member:update')")
     public CommonResult<Boolean> update(@RequestBody PmsProjectMemberDO entity) {
+        requireProjectPerm(entity.getProjectId(), PmsPermKeyEnum.MEMBER_MANAGE.getKey());
         projectMemberService.updateProjectMember(entity);
         return success(true);
     }
@@ -42,6 +66,7 @@ public class ProjectMemberController {
     @Parameter(name = "id", description = "编号", required = true)
     @PreAuthorize("@ss.hasPermission('pms:member:delete')")
     public CommonResult<Boolean> delete(@RequestParam("id") Long id) {
+        requireProjectPerm(getMemberProjectId(id), PmsPermKeyEnum.MEMBER_MANAGE.getKey());
         projectMemberService.deleteProjectMember(id);
         return success(true);
     }

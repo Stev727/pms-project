@@ -47,16 +47,25 @@
     <el-dialog v-model="showDialog" :title="editing ? '编辑成员' : '添加成员'" width="480px">
       <el-form label-width="80px">
         <el-form-item label="成员" required>
+          <!-- 编辑模式：只读输入框显示姓名（避免 el-select 找不到 option 回退显示 ID） -->
+          <el-input
+            v-if="editing"
+            :model-value="form.userName"
+            disabled
+            placeholder="-"
+            class="w-full"
+          />
+          <!-- 添加模式：远程搜索 el-select -->
           <el-select
+            v-else
             v-model="form.userId"
             filterable
             remote
             reserve-keyword
             :remote-method="searchUsers"
             :loading="remoteLoading"
-            placeholder="输入用户昵称或ID搜索，或直接从列表中选择"
+            placeholder="输入用户昵称或ID搜索"
             class="w-full"
-            :disabled="!!editing"
             @focus="onUserSelectFocus"
           >
             <el-option v-for="u in selectUserOptions" :key="u.id" :label="`${u.nickname} (${u.id})`" :value="Number(u.id)" />
@@ -105,6 +114,7 @@ import { checkPermi } from '@/utils/permission'
 import { useCache } from '@/hooks/web/useCache'
 import { useUserStore } from '@/store/modules/user'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 import { getDictOptions } from '../pms-utils'
 
 defineOptions({ name: 'MembersTab' })
@@ -136,6 +146,7 @@ const isPM = computed(() => {
 })
 
 const { userList, getUserName, ensureLoaded: ensureUsersLoaded, remoteUserList, remoteLoading, searchUsers: rawSearchUsers } = useUserNames()
+const { clearMemberCache } = useProjectMembers()
 const loading = ref(false)
 const memberList = ref<any[]>([])
 const showDialog = ref(false)
@@ -147,6 +158,7 @@ const userSearchQuery = ref('')
 const form = reactive({
   memberId: undefined as any,
   userId: undefined as any,
+  userName: '' as string,
   roleCode: 'helper',  // 默认项目角色：协助人（有效的项目角色）
   isExternal: false,
   status: 'active'
@@ -221,6 +233,7 @@ async function handleAdd() {
   editing.value = null
   form.memberId = undefined
   form.userId = undefined
+  form.userName = ''
   form.roleCode = 'helper'
   form.isExternal = false
   form.status = 'active'
@@ -234,6 +247,7 @@ async function editMember(row: any) {
   editing.value = row
   form.memberId = row.memberId
   form.userId = String(row.userId)
+  form.userName = getUserName(row.userId) || ''
   form.roleCode = row.roleCode
   form.isExternal = row.isExternal
   form.status = row.status
@@ -270,6 +284,7 @@ async function saveMember() {
     showDialog.value = false
     editing.value = null
     await loadMembers()
+    clearMemberCache(props.projectId)
   } catch (e: any) {
     console.error(e)
     const msg = e?.message || String(e || '')
@@ -303,6 +318,7 @@ async function removeMember(row: any) {
       await deleteProjectMember(row.memberId as number)
       ElMessage.success('成员已移除')
       await loadMembers()
+      clearMemberCache(props.projectId)
     } catch (e) { console.error(e) }
   }).catch(() => {})
 }

@@ -75,6 +75,7 @@
 
     <!-- Tab 容器 -->
     <ContentWrap class="mt-16px">
+      <div class="sticky-tabs-area">
       <el-tabs v-model="activeTab" type="card" @tab-change="handleTabChange">
         <!-- 概览 Tab (NEW - FATAL+SEVERE 修复) -->
         <el-tab-pane label="概览" name="overview">
@@ -190,6 +191,7 @@
           </template>
         </el-tab-pane>
       </el-tabs>
+      </div><!-- /sticky-tabs-area -->
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
@@ -820,6 +822,22 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 方案A 二次加固：tabs header 改为 fixed，钉在 admin navbar(50px) + tags view(35px) = 85px 下方
+   用 fixed 而非 sticky 是因为 sticky 在 el-tabs__content overflow:hidden 链路上仍失效
+   fixed 完全不受任何父容器 overflow 影响。left 用 var 响应 sidebar 折叠/展开 */
+
+/* 终极方案：tabs sticky 通过模板 wrapper 生效，绕过 Element Plus 内部结构干扰。
+   wrapper 是 project-detail 模板直接子节点（带 scope attr），sticky 上下文干净。
+   视觉：项目信息头正常滚动消失后，wrapper 钉在滚动区顶部；项目信息头还在时，wrapper 在它下方保持自然位置。 */
+.sticky-tabs-area {
+  position: sticky;
+  top: 0;
+  z-index: 998;
+  background: var(--el-bg-color, #fff);
+}
+:deep(.el-tabs__content) {
+  overflow: visible; /* Element Plus 默认 overflow:hidden 会困住 tab 内 sticky 元素；保留防止后续问题 */
+}
 .detail-header {
   display: flex; justify-content: space-between; align-items: flex-start;
 }

@@ -30,7 +30,7 @@
         </template>
       </el-table-column>
       <el-table-column label="发起人" width="100">
-        <template #default="{ row }">{{ row.initiatorName || row.initiatorId || '-' }}</template>
+        <template #default="{ row }">{{ row.initiatorName || (row.initiatorId ? getUserName(row.initiatorId) : '-') }}</template>
       </el-table-column>
       <el-table-column label="状态" width="90" align="center">
         <template #default="{ row }">
@@ -76,11 +76,11 @@
           <el-descriptions-item label="审批类型">{{ getTypeLabel(detailData.approvalType) }}</el-descriptions-item>
           <el-descriptions-item label="审批事项">{{ detailData.approvalTitle || '-' }}</el-descriptions-item>
           <el-descriptions-item label="当前状态">{{ getStatusLabel(detailData.approvalStatus) }}</el-descriptions-item>
-          <el-descriptions-item label="发起人">{{ detailData.initiatorName || detailData.initiatorId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="发起人">{{ detailData.initiatorName || (detailData.initiatorId ? getUserName(detailData.initiatorId) : '-') }}</el-descriptions-item>
           <el-descriptions-item label="审批人">{{ detailData.approverName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="提交时间">{{ formatDate(detailData.initiateTime) }}</el-descriptions-item>
           <el-descriptions-item label="完成时间">{{ formatDate(detailData.completeTime) }}</el-descriptions-item>
-          <el-descriptions-item label="OA回调状态">{{ detailData.oaCallbackStatus || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="OA回调状态">{{ detailData.oaCallbackStatus === 'success' ? '已回调' : detailData.oaCallbackStatus === 'pending' ? '等待中' : '-' }}</el-descriptions-item>
           <el-descriptions-item label="审批意见" :span="2">{{ detailData.approvalOpinion || '-' }}</el-descriptions-item>
         </el-descriptions>
       </template>

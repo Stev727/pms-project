@@ -40,11 +40,14 @@ public interface ProjectPermissionMapper extends BaseMapperX<PmsProjectPermissio
         if (roleIds == null || roleIds.isEmpty()) {
             return false;
         }
+        // 显式过滤 deleted=0：DO 虽无 @TableLogic，但历史数据/迁移可能留下 deleted=1 行
+        // （例如曾启用软删除后再关闭）。不显式过滤会让"已撤销"的权限通过旧行继续放行。
         return selectCount(new LambdaQueryWrapperX<PmsProjectPermissionDO>()
                 .eq(PmsProjectPermissionDO::getProjectId, projectId)
                 .in(PmsProjectPermissionDO::getRoleId, roleIds)
                 .eq(PmsProjectPermissionDO::getPermKey, permKey)
-                .eq(PmsProjectPermissionDO::getAllowed, true)) > 0;
+                .eq(PmsProjectPermissionDO::getAllowed, true)
+                .eq(PmsProjectPermissionDO::getDeleted, false)) > 0;
     }
 
     /**

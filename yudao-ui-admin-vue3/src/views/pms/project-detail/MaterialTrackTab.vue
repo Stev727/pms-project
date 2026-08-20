@@ -108,7 +108,7 @@
         </el-table-column>
         <el-table-column label="操作" width="240" align="center">
           <template #default="{ row }">
-            <el-button link type="warning" size="small" @click.stop="urge(row)" v-if="row.warningStatus !== 'normal'">
+            <el-button link type="warning" size="small" @click.stop="urge(row)" v-if="calcWarningStatus(row) !== 'normal'">
               催交
             </el-button>
             <el-button
@@ -300,7 +300,7 @@ const createRules = {
 const filteredData = computed(() => {
   let result = tableData.value
   if (filters.name) result = result.filter(m => m.materialName?.includes(filters.name))
-  if (filters.status) result = result.filter(m => m.warningStatus === filters.status)
+  if (filters.status) result = result.filter(m => calcWarningStatus(m) === filters.status)
   return result
 })
 

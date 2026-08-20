@@ -30,7 +30,7 @@
         </el-table-column>
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '活跃' : ' inactive' }}</el-tag>
+            <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '活跃' : '停用' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120" align="center">
@@ -44,7 +44,7 @@
 
     <el-dialog v-model="showAdd" :title="editing ? '编辑成员' : '添加成员'" width="480px">
       <el-form label-width="80px">
-        <el-form-item label="成员"><el-select v-model="form.userId" filterable placeholder="选择用户" class="w-full"><el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" /></el-select></el-form-item>
+        <el-form-item label="成员"><el-input v-if="editing" :model-value="form.userName" disabled placeholder="-" class="w-full" /><el-select v-else v-model="form.userId" filterable placeholder="选择用户" class="w-full"><el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" /></el-select></el-form-item>
         <el-form-item label="项目角色"><el-select v-model="form.roleCode" class="w-full"><el-option label="项目经理" value="pm" /><el-option label="技术负责人" value="tech_lead" /><el-option label="硬件工程师" value="hw_engineer" /><el-option label="软件工程师" value="sw_engineer" /><el-option label="测试工程师" value="qa_engineer" /><el-option label="结构工程师" value="mech_engineer" /><el-option label="采购" value="procurement" /></el-select></el-form-item>
         <el-form-item label="是否外部"><el-switch v-model="form.isExternal" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="form.status" class="w-full"><el-option label="活跃" value="active" /><el-option label="停用" value="inactive" /></el-select></el-form-item>
@@ -75,6 +75,7 @@ const form = reactive({
   memberId: undefined as any,
   projectId: undefined as any,
   userId: undefined as any,
+  userName: '' as string,
   roleCode: 'hw_engineer',
   isExternal: false,
   status: 'active'
@@ -107,6 +108,7 @@ function handleAdd() {
   editing.value = null
   form.memberId = undefined
   form.userId = undefined
+  form.userName = ''
   form.roleCode = 'hw_engineer'
   form.isExternal = false
   form.status = 'active'
@@ -119,6 +121,7 @@ function editMember(row: any) {
   form.memberId = row.memberId
   form.projectId = row.projectId
   form.userId = row.userId
+  form.userName = getUserName(row.userId) || ''
   form.roleCode = row.roleCode
   form.isExternal = row.isExternal
   form.status = row.status
