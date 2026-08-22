@@ -41,13 +41,13 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
         server: {
             port: env.VITE_PORT, // 端口号
             host: "0.0.0.0",
-            allowedHosts: ["pms.topsunpower.cc", "10.1.3.32"],
-            hmr: { host: "pms.topsunpower.cc", clientPort: 80, protocol: "ws" },
+            allowedHosts: ["pms.topsunpower.cc", "10.1.3.32", "10.1.4.23"],
+            hmr: { clientPort: 80, protocol: "ws" },
             open: env.VITE_OPEN === 'true',
             // 跨域代理：浏览器→vite(3000)→后端(48080)
             proxy: {
                 ['/admin-api']: {
-                    target: env.VITE_BASE_URL || 'http://10.1.3.32:48080',
+                    target: env.VITE_BASE_URL || 'http://127.0.0.1:48080',
                     ws: false,
                     changeOrigin: true,
                     // 不需要 rewrite — 保留 /admin-api 前缀
