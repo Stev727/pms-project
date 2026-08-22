@@ -4,8 +4,12 @@
 set -euo pipefail
 RDPMS=/home/ai/projects/rdpms
 BRANCH=codex/pms-upgrade-prod-20260808
-MVN=$(ls /opt/apache-maven-*/bin/mvn /home/ai/apache-maven-*/bin/mvn 2>/dev/null | head -1)
+MVN=""
+for c in /opt/apache-maven-*/bin/mvn /home/ai/apache-maven-*/bin/mvn; do
+  [ -x "$c" ] && MVN="$c" && break
+done
 [ -n "$MVN" ] || { echo "!! 未找到 maven"; exit 1; }
+echo "使用 maven: $MVN"
 
 cd "$RDPMS"
 echo "[1/6] 工作区检查"
@@ -32,6 +36,6 @@ setsid java -jar yudao-server.jar --spring.profiles.active=local > /tmp/yudao-se
 echo "[6/6] 等待就绪"
 for i in $(seq 1 30); do sleep 2; ss -tln | grep -q ':48080' && break; done
 ss -tln | grep -q ':48080' || { echo "!! 后端未就绪，查 /tmp/yudao-server.log"; exit 1; }
-echo "✅ 部署完成 commit=$(git rev-parse --short HEAD)"
+echo "OK 部署完成 commit=$(git rev-parse --short HEAD)"
 echo "$(date '+%F %T') deploy-test $(git rev-parse --short HEAD) by $(whoami)" >> "$RDPMS/releases.log"
 echo "前端由 Vite dev 自动热更（改 vite.config 时 Vite 自动重启）"
