@@ -605,10 +605,16 @@ function getTaskRoleName(row: any): string {
   return row.roleName || '-'
 }
 
-// 项目经理变更时自动同步到成员列表
+// 项目经理变更时自动同步到成员列表 + 所属部门
 function onManagerChange(val: number | string) {
   if (!val) return
   const idStr = String(val)
+  // 自动带出所属部门：优先从远程搜索结果取，否则从全局用户单例取；用户仍可手动修改
+  const pmUser = remoteUserList.value.find((u: any) => String(u.id) === idStr)
+    || userList.value.find((u: any) => String(u.id) === idStr)
+  if (pmUser?.deptId) {
+    projectForm.deptId = Number(pmUser.deptId)
+  }
   // 移除旧的 PM 成员
   const oldPmIdx = selectedMembers.value.findIndex(m => m.roleCode === 'pm')
   if (oldPmIdx > -1) selectedMembers.value.splice(oldPmIdx, 1)

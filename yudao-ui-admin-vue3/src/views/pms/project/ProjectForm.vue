@@ -56,7 +56,7 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="项目经理" prop="projectManagerId">
-            <el-select v-model="formData.projectManagerId" placeholder="请选择" filterable remote clearable :remote-method="searchUsers" :loading="remoteLoading" style="width: 100%">
+            <el-select v-model="formData.projectManagerId" placeholder="请选择" filterable remote clearable :remote-method="searchUsers" :loading="remoteLoading" style="width: 100%" @change="onManagerChange">
               <el-option v-for="u in remoteUserList" :key="u.id" :label="`${u.nickname}`" :value="Number(u.id)" />
             </el-select>
           </el-form-item>
@@ -199,6 +199,17 @@ const closeDialog = () => {
   dialogVisible.value = false
   Object.assign(formData, defaultForm)
   formRef.value?.resetFields()
+}
+
+// 项目经理变更时自动带出所属部门（用户仍可手动修改）
+const onManagerChange = (val: number | string | undefined) => {
+  if (!val) return
+  const idStr = String(val)
+  const pmUser = remoteUserList.value.find((u: any) => String(u.id) === idStr)
+    || userList.value.find((u: any) => String(u.id) === idStr)
+  if (pmUser?.deptId) {
+    formData.deptId = Number(pmUser.deptId)
+  }
 }
 
 const handleSubmit = async () => {
