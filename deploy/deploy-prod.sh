@@ -15,8 +15,11 @@ echo "=============================================="
 echo "  即将部署到【生产环境 10.1.3.32】"
 echo "  本操作不动数据库，只更新代码并重启服务"
 echo "=============================================="
-read -r -p "确认请输入 yes: " CONFIRM
-[ "$CONFIRM" = "yes" ] || { echo "已取消"; exit 1; }
+# 支持 DEPLOY_CONFIRM=yes 跳过交互(自动化/SSH 非交互场景); 人工执行仍需输入 yes
+if [ "${DEPLOY_CONFIRM:-}" != "yes" ]; then
+  read -r -p "确认请输入 yes: " CONFIRM
+  [ "$CONFIRM" = "yes" ] || { echo "已取消"; exit 1; }
+fi
 
 cd "$RDPMS"
 echo "[1/6] 工作区检查"
