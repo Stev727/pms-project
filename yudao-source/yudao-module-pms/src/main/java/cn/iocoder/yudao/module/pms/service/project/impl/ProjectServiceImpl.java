@@ -115,6 +115,7 @@ public class ProjectServiceImpl implements ProjectService {
             member.setProjectId(projectId);
             projectMemberMapper.insert(member);
         }
+        int taskSeq = 0;
         for (PmsTaskDO task : tasks) {
             task.setProjectId(projectId);
             Long origStageId = task.getStageId();
@@ -129,6 +130,10 @@ public class ProjectServiceImpl implements ProjectService {
             normalizeTaskSchedule(task);
             task.setCompleteStatus("not_started");
             task.setProgress(0);
+            // 任务按提交顺序回填 sortOrder，保证列表/甘特顺序稳定（引用模板时顺序随之继承）
+            if (task.getSortOrder() == null) {
+                task.setSortOrder(++taskSeq);
+            }
             taskMapper.insert(task);
         }
         List<PmsNotifyRuleDO> rules;

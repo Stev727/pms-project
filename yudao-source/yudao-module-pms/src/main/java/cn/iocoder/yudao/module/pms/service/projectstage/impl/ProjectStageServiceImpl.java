@@ -63,7 +63,11 @@ public class ProjectStageServiceImpl implements ProjectStageService {
 
     @Override
     public List<PmsProjectStageDO> getProjectStageList() {
-        return projectStageMapper.selectList(null);
+        // 阶段按 sort_order 升序返回，同序号按主键稳定排序（模板/项目阶段顺序由此保证）
+        return projectStageMapper.selectList(
+                Wrappers.<PmsProjectStageDO>lambdaQuery()
+                        .orderByAsc(PmsProjectStageDO::getSortOrder)
+                        .orderByAsc(PmsProjectStageDO::getStageId));
     }
 
     private void requireProjectManager(Long projectId) {

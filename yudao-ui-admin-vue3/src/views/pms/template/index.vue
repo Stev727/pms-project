@@ -279,7 +279,13 @@
               default-expand-all
               style="width: 100%"
             >
-              <el-table-column label="名称" prop="taskName" min-width="220" />
+              <el-table-column label="序号" width="60" align="center">
+                <template #default="{ row }">
+                  <span v-if="row.isStage">{{ row.sortOrder ?? '' }}</span>
+                  <span v-else class="text-12px text-gray-400">{{ row.sortOrder ?? '' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="名称" prop="taskName" min-width="200" />
               <el-table-column label="类型" width="100">
                 <template #default="{ row }">
                   <el-tag v-if="row.isStage" type="warning" size="small">阶段</el-tag>
@@ -299,20 +305,30 @@
                   <span v-else>-</span>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="120" align="center">
+              <el-table-column label="操作" width="230" align="center">
                 <template #default="{ row }">
-                  <el-button v-if="!row.isStage" link type="primary" size="small" @click="openEditTask(row)">
-                    <Icon icon="ep:edit" />编辑
-                  </el-button>
-                  <el-button v-if="!row.isStage" link type="danger" size="small" @click="removeEditTask(row)">
-                    <Icon icon="ep:delete" />删除
-                  </el-button>
-                  <el-button v-else v-hasPermi="['pms:template:update']" link type="primary" size="small" @click="openEditStage(row)">
-                    <Icon icon="ep:edit" />编辑
-                  </el-button>
-                  <el-button v-if="row.isStage" v-hasPermi="['pms:template:update']" link type="danger" size="small" @click="removeEditStage(row)">
-                    <Icon icon="ep:delete" />删除
-                  </el-button>
+                  <template v-if="row.isStage">
+                    <el-button v-hasPermi="['pms:template:update']" link type="default" size="small" :disabled="isFirstStage(row)" @click="moveStage(row, -1)">
+                      <Icon icon="ep:top" />上移
+                    </el-button>
+                    <el-button v-hasPermi="['pms:template:update']" link type="default" size="small" :disabled="isLastStage(row)" @click="moveStage(row, 1)">
+                      <Icon icon="ep:bottom" />下移
+                    </el-button>
+                    <el-button v-hasPermi="['pms:template:update']" link type="primary" size="small" @click="openEditStage(row)">
+                      <Icon icon="ep:edit" />编辑
+                    </el-button>
+                    <el-button v-hasPermi="['pms:template:update']" link type="danger" size="small" @click="removeEditStage(row)">
+                      <Icon icon="ep:delete" />删除
+                    </el-button>
+                  </template>
+                  <template v-else>
+                    <el-button link type="primary" size="small" @click="openEditTask(row)">
+                      <Icon icon="ep:edit" />编辑
+                    </el-button>
+                    <el-button link type="danger" size="small" @click="removeEditTask(row)">
+                      <Icon icon="ep:delete" />删除
+                    </el-button>
+                  </template>
                 </template>
               </el-table-column>
             </el-table>
@@ -509,7 +525,7 @@ const editStageTreeData = computed(() => {
       taskName: stage.stageName,
       children
     }
-  })
+  }).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
 })
 
 const getTypeLabel = (type: string) => {
@@ -575,7 +591,7 @@ const stageTreeData = computed(() => {
       taskName: stage.stageName,
       children
     }
-  })
+  }).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
   return stages
 })
 
@@ -763,6 +779,34 @@ const saveEdit = async () => {
   } finally {
     editSaving.value = false
   }
+}
+
+// 阶段排序：上移/下移（交换相邻阶段的 sortOrder 并归一化为 1..n，保存时随 updateStage 一并提交）
+const sortedEditStages = () =>
+  [...editStageList.value].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+
+const isFirstStage = (row: any) => {
+  const sorted = sortedEditStages()
+  return sorted.length === 0 || String(sorted[0].stageId) === String(row.stageId)
+}
+
+const isLastStage = (row: any) => {
+  const sorted = sortedEditStages()
+  return sorted.length === 0 || String(sorted[sorted.length - 1].stageId) === String(row.stageId)
+}
+
+const moveStage = (row: any, dir: number) => {
+  const sorted = sortedEditStages()
+  const idx = sorted.findIndex(s => String(s.stageId) === String(row.stageId))
+  if (idx === -1) return
+  const target = idx + dir
+  if (target < 0 || target >= sorted.length) return
+  // 交换相邻两个阶段的 sortOrder
+  const tmp = Number(sorted[idx].sortOrder) || 0
+  sorted[idx].sortOrder = Number(sorted[target].sortOrder) || 0
+  sorted[target].sortOrder = tmp
+  // 归一化为 1..n，保证顺序连续、序号列展示稳定
+  sorted.forEach((s, i) => { s.sortOrder = i + 1 })
 }
 
 const openEditStage = (row: any) => {
