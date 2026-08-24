@@ -37,7 +37,8 @@
     </div>
 
     <!-- 下层工具栏：选中任务后的操作按钮（独立 sticky 行，滚动时始终可见） -->
-    <div v-if="selectedTask && !selectedTask.isStageRow" class="task-toolbar task-toolbar-action">
+    <div v-if="selectedTask && !selectedTask.isStageRow" class="task-toolbar task-toolbar-action"
+         :style="{ left: taskActionBarLeft }">
       <div class="task-op-actions">
         <span class="task-op-label" :title="selectedTask.taskName">
           <Icon icon="ep:select" class="mr-4px" />已选：{{ selectedTask.taskName }}
@@ -242,6 +243,7 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 import { useProjectPerm, PERM } from '@/hooks/pms/useProjectPerm'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/modules/user'
+import { useAppStore } from '@/store/modules/app'
 
 defineOptions({ name: 'TaskListTab' })
 
@@ -522,6 +524,14 @@ const filteredTreeData = computed<TreeRow[]>(() => {
 const currentUserId = computed(() => {
   const userStore = useUserStore()
   return String(userStore.getUser?.id || '')
+})
+
+// 底部操作条联动侧边栏折叠：展开 200px / 折叠 64px，避免 fixed 条遮挡左侧菜单
+const appStore = useAppStore()
+const taskActionBarLeft = computed(() => {
+  return appStore.getCollapse
+    ? 'calc(64px + 20px)'
+    : 'calc(200px + 20px)'
 })
 
 // 当前用户是否是项目经理（或超管）
