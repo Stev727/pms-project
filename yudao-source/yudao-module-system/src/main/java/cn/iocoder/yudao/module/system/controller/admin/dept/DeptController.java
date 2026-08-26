@@ -1,6 +1,5 @@
 package cn.iocoder.yudao.module.system.controller.admin.dept;
 
-import cn.iocoder.yudao.framework.common.enums.CommonStatusEnum;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 import cn.iocoder.yudao.module.system.controller.admin.dept.vo.dept.DeptListReqVO;
@@ -74,10 +73,12 @@ public class DeptController {
     }
 
     @GetMapping(value = {"/list-all-simple", "/simple-list"})
-    @Operation(summary = "获取部门精简信息列表", description = "只包含被开启的部门，主要用于前端的下拉选项")
+    @Operation(summary = "获取部门精简信息列表", description = "包含所有未删除的部门，主要用于前端的下拉选项")
     public CommonResult<List<DeptSimpleRespVO>> getSimpleDeptList() {
-        List<DeptDO> list = deptService.getDeptList(
-                new DeptListReqVO().setStatus(CommonStatusEnum.ENABLE.getStatus()));
+        // PMS 场景: 钉钉同步的部门 status 未必为 ENABLE(实测全库 318 个部门 status 全是 0)，
+        // 按 status 过滤会导致前端下拉缺部门、el-select 选中值回显成数字 ID(如「385」)。
+        // 改为返回全部未删除部门(软删除由 MyBatis-Plus 逻辑删除自动过滤)。
+        List<DeptDO> list = deptService.getDeptList(new DeptListReqVO());
         return success(BeanUtils.toBean(list, DeptSimpleRespVO.class));
     }
 
