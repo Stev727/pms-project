@@ -25,9 +25,9 @@ export const sendTestNotify = (params: { title: string; content: string; userId:
   return request.post({ url: '/pms/dingtalk/notify/test', params })
 }
 
-// 全量同步组织架构
+// 全量同步组织架构（部门+用户+leader，实测 60-80s，全局 axios 超时 30s 不够）
 export const syncAll = () => {
-  return request.post({ url: '/pms/dingtalk/sync/all' })
+  return request.post({ url: '/pms/dingtalk/sync/all', timeout: 180000 })
 }
 
 // 同步部门
