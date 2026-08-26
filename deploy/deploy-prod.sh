@@ -39,7 +39,15 @@ cp yudao-server/target/yudao-server.jar "$RDPMS/yudao-server.jar"
 
 echo "[5/6] 重启后端"
 PID=$(ss -tlnp 2>/dev/null | grep ':48080' | grep -oP 'pid=\K[0-9]+' | head -1 || true)
-if [ -n "$PID" ]; then kill "$PID" || true; sleep 4; fi
+if [ -n "$PID" ]; then kill "$PID" || true; fi
+# 等待端口真正释放再启动(旧进程 shutdown hook 最长约 30-60s;固定 sleep 4 会竞态)
+PORT_WAIT=0
+while ss -tln 2>/dev/null | grep -q ':48080 '; do
+  PORT_WAIT=$((PORT_WAIT+2))
+  [ $PORT_WAIT -ge 90 ] && { echo "!! 端口 48080 释放超时(90s),强制 kill -9"; ss -tlnp 2>/dev/null | grep ':48080' | grep -oP 'pid=\K[0-9]+' | xargs -r kill -9; sleep 2; break; }
+  sleep 2
+done
+echo "端口已释放(等待 ${PORT_WAIT}s),启动新进程..."
 cd "$RDPMS"
 setsid java -jar yudao-server.jar --spring.profiles.active=local > /tmp/yudao-server.log 2>&1 < /dev/null &
 

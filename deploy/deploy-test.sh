@@ -29,12 +29,21 @@ cp yudao-server/target/yudao-server.jar "$RDPMS/yudao-server.jar"
 
 echo "[5/6] 重启后端"
 PID=$(ss -tlnp 2>/dev/null | grep ':48080' | grep -oP 'pid=\K[0-9]+' | head -1 || true)
-if [ -n "$PID" ]; then kill "$PID" || true; sleep 4; fi
+if [ -n "$PID" ]; then kill "$PID" || true; fi
+# 等待端口真正释放再启动(旧进程 shutdown hook 最长约 30-60s;固定 sleep 4 会竞态:
+# 新进程 Port already in use 启动失败,旧进程死透后服务空窗)
+PORT_WAIT=0
+while ss -tln 2>/dev/null | grep -q ':48080 '; do
+  PORT_WAIT=$((PORT_WAIT+2))
+  [ $PORT_WAIT -ge 90 ] && { echo "!! 端口 48080 释放超时(90s),强制 kill -9"; ss -tlnp 2>/dev/null | grep ':48080' | grep -oP 'pid=\K[0-9]+' | xargs -r kill -9; sleep 2; break; }
+  sleep 2
+done
+echo "端口已释放(等待 ${PORT_WAIT}s),启动新进程..."
 cd "$RDPMS"
 setsid java -jar yudao-server.jar --spring.profiles.active=local > /tmp/yudao-server.log 2>&1 < /dev/null &
 
 echo "[6/6] 等待就绪"
-for i in $(seq 1 30); do sleep 2; ss -tln | grep -q ':48080' && break; done
+for i in $(seq 1 45); do sleep 2; ss -tln | grep -q ':48080' && break; done
 ss -tln | grep -q ':48080' || { echo "!! 后端未就绪，查 /tmp/yudao-server.log"; exit 1; }
 echo "OK 部署完成 commit=$(git rev-parse --short HEAD)"
 echo "$(date '+%F %T') deploy-test $(git rev-parse --short HEAD) by $(whoami)" >> "$RDPMS/releases.log"
