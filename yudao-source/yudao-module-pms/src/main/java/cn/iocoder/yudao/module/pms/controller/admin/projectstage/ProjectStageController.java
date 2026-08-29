@@ -24,14 +24,15 @@ public class ProjectStageController {
 
     @PostMapping("/create")
     @Operation(summary = "创建项目阶段")
-    @PreAuthorize("@ss.hasPermission('pms:project_stage:create')")
+    // 模板管理页操作：有模板菜单权限(pms:template:query)即可；普通项目仍走 pms:project_stage:* + service 层 PM 校验
+    @PreAuthorize("@ss.hasPermission('pms:project_stage:create') or @ss.hasPermission('pms:template:query')")
     public CommonResult<Long> create(@RequestBody PmsProjectStageDO entity) {
         return success(projectStageService.createProjectStage(entity));
     }
 
     @PutMapping("/update")
     @Operation(summary = "更新项目阶段")
-    @PreAuthorize("@ss.hasPermission('pms:project_stage:update')")
+    @PreAuthorize("@ss.hasPermission('pms:project_stage:update') or @ss.hasPermission('pms:template:query')")
     public CommonResult<Boolean> update(@RequestBody PmsProjectStageDO entity) {
         projectStageService.updateProjectStage(entity);
         return success(true);
@@ -40,7 +41,7 @@ public class ProjectStageController {
     @DeleteMapping("/delete")
     @Operation(summary = "删除项目阶段")
     @Parameter(name = "id", description = "编号", required = true)
-    @PreAuthorize("@ss.hasPermission('pms:project_stage:delete')")
+    @PreAuthorize("@ss.hasPermission('pms:project_stage:delete') or @ss.hasPermission('pms:template:query')")
     public CommonResult<Boolean> delete(@RequestParam("id") Long id) {
         projectStageService.deleteProjectStage(id);
         return success(true);

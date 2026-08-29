@@ -66,6 +66,11 @@ public class ProjectPermissionServiceImpl implements ProjectPermissionService {
         if (userId == null || projectId == null || permKey == null) {
             return false;
         }
+        // 0. 模板项目(standard_template)：有模板管理菜单权限即可操作，豁免项目级权限矩阵
+        //    （模板项目无成员概念，用户不会是 pms_project_member，第3步查角色必返回 false）
+        if (isTemplateProject(projectId)) {
+            return true;
+        }
         // 1. 超管 / PMO 全量放行
         if (hasGlobalRole()) {
             return true;
@@ -308,6 +313,14 @@ public class ProjectPermissionServiceImpl implements ProjectPermissionService {
     private boolean isProjectManager(Long userId, Long projectId) {
         PmsProjectDO project = projectMapper.selectById(projectId);
         return project != null && Objects.equals(project.getProjectManagerId(), userId);
+    }
+
+    /**
+     * 是否为模板项目（standard_template）
+     */
+    private boolean isTemplateProject(Long projectId) {
+        PmsProjectDO project = projectMapper.selectById(projectId);
+        return project != null && "standard_template".equals(project.getProjectType());
     }
 
     /**

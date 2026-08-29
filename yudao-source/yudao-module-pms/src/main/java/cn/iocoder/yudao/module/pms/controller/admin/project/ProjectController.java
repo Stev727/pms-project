@@ -59,9 +59,9 @@ public class ProjectController {
 
     @PutMapping("/update")
     @Operation(summary = "更新项目")
-    @PreAuthorize("@ss.hasPermission('pms:project:update')")
+    @PreAuthorize("@ss.hasPermission('pms:project:update') or @ss.hasPermission('pms:template:query')")
     public CommonResult<Boolean> update(@RequestBody PmsProjectDO entity) {
-        // P0: 限制只有项目经理或超管可以修改项目基本信息
+        // P0: 限制只有项目经理或超管可以修改项目基本信息；模板项目(standard_template)豁免，由模板菜单权限控制
         Long currentUserId = SecurityFrameworkUtils.getLoginUserId();
         boolean isSuperAdmin = SecurityFrameworkUtils.getLoginUser() != null
                 && SecurityFrameworkUtils.getLoginUser().getScopes() != null
@@ -69,7 +69,9 @@ public class ProjectController {
         if (!isSuperAdmin) {
             // 从数据库读取真实项目信息判断是否PM
             PmsProjectDO existing = projectService.getProject(entity.getProjectId());
-            if (existing != null && existing.getProjectManagerId() != null
+            if (existing != null && "standard_template".equals(existing.getProjectType())) {
+                // 模板项目豁免 PM 校验
+            } else if (existing != null && existing.getProjectManagerId() != null
                     && !existing.getProjectManagerId().equals(currentUserId)) {
                 throw new cn.iocoder.yudao.framework.common.exception.ServiceException(
                     cn.iocoder.yudao.module.pms.enums.ErrorCodeConstants.PROJECT_MANAGER_REQUIRED);

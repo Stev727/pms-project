@@ -76,7 +76,7 @@ public class TaskController {
 
     @PostMapping("/create")
     @Operation(summary = "创建任务")
-    @PreAuthorize("@ss.hasPermission('pms:task:create')")
+    @PreAuthorize("@ss.hasPermission('pms:task:create') or @ss.hasPermission('pms:template:query')")
     public CommonResult<Long> create(@RequestBody PmsTaskDO entity) {
         requireProjectPerm(entity.getProjectId(), PmsPermKeyEnum.TASK_CREATE.getKey());
         return success(taskService.createTask(entity));
@@ -130,7 +130,7 @@ public class TaskController {
 
     @PutMapping("/update")
     @Operation(summary = "更新任务")
-    @PreAuthorize("@ss.hasPermission('pms:task:update')")
+    @PreAuthorize("@ss.hasPermission('pms:task:update') or @ss.hasPermission('pms:template:query')")
     public CommonResult<Boolean> update(@RequestBody PmsTaskDO entity) {
         requireProjectPerm(entity.getProjectId(), PmsPermKeyEnum.TASK_EDIT.getKey());
         taskService.updateTask(entity);
@@ -158,7 +158,7 @@ public class TaskController {
     @DeleteMapping("/delete")
     @Operation(summary = "删除任务")
     @Parameter(name = "id", description = "编号", required = true)
-    @PreAuthorize("@ss.hasPermission('pms:task:delete')")
+    @PreAuthorize("@ss.hasPermission('pms:task:delete') or @ss.hasPermission('pms:template:query')")
     public CommonResult<Boolean> delete(@RequestParam("id") Long id) {
         requireProjectPerm(getTaskProjectId(id), PmsPermKeyEnum.TASK_DELETE.getKey());
         taskService.deleteTask(id);

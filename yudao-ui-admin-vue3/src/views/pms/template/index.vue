@@ -14,7 +14,7 @@
           </el-form-item>
           <el-form-item>
             <el-button @click="getList"><Icon icon="ep:search" />搜索</el-button>
-            <el-button type="primary" plain @click="openCreateDialog" v-hasPermi="['pms:template:create']">
+            <el-button type="primary" plain @click="openCreateDialog" v-hasPermi="['pms:template:query']">
               <Icon icon="ep:plus" />新增模板
             </el-button>
           </el-form-item>
@@ -62,10 +62,10 @@
             <el-button link type="primary" @click="openPreview(row)">
               <Icon icon="ep:view" />预览
             </el-button>
-            <el-button link type="primary" @click="openEdit(row)" v-hasPermi="['pms:template:update']">
+            <el-button link type="primary" @click="openEdit(row)" v-hasPermi="['pms:template:query']">
               <Icon icon="ep:edit" />编辑
             </el-button>
-            <el-button link type="primary" @click="handleCopy(row)" v-hasPermi="['pms:template:create']">
+            <el-button link type="primary" @click="handleCopy(row)" v-hasPermi="['pms:template:query']">
               <Icon icon="ep:copy-document" />复制
             </el-button>
             <el-button link type="danger" @click="handleDeleteTemplate(row)">
@@ -104,8 +104,8 @@
               <el-tag size="small" :type="tpl.status === 'archived' ? 'info' : 'success'">{{ tpl.status === 'archived' ? '归档' : '启用' }}</el-tag>
               <div class="card-actions">
                 <el-button link type="primary" @click="openPreview(tpl)"><Icon icon="ep:view" />预览</el-button>
-                <el-button link type="primary" @click="openEdit(tpl)" v-hasPermi="['pms:template:update']"><Icon icon="ep:edit" />编辑</el-button>
-                <el-button link type="primary" @click="handleCopy(tpl)" v-hasPermi="['pms:template:create']">
+                <el-button link type="primary" @click="openEdit(tpl)" v-hasPermi="['pms:template:query']"><Icon icon="ep:edit" />编辑</el-button>
+                <el-button link type="primary" @click="handleCopy(tpl)" v-hasPermi="['pms:template:query']">
                   <Icon icon="ep:copy-document" />复制
                 </el-button>
                 <el-button link type="danger" @click="handleDeleteTemplate(tpl)">
@@ -215,7 +215,7 @@
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleCopy(previewData)" v-hasPermi="['pms:template:create']">
+        <el-button type="primary" @click="handleCopy(previewData)" v-hasPermi="['pms:template:query']">
           <Icon icon="ep:copy-document" />复制此模板
         </el-button>
       </template>
@@ -261,11 +261,11 @@
             <div class="flex justify-between items-center mb-12px">
               <span class="text-14px font-600">阶段与任务</span>
               <div class="flex gap-8px">
-                <el-button type="success" size="small" @click="openAddStage" v-hasPermi="['pms:template:update']">
+                <el-button type="success" size="small" @click="openAddStage" v-hasPermi="['pms:template:query']">
                   <Icon icon="ep:plus" /> 添加阶段
                 </el-button>
                 <el-tooltip :content="editStageList.length === 0 ? '请先添加阶段' : ''" :disabled="editStageList.length > 0">
-                  <el-button type="primary" size="small" :disabled="editStageList.length === 0" @click="openAddTask" v-hasPermi="['pms:template:update']">
+                  <el-button type="primary" size="small" :disabled="editStageList.length === 0" @click="openAddTask" v-hasPermi="['pms:template:query']">
                     <Icon icon="ep:plus" /> 添加任务
                   </el-button>
                 </el-tooltip>
@@ -308,16 +308,16 @@
               <el-table-column label="操作" width="230" align="center">
                 <template #default="{ row }">
                   <template v-if="row.isStage">
-                    <el-button v-hasPermi="['pms:template:update']" link type="default" size="small" :disabled="isFirstStage(row)" @click="moveStage(row, -1)">
+                    <el-button v-hasPermi="['pms:template:query']" link type="default" size="small" :disabled="isFirstStage(row)" @click="moveStage(row, -1)">
                       <Icon icon="ep:top" />上移
                     </el-button>
-                    <el-button v-hasPermi="['pms:template:update']" link type="default" size="small" :disabled="isLastStage(row)" @click="moveStage(row, 1)">
+                    <el-button v-hasPermi="['pms:template:query']" link type="default" size="small" :disabled="isLastStage(row)" @click="moveStage(row, 1)">
                       <Icon icon="ep:bottom" />下移
                     </el-button>
-                    <el-button v-hasPermi="['pms:template:update']" link type="primary" size="small" @click="openEditStage(row)">
+                    <el-button v-hasPermi="['pms:template:query']" link type="primary" size="small" @click="openEditStage(row)">
                       <Icon icon="ep:edit" />编辑
                     </el-button>
-                    <el-button v-hasPermi="['pms:template:update']" link type="danger" size="small" @click="removeEditStage(row)">
+                    <el-button v-hasPermi="['pms:template:query']" link type="danger" size="small" @click="removeEditStage(row)">
                       <Icon icon="ep:delete" />删除
                     </el-button>
                   </template>
