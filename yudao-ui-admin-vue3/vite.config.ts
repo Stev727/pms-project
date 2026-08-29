@@ -42,7 +42,7 @@ export default ({command, mode}: ConfigEnv): UserConfig => {
             port: env.VITE_PORT, // 端口号
             host: "0.0.0.0",
             allowedHosts: ["pms.topsunpower.cc", "10.1.3.32", "10.1.4.23"],
-            hmr: { clientPort: 80, protocol: "ws" },
+            hmr: true, // 自动推断：HTTP 页面用 ws://:80，HTTPS 页面用 wss://:443（修生产 HTTPS 下 Mixed Content 拦截）
             open: env.VITE_OPEN === 'true',
             // 跨域代理：浏览器→vite(3000)→后端(48080)
             proxy: {

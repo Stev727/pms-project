@@ -661,7 +661,9 @@ const saveEdit = async () => {
   if (!editFormRef.value) return
   try {
     await editFormRef.value.validate()
-  } catch {
+  } catch (e) {
+    // 表单校验失败时给出明确提示，避免用户点保存无反应(Network 无请求)
+    message.warning('请完善必填信息（模板名称、所属部门等）后再保存')
     return
   }
   editSaving.value = true
