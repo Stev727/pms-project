@@ -817,18 +817,19 @@ const isLastStage = (row: any) => {
 }
 
 const moveStage = (row: any, dir: number) => {
-  const sorted = sortedEditStages()
-  const idx = findStageIdx(sorted, row)
+  // 直接操作 editStageList.value 原数组: Vue 3 对 splice 有原生响应式拦截,
+  // 会触发 computed editStageTreeData 重算;不需要替换整个数组(浅拷贝元素
+  // 引用相同,Vue 3 可能不触发 setter)
+  const list = editStageList.value
+  const idx = findStageIdx(list, row)
   if (idx === -1) return
   const target = idx + dir
-  if (target < 0 || target >= sorted.length) return
-  // 交换数组元素位置(不是交换 sortOrder 值——否则 forEach 按原顺序归一化会把 sortOrder 改回去)
-  const [moved] = sorted.splice(idx, 1)
-  sorted.splice(target, 0, moved)
-  // 按新数组顺序归一化 sortOrder 为 1..n
-  sorted.forEach((s, i) => { s.sortOrder = i + 1 })
-  // 强制触发 ref setter，让 editStageTreeData computed 重算
-  editStageList.value = [...sorted]
+  if (target < 0 || target >= list.length) return
+  // splice 交换位置(Vue 3 原生响应式追踪)
+  const [moved] = list.splice(idx, 1)
+  list.splice(target, 0, moved)
+  // 按新顺序归一化 sortOrder
+  list.forEach((s, i) => { s.sortOrder = i + 1 })
 }
 
 const openEditStage = (row: any) => {
