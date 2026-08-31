@@ -514,6 +514,8 @@ const taskEditForm = reactive<any>({
   isNew: false
 })
 
+// editStageList 加载时已按 sortOrder 排序(顺序=显示顺序),computed 不再二次排序,
+// 直接透传 map 结果——moveStage splice 修改原数组顺序后,computed 重算即反映新顺序
 const editStageTreeData = computed(() => {
   return editStageList.value.map(stage => {
     const children = editTaskList.value
@@ -525,7 +527,7 @@ const editStageTreeData = computed(() => {
       taskName: stage.stageName,
       children
     }
-  }).sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+  })
 })
 
 const getTypeLabel = (type: string) => {
@@ -651,10 +653,14 @@ const openEdit = async (row: ProjectVO) => {
     editTaskList.value = (allTasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
     // 防御：脏数据可能存在 stageId 为 null,补临时 ID 避免后续排序/匹配错位
     const stages = (allStages as StageVO[]).filter(s => String(s.projectId) === tplId)
-    editStageList.value = stages.map((s, i) => ({
-      ...s,
-      stageId: s.stageId != null ? s.stageId : `legacy_${s.stageName || 'stage'}_${i}`
-    }))
+    // 加载时即按 sortOrder 排序: 让 editStageList 的顺序 = 显示顺序,
+    // 后续 moveStage 直接 splice 修改原数组顺序即可(Vue 3 原生响应式)
+    editStageList.value = stages
+      .map((s, i) => ({
+        ...s,
+        stageId: s.stageId != null ? s.stageId : `legacy_${s.stageName || 'stage'}_${i}`
+      }))
+      .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
   } catch (e) {
     console.error('加载模板任务失败', e)
   } finally {
