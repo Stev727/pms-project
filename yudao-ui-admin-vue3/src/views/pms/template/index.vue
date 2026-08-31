@@ -822,14 +822,13 @@ const moveStage = (row: any, dir: number) => {
   if (idx === -1) return
   const target = idx + dir
   if (target < 0 || target >= sorted.length) return
-  // 交换相邻两个阶段的 sortOrder
-  const tmp = Number(sorted[idx].sortOrder) || 0
-  sorted[idx].sortOrder = Number(sorted[target].sortOrder) || 0
-  sorted[target].sortOrder = tmp
-  // 归一化为 1..n
+  // 交换数组元素位置(不是交换 sortOrder 值——否则 forEach 按原顺序归一化会把 sortOrder 改回去)
+  const [moved] = sorted.splice(idx, 1)
+  sorted.splice(target, 0, moved)
+  // 按新数组顺序归一化 sortOrder 为 1..n
   sorted.forEach((s, i) => { s.sortOrder = i + 1 })
   // 强制触发 ref setter，让 editStageTreeData computed 重算
-  editStageList.value = [...editStageList.value]
+  editStageList.value = [...sorted]
 }
 
 const openEditStage = (row: any) => {
