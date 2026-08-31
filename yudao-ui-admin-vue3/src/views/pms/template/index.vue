@@ -809,6 +809,9 @@ const moveStage = (row: any, dir: number) => {
   sorted[target].sortOrder = tmp
   // 归一化为 1..n，保证顺序连续、序号列展示稳定
   sorted.forEach((s, i) => { s.sortOrder = i + 1 })
+  // 强制触发 ref setter，让 editStageTreeData computed 重算
+  // （Vue 3 reactive 对数组元素属性修改有时不触发 computed 重算，重新赋值整个数组保险）
+  editStageList.value = [...editStageList.value]
 }
 
 const openEditStage = (row: any) => {
