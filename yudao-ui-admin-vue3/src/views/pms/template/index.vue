@@ -649,7 +649,12 @@ const openEdit = async (row: ProjectVO) => {
     const [allTasks, allStages] = await Promise.all([getTaskList({ projectType: 'standard_template' }), getStageList()])
     const tplId = String(row.projectId)
     editTaskList.value = (allTasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
-    editStageList.value = (allStages as StageVO[]).filter(s => String(s.projectId) === tplId)
+    // 防御：脏数据可能存在 stageId 为 null,补临时 ID 避免后续排序/匹配错位
+    const stages = (allStages as StageVO[]).filter(s => String(s.projectId) === tplId)
+    editStageList.value = stages.map((s, i) => ({
+      ...s,
+      stageId: s.stageId != null ? s.stageId : `legacy_${s.stageName || 'stage'}_${i}`
+    }))
   } catch (e) {
     console.error('加载模板任务失败', e)
   } finally {
@@ -784,22 +789,36 @@ const saveEdit = async () => {
 }
 
 // 阶段排序：上移/下移（交换相邻阶段的 sortOrder 并归一化为 1..n，保存时随 updateStage 一并提交）
+// 匹配用 taskName 而非 stageId：实际数据中存在 stageId 缺失(null)的脏数据,
+// 用 stageId 匹配会错位；taskName 必非空更稳。
+const findStageIdx = (sorted: any[], row: any) => {
+  // 优先按 taskName(stage.stageName 透传)匹配;其次 stageId
+  const byName = sorted.findIndex(s => s.stageName && row.taskName && s.stageName === row.taskName)
+  if (byName !== -1) return byName
+  if (row.stageId != null) {
+    return sorted.findIndex(s => s.stageId != null && String(s.stageId) === String(row.stageId))
+  }
+  return -1
+}
+
 const sortedEditStages = () =>
   [...editStageList.value].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
 
 const isFirstStage = (row: any) => {
   const sorted = sortedEditStages()
-  return sorted.length === 0 || String(sorted[0].stageId) === String(row.stageId)
+  if (sorted.length === 0) return true
+  return findStageIdx(sorted, row) === 0
 }
 
 const isLastStage = (row: any) => {
   const sorted = sortedEditStages()
-  return sorted.length === 0 || String(sorted[sorted.length - 1].stageId) === String(row.stageId)
+  if (sorted.length === 0) return true
+  return findStageIdx(sorted, row) === sorted.length - 1
 }
 
 const moveStage = (row: any, dir: number) => {
   const sorted = sortedEditStages()
-  const idx = sorted.findIndex(s => String(s.stageId) === String(row.stageId))
+  const idx = findStageIdx(sorted, row)
   if (idx === -1) return
   const target = idx + dir
   if (target < 0 || target >= sorted.length) return
@@ -807,10 +826,9 @@ const moveStage = (row: any, dir: number) => {
   const tmp = Number(sorted[idx].sortOrder) || 0
   sorted[idx].sortOrder = Number(sorted[target].sortOrder) || 0
   sorted[target].sortOrder = tmp
-  // 归一化为 1..n，保证顺序连续、序号列展示稳定
+  // 归一化为 1..n
   sorted.forEach((s, i) => { s.sortOrder = i + 1 })
   // 强制触发 ref setter，让 editStageTreeData computed 重算
-  // （Vue 3 reactive 对数组元素属性修改有时不触发 computed 重算，重新赋值整个数组保险）
   editStageList.value = [...editStageList.value]
 }
 
