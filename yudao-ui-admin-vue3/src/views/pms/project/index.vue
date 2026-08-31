@@ -515,7 +515,8 @@ const goDetail = (project: ProjectVO) => {
 }
 
 onMounted(async () => {
-  ensureUsersLoaded()
+  // 必须 await: loadList 完成后 getUserName 立即调用,userList 还在加载就会 fallback '用户{id}'
+  await ensureUsersLoaded()
   await loadList()
   // 检查是否从详情页跳转过来编辑
   const editId = route.query.edit
