@@ -14,7 +14,9 @@
           :props="defaultProps"
           check-strictly
           default-expand-all
-          placeholder="请选择上级部门"
+          filterable
+          :filter-node-method="filterNode"
+          placeholder="请输入关键字搜索/选择上级部门"
           value-key="deptId"
         />
       </el-form-item>
@@ -159,6 +161,12 @@ const resetForm = () => {
     status: CommonStatusEnum.ENABLE
   }
   formRef.value?.resetFields()
+}
+
+/** 模糊搜索：上级部门树节点过滤（按名称包含匹配） */
+const filterNode = (value: string, data: { name?: string }) => {
+  if (!value) return true
+  return (data.name || '').includes(value)
 }
 
 /** 获得部门树 */
