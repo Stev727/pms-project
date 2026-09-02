@@ -195,7 +195,7 @@
             <template #default="{ row }">
               <el-tag v-if="row.isStage" type="warning" size="small">阶段</el-tag>
               <el-tag v-else-if="row.isMilestone" type="danger" size="small">里程碑</el-tag>
-              <el-tag v-else size="small" effect="plain">{{ getTypeLabel(row.taskType || '') }}</el-tag>
+              <el-tag v-else size="small" effect="plain">{{ getPreviewStageName(row.stageId) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="计划工期" width="80" align="center">
@@ -290,7 +290,7 @@
                 <template #default="{ row }">
                   <el-tag v-if="row.isStage" type="warning" size="small">阶段</el-tag>
                   <el-tag v-else-if="row.isMilestone" type="danger" size="small">里程碑</el-tag>
-                  <el-tag v-else size="small" effect="plain">{{ getTypeLabel(row.taskType || '') }}</el-tag>
+                  <el-tag v-else size="small" effect="plain">{{ getEditStageName(row.stageId) }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="工期" width="80" align="center">
@@ -357,6 +357,9 @@
           <el-select v-model="taskEditForm.stageId" placeholder="请选择" class="w-full">
             <el-option v-for="s in editStageList" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
           </el-select>
+        </el-form-item>
+        <el-form-item v-if="!taskEditForm.isStage" label="工期（天）" required>
+          <el-input-number v-model="taskEditForm.cycle" :min="1" :max="365" class="w-full" />
         </el-form-item>
         <el-form-item v-if="!taskEditForm.isStage" label="输出要求">
           <el-input v-model="taskEditForm.outputRequirement" type="textarea" :rows="2" />
@@ -535,6 +538,16 @@ const editStageTreeData = computed(() => {
     }
   })
 })
+
+// 类型列取值: 任务行自动读取所属阶段的名称(不再用 taskType 字典)
+const getEditStageName = (stageId: any) => {
+  const s = editStageList.value.find(x => String(x.stageId) === String(stageId))
+  return s?.stageName || '-'
+}
+const getPreviewStageName = (stageId: any) => {
+  const s = stageList.value.find(x => String(x.stageId) === String(stageId))
+  return s?.stageName || '-'
+}
 
 const getTypeLabel = (type: string) => {
   const map: Record<string, string> = {
