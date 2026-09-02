@@ -15,7 +15,7 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="归属部门" prop="deptId">
-            <el-tree-select
+            <el-tree-select filterable :filter-node-method="(value, data) => !value || String(data.name || '').includes(value)"
               v-model="formData.deptId"
               :data="deptList"
               :props="defaultProps"
@@ -58,7 +58,7 @@
       <el-row>
         <el-col :span="12">
           <el-form-item label="用户性别">
-            <el-select v-model="formData.sex" placeholder="请选择">
+            <el-select filterable v-model="formData.sex" placeholder="请选择">
               <el-option
                 v-for="dict in getIntDictOptions(DICT_TYPE.SYSTEM_USER_SEX)"
                 :key="dict.value"
@@ -70,7 +70,7 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="岗位">
-            <el-select v-model="formData.postIds" multiple placeholder="请选择">
+            <el-select filterable v-model="formData.postIds" multiple placeholder="请选择">
               <el-option
                 v-for="item in postList"
                 :key="item.id"

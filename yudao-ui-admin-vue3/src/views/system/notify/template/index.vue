@@ -29,7 +29,7 @@
         />
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-select
+        <el-select filterable
           v-model="queryParams.status"
           placeholder="请选择开启状态"
           clearable

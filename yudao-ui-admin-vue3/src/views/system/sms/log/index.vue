@@ -20,7 +20,7 @@
         />
       </el-form-item>
       <el-form-item label="短信渠道" prop="channelId">
-        <el-select
+        <el-select filterable
           v-model="queryParams.channelId"
           placeholder="请选择短信渠道"
           clearable
@@ -47,7 +47,7 @@
         />
       </el-form-item>
       <el-form-item label="发送状态" prop="sendStatus">
-        <el-select
+        <el-select filterable
           v-model="queryParams.sendStatus"
           placeholder="请选择发送状态"
           clearable
@@ -72,7 +72,7 @@
         />
       </el-form-item>
       <el-form-item label="接收状态" prop="receiveStatus">
-        <el-select
+        <el-select filterable
           v-model="queryParams.receiveStatus"
           placeholder="请选择接收状态"
           clearable

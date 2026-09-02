@@ -3,10 +3,10 @@
     <div class="tab-toolbar">
       <span class="toolbar-title">变更记录 ({{ filteredList.length }})</span>
       <div style="display: flex; gap: 8px">
-        <el-select v-model="filterType" placeholder="变更类型" clearable size="small" style="width: 110px">
+        <el-select filterable v-model="filterType" placeholder="变更类型" clearable size="small" style="width: 110px">
           <el-option v-for="(v, k) in changeTypes" :key="k" :label="v.label" :value="k" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
+        <el-select filterable v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
           <el-option v-for="(v, k) in changeStatusMap" :key="k" :label="v.label" :value="k" />
         </el-select>
         <el-button type="primary" size="small" @click="showForm = true" v-if="checkPermi(['pms:change:create'])">
@@ -158,7 +158,7 @@
       <el-form label-width="100px">
         <el-form-item label="变更标题" required><el-input v-model="newChange.title" placeholder="请输入变更标题" /></el-form-item>
         <el-form-item label="变更类型" required>
-          <el-select v-model="newChange.type" class="w-full">
+          <el-select filterable v-model="newChange.type" class="w-full">
             <el-option v-for="(v, k) in changeTypes" :key="k" :label="v.label" :value="k" />
           </el-select>
         </el-form-item>

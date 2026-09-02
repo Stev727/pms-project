@@ -3,7 +3,7 @@
     <div class="tab-toolbar">
       <span class="toolbar-title">审批记录 ({{ filteredList.length }})</span>
       <div style="display: flex; gap: 8px">
-        <el-select v-model="filterType" placeholder="审批类型" clearable size="small" style="width: 120px">
+        <el-select filterable v-model="filterType" placeholder="审批类型" clearable size="small" style="width: 120px">
           <el-option label="立项审批" value="project_init" />
           <el-option label="开模审批" value="mold_open" />
           <el-option label="设计评审" value="design_review" />
@@ -13,7 +13,7 @@
           <el-option label="延期审批" value="delay" />
           <el-option label="任务审核" value="task_review" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
+        <el-select filterable v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
           <el-option label="待审批" value="pending" />
           <el-option label="已通过" value="approved" />
           <el-option label="已驳回" value="rejected" />

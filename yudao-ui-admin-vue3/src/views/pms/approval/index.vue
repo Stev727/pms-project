@@ -3,12 +3,12 @@
     <ContentWrap>
       <el-form :inline="true" :model="filters">
         <el-form-item label="项目">
-          <el-select v-model="filters.projectId" clearable style="width: 160px">
+          <el-select filterable v-model="filters.projectId" clearable style="width: 160px">
             <el-option v-for="p in projects" :key="p.projectId" :label="p.projectName" :value="p.projectId" />
           </el-select>
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="filters.type" clearable style="width: 120px">
+          <el-select filterable v-model="filters.type" clearable style="width: 120px">
             <el-option label="立项审批" value="project_init" />
             <el-option label="开模审批" value="mold_open" />
             <el-option label="设计评审" value="design_review" />
@@ -19,7 +19,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="filters.status" clearable style="width: 100px">
+          <el-select filterable v-model="filters.status" clearable style="width: 100px">
             <el-option label="待审批" value="pending" /><el-option label="已通过" value="approved" /><el-option label="已驳回" value="rejected" />
           </el-select>
         </el-form-item>
@@ -61,7 +61,7 @@
     <el-dialog v-model="showCreateDialog" title="发起审批" width="560px">
       <el-form label-width="100px">
         <el-form-item label="审批类型" required>
-          <el-select v-model="createForm.approvalType" placeholder="请选择" class="w-full">
+          <el-select filterable v-model="createForm.approvalType" placeholder="请选择" class="w-full">
             <el-option label="立项审批" value="project_init" />
             <el-option label="开模审批" value="mold_open" />
             <el-option label="设计评审" value="design_review" />

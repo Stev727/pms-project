@@ -3,7 +3,7 @@
     <!-- 顶部工具栏 -->
     <ContentWrap>
       <div class="toolbar">
-        <el-select v-model="timeRange" placeholder="时间范围" style="width: 120px">
+        <el-select filterable v-model="timeRange" placeholder="时间范围" style="width: 120px">
           <el-option label="本周" value="week" />
           <el-option label="本月" value="month" />
           <el-option label="本季度" value="quarter" />
@@ -56,10 +56,10 @@
         <el-select v-model="filterUser" placeholder="责任人" clearable filterable style="width: 140px">
           <el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="String(u.id)" />
         </el-select>
-        <el-select v-model="filterPhase" placeholder="阶段" clearable style="width: 140px">
+        <el-select filterable v-model="filterPhase" placeholder="阶段" clearable style="width: 140px">
           <el-option v-for="s in stages" :key="s.stageId" :label="s.stageName" :value="String(s.stageId)" />
         </el-select>
-        <el-select v-model="filterSeverity" placeholder="严重程度" clearable style="width: 120px">
+        <el-select filterable v-model="filterSeverity" placeholder="严重程度" clearable style="width: 120px">
           <el-option label="轻微(1-3天)" value="minor" />
           <el-option label="一般(4-7天)" value="moderate" />
           <el-option label="严重(>7天)" value="severe" />

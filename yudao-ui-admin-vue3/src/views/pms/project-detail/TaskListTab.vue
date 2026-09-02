@@ -14,13 +14,13 @@
         <el-input v-model="searchKeyword" placeholder="搜索任务名称" clearable size="small" style="width: 200px">
           <template #prefix><Icon icon="ep:search" /></template>
         </el-input>
-        <el-select v-model="filterStage" placeholder="全部阶段" clearable size="small" style="width: 120px">
+        <el-select filterable v-model="filterStage" placeholder="全部阶段" clearable size="small" style="width: 120px">
           <el-option v-for="s in stages" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="全部状态" clearable size="small" style="width: 120px">
+        <el-select filterable v-model="filterStatus" placeholder="全部状态" clearable size="small" style="width: 120px">
           <el-option v-for="(v, k) in taskStatusMap" :key="k" :label="v.label" :value="k" />
         </el-select>
-        <el-select v-model="filterAssignee" placeholder="我的任务" clearable size="small" style="width: 120px">
+        <el-select filterable v-model="filterAssignee" placeholder="我的任务" clearable size="small" style="width: 120px">
           <el-option label="我负责的" value="mine" />
           <el-option label="我参与的" value="involved" />
         </el-select>

@@ -75,7 +75,6 @@
 
     <!-- Tab 容器 -->
     <ContentWrap class="mt-16px">
-      <div class="sticky-tabs-area">
       <el-tabs v-model="activeTab" type="card" @tab-change="handleTabChange">
         <!-- 概览 Tab (NEW - FATAL+SEVERE 修复) -->
         <el-tab-pane label="概览" name="overview">
@@ -174,7 +173,9 @@
 
         <!-- 变更 Tab (NEW - SEVERE-4 修复) -->
         <el-tab-pane label="变更记录" name="changes">
-          <ChangesTab v-if="activeTab === 'changes'" :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
+          <template v-if="activeTab === 'changes'">
+            <ChangesTab :project-id="projectId" :tasks="projectTasks" ref="changesTabRef" />
+          </template>
         </el-tab-pane>
 
         <!-- 物料跟踪 Tab (NEW - #10 物料跟踪嵌入项目详情) -->
@@ -183,20 +184,11 @@
             <MaterialTrackTab :project-id="projectId" ref="materialTrackTabRef" />
           </template>
         </el-tab-pane>
-
-        <!-- 通知管理 Tab (NEW - 项目级通知规则：延期/提前自动提醒) -->
-        <el-tab-pane label="通知管理" name="notify">
-          <template v-if="activeTab === 'notify'">
-            <NotifyTab :project-id="projectId" />
-          </template>
-        </el-tab-pane>
       </el-tabs>
-      </div><!-- /sticky-tabs-area -->
     </ContentWrap>
 
     <!-- 任务详情抽屉 -->
-    <TaskDetailDrawer ref="taskDrawerRef" :project="project" :stages="projectStages" @refresh="onTaskDataRefresh" @create-change="handleStartChange" @create-subtask="handleAddSubtask" />
-    <ChangeFormDialog ref="changeFormRef" :project-id="projectId" :tasks="projectTasks" @submitted="onTaskDataRefresh" />
+    <TaskDetailDrawer ref="taskDrawerRef" :project="project" @refresh="onTaskDataRefresh" @create-change="handleStartChange" @create-subtask="handleAddSubtask" />
 
     <!-- P0: 项目编辑弹窗 -->
     <ProjectForm ref="projectFormRef" @success="loadProjectData" />
@@ -212,7 +204,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="所属阶段" prop="stageId">
-              <el-select filterable v-model="taskForm.stageId" placeholder="请选择阶段" class="w-full">
+              <el-select v-model="taskForm.stageId" placeholder="请选择阶段" class="w-full">
                 <el-option v-for="s in projectStages" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
               </el-select>
             </el-form-item>
@@ -226,7 +218,7 @@
                 <el-option
                   v-for="p in candidateParentTasks"
                   :key="p.taskId"
-                  :label="`${p.taskName}（${p.level || 1}级）`"
+                  :label="`${p.taskCode ? p.taskCode + ' - ' : ''}${p.taskName}（${p.level || 1}级）`"
                   :value="String(p.taskId)"
                 />
               </el-select>
@@ -241,14 +233,14 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="任务类型" prop="taskType">
-              <el-select filterable v-model="taskForm.taskType" placeholder="请选择" class="w-full">
+              <el-select v-model="taskForm.taskType" placeholder="请选择" class="w-full">
                 <el-option v-for="opt in taskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="优先级" prop="priority">
-              <el-select filterable v-model="taskForm.priority" placeholder="请选择" class="w-full">
+              <el-select v-model="taskForm.priority" placeholder="请选择" class="w-full">
                 <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
@@ -287,6 +279,11 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
+            <el-form-item label="工期(天)" prop="cycle">
+              <el-input-number v-model="taskForm.cycle" :min="1" :max="999" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item label="里程碑">
               <el-switch v-model="taskForm.isMilestone" />
             </el-form-item>
@@ -323,28 +320,20 @@ import MembersTab from './MembersTab.vue'
 import DocumentsTab from './DocumentsTab.vue'
 import ApprovalTab from './ApprovalTab.vue'
 import ChangesTab from './ChangesTab.vue'
-import ChangeFormDialog from './ChangeFormDialog.vue'
 import QualityTab from './QualityTab.vue'
 import ReviewCenterTab from './ReviewCenterTab.vue'
 import MaterialTrackTab from './MaterialTrackTab.vue' // #10 物料跟踪嵌入项目详情
 import PermissionTab from './PermissionTab.vue' // #2 项目权限分级配置
-import NotifyTab from './NotifyTab.vue' // 项目级通知规则管理
 import ProjectForm from '../project/ProjectForm.vue'
 import {
-  projectStatusMap, phaseColorMap, priorityMap,
-  taskStatusMap, formatDate, calcDuration, calcDelayDays,
-  getDynamicProjectTypeOptions, getDynamicTaskTypeOptions, getDynamicPriorityOptions
+  projectStatusMap, phaseColorMap, priorityMap, projectTypeOptions,
+  taskTypeOptions, priorityOptions, taskStatusMap, formatDate, calcDuration, calcDelayDays
 } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 
 defineOptions({ name: 'PmsProjectDetail' })
-
-// 【PMS】下拉统一走系统字典真源
-const projectTypeOptions = getDynamicProjectTypeOptions()
-const taskTypeOptions = getDynamicTaskTypeOptions()
-const priorityOptions = getDynamicPriorityOptions()
 
 const route = useRoute()
 const { push, back } = useRouter()
@@ -395,7 +384,6 @@ const documentsTabRef = ref()
 const approvalTabRef = ref()
 const qualityTabRef = ref()
 const changesTabRef = ref()
-const changeFormRef = ref()
 const materialTrackTabRef = ref() // #10 物料跟踪 Tab
 const projectFormRef = ref()
 
@@ -419,16 +407,6 @@ const taskForm = reactive({
   completionStandard: '',
   estimatedHours: undefined as number | undefined
 })
-
-// 工期按计划起止日期自动计算，无需手工填写
-watch(
-  () => [taskForm.planStartDate, taskForm.planEndDate],
-  ([start, end]) => {
-    if (start && end && end >= start) {
-      taskForm.cycle = calcDuration(start, end)
-    }
-  }
-)
 
 // #1 子任务层级：可作为父任务的候选（层级未满 3 级）
 const candidateParentTasks = computed(() => projectTasks.value.filter((t: TaskVO) => (t.level || 1) < 3))
@@ -746,8 +724,14 @@ const handleEdit = () => {
 }
 
 const handleStartChange = (task?: any) => {
-  // 直接弹出独立变更对话框，不切换 Tab，停留在当前页面
-  changeFormRef.value?.open(task?.taskId ? String(task.taskId) : undefined)
+  activeTab.value = 'changes'
+  nextTick(() => {
+    changesTabRef.value?.refresh?.()
+    // 如果传了任务，自动打开发起变更对话框并预填任务
+    if (task?.taskId) {
+      nextTick(() => changesTabRef.value?.openChangeForm?.(String(task.taskId)))
+    }
+  })
 }
 
 const handleCopyProject = () => {
@@ -812,32 +796,10 @@ onMounted(async () => {
     deptList.value = (depts as any[]) || []
   } catch { /* ignore */ }
   loadProjectData()
-  // 钉钉通知跳转：自动打开指定任务抽屉（查看详情场景）
-  const notifyTaskId = route.query.taskId as string | undefined
-  if (notifyTaskId && !route.query.action) {
-    await nextTick()
-    await (taskDrawerRef.value?.open({ taskId: String(notifyTaskId) } as any) ?? Promise.resolve())
-  }
 })
 </script>
 
 <style scoped>
-/* 方案A 二次加固：tabs header 改为 fixed，钉在 admin navbar(50px) + tags view(35px) = 85px 下方
-   用 fixed 而非 sticky 是因为 sticky 在 el-tabs__content overflow:hidden 链路上仍失效
-   fixed 完全不受任何父容器 overflow 影响。left 用 var 响应 sidebar 折叠/展开 */
-
-/* 终极方案：tabs sticky 通过模板 wrapper 生效，绕过 Element Plus 内部结构干扰。
-   wrapper 是 project-detail 模板直接子节点（带 scope attr），sticky 上下文干净。
-   视觉：项目信息头正常滚动消失后，wrapper 钉在滚动区顶部；项目信息头还在时，wrapper 在它下方保持自然位置。 */
-.sticky-tabs-area {
-  position: sticky;
-  top: 0;
-  z-index: 998;
-  background: var(--el-bg-color, #fff);
-}
-:deep(.el-tabs__content) {
-  overflow: visible; /* Element Plus 默认 overflow:hidden 会困住 tab 内 sticky 元素；保留防止后续问题 */
-}
 .detail-header {
   display: flex; justify-content: space-between; align-items: flex-start;
 }

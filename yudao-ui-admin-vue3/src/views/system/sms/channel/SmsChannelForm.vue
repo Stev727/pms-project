@@ -11,7 +11,7 @@
         <el-input v-model="formData.signature" placeholder="请输入短信签名" />
       </el-form-item>
       <el-form-item label="渠道编码" prop="code">
-        <el-select v-model="formData.code" clearable placeholder="请选择渠道编码">
+        <el-select filterable v-model="formData.code" clearable placeholder="请选择渠道编码">
           <el-option
             v-for="dict in getStrDictOptions(DICT_TYPE.SYSTEM_SMS_CHANNEL_CODE)"
             :key="dict.value"

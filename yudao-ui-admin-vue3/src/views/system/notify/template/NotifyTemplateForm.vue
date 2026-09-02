@@ -20,7 +20,7 @@
         <el-input type="textarea" v-model="formData.content" placeholder="请输入模板内容" />
       </el-form-item>
       <el-form-item label="类型" prop="type">
-        <el-select v-model="formData.type" placeholder="请选择类型">
+        <el-select filterable v-model="formData.type" placeholder="请选择类型">
           <el-option
             v-for="dict in getIntDictOptions(DICT_TYPE.SYSTEM_NOTIFY_TEMPLATE_TYPE)"
             :key="dict.value"

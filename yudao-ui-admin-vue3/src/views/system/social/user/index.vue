@@ -11,7 +11,7 @@
       label-width="120px"
     >
       <el-form-item label="社交平台" prop="type">
-        <el-select
+        <el-select filterable
           v-model="queryParams.type"
           class="!w-240px"
           clearable

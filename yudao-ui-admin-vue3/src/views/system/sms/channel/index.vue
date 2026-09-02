@@ -19,7 +19,7 @@
         />
       </el-form-item>
       <el-form-item label="启用状态" prop="status">
-        <el-select
+        <el-select filterable
           v-model="queryParams.status"
           placeholder="请选择启用状态"
           class="!w-240px"

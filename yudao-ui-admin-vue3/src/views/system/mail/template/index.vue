@@ -29,7 +29,7 @@
         />
       </el-form-item>
       <el-form-item label="邮箱账号" prop="accountId">
-        <el-select
+        <el-select filterable
           v-model="queryParams.accountId"
           placeholder="请选择邮箱账号"
           clearable
@@ -44,7 +44,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="开启状态" prop="status">
-        <el-select
+        <el-select filterable
           v-model="queryParams.status"
           placeholder="请选择开启状态"
           clearable

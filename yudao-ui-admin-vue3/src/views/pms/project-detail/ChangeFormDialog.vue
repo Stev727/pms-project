@@ -3,7 +3,7 @@
     <el-form label-width="100px">
       <el-form-item label="变更标题" required><el-input v-model="newChange.title" placeholder="请输入变更标题" /></el-form-item>
       <el-form-item label="变更类型" required>
-        <el-select v-model="newChange.type" class="w-full">
+        <el-select filterable v-model="newChange.type" class="w-full">
           <el-option v-for="(v, k) in changeTypes" :key="k" :label="v.label" :value="k" />
         </el-select>
       </el-form-item>

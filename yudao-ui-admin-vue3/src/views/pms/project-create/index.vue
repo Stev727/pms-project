@@ -79,14 +79,14 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="项目类型" prop="projectType">
-                <el-select v-model="projectForm.projectType" placeholder="请选择" class="w-full">
+                <el-select filterable v-model="projectForm.projectType" placeholder="请选择" class="w-full">
                   <el-option v-for="opt in projectTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
                 </el-select>
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item label="优先级" prop="priority">
-                <el-select v-model="projectForm.priority" placeholder="请选择" class="w-full">
+                <el-select filterable v-model="projectForm.priority" placeholder="请选择" class="w-full">
                   <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
                 </el-select>
               </el-form-item>
@@ -159,7 +159,7 @@
           </el-table-column>
           <el-table-column label="项目角色" width="200">
             <template #default="{ row }">
-              <el-select v-model="row.roleCode" size="small" class="w-full" :disabled="row.roleCode === 'pm'">
+              <el-select filterable v-model="row.roleCode" size="small" class="w-full" :disabled="row.roleCode === 'pm'">
                 <el-option label="项目经理" value="pm" />
                 <el-option label="部门负责人" value="dept_head" />
                 <el-option label="主责任人" value="main_owner" />
@@ -192,7 +192,7 @@
               </el-select>
             </el-form-item>
             <el-form-item label="项目角色" required>
-              <el-select v-model="memberForm.roleCode" class="w-full">
+              <el-select filterable v-model="memberForm.roleCode" class="w-full">
                 <el-option label="项目经理" value="pm" />
                 <el-option label="部门负责人" value="dept_head" />
                 <el-option label="主责任人" value="main_owner" />
@@ -230,10 +230,10 @@
         <div class="batch-toolbar">
           <div class="batch-actions">
             <span class="batch-label">批量操作：</span>
-            <el-select v-model="batchStage" placeholder="选择阶段" size="small" style="width: 130px" clearable>
+            <el-select filterable v-model="batchStage" placeholder="选择阶段" size="small" style="width: 130px" clearable>
               <el-option v-for="s in stageList" :key="s.stageName" :label="s.stageName" :value="s.stageName" />
             </el-select>
-            <el-select v-model="batchAction" size="small" style="width: 130px" placeholder="选择操作">
+            <el-select filterable v-model="batchAction" size="small" style="width: 130px" placeholder="选择操作">
               <el-option label="批量设责任人" value="set_owner" />
               <el-option label="批量设优先级" value="set_priority" />
             </el-select>
@@ -244,7 +244,7 @@
               </el-select>
             </template>
             <template v-if="batchAction === 'set_priority'">
-              <el-select v-model="batchPriority" size="small" style="width: 100px">
+              <el-select filterable v-model="batchPriority" size="small" style="width: 100px">
                 <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </template>
@@ -331,7 +331,7 @@
               </el-col>
               <el-col :span="12">
                 <el-form-item label="所属阶段" required>
-                  <el-select v-model="taskForm.stageId" :value-on-clear="undefined" placeholder="请选择" class="w-full" @change="onStageSelect">
+                  <el-select filterable v-model="taskForm.stageId" :value-on-clear="undefined" placeholder="请选择" class="w-full" @change="onStageSelect">
                     <el-option v-for="s in stageList" :key="s.stageId" :label="s.stageName" :value="String(s.stageId)" />
                   </el-select>
                 </el-form-item>
@@ -355,7 +355,7 @@
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="优先级">
-                  <el-select v-model="taskForm.priority" class="w-full">
+                  <el-select filterable v-model="taskForm.priority" class="w-full">
                     <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
@@ -401,7 +401,7 @@
         <el-card shadow="never" class="confirm-card mb-16px">
           <template #header><span class="card-title">项目默认规则</span></template>
           <el-form-item label="通知模式" required>
-            <el-select v-model="selectedNotifyModeId" placeholder="请选择通知模式" class="w-full">
+            <el-select filterable v-model="selectedNotifyModeId" placeholder="请选择通知模式" class="w-full">
               <el-option v-for="mode in notifyModeList" :key="mode.modeId" :label="mode.modeName" :value="mode.modeId" />
             </el-select>
           </el-form-item>

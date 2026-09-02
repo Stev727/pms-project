@@ -20,7 +20,7 @@
         />
       </el-form-item>
       <el-form-item label="用户类型" prop="userType">
-        <el-select
+        <el-select filterable
           v-model="queryParams.userType"
           placeholder="请选择用户类型"
           clearable
@@ -44,7 +44,7 @@
         />
       </el-form-item>
       <el-form-item label="模版类型" prop="templateType">
-        <el-select
+        <el-select filterable
           v-model="queryParams.templateType"
           placeholder="请选择模版类型"
           clearable

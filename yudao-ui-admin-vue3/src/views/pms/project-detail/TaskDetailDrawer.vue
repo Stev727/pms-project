@@ -95,12 +95,12 @@
                   <el-date-picker v-model="editForm.planEndDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" class="w-full" :disabled-date="disabledTaskEndDate" />
                 </el-form-item>
                 <el-form-item label="任务类型">
-                  <el-select v-model="editForm.taskType" class="w-full">
+                  <el-select filterable v-model="editForm.taskType" class="w-full">
                     <el-option v-for="opt in taskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>
                 <el-form-item label="优先级">
-                  <el-select v-model="editForm.priority" class="w-full">
+                  <el-select filterable v-model="editForm.priority" class="w-full">
                     <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
                   </el-select>
                 </el-form-item>

@@ -11,7 +11,7 @@
       label-width="68px"
     >
       <el-form-item label="是否已读" prop="readStatus">
-        <el-select
+        <el-select filterable
           v-model="queryParams.readStatus"
           placeholder="请选择状态"
           clearable

@@ -27,7 +27,7 @@
         <el-input-number v-model="formData.sort" :min="0" controls-position="right" />
       </el-form-item>
       <el-form-item label="负责人" prop="leaderUserId">
-        <el-select v-model="formData.leaderUserId" clearable placeholder="请输入负责人">
+        <el-select filterable v-model="formData.leaderUserId" clearable placeholder="请输入负责人">
           <el-option
             v-for="item in userList"
             :key="item.id"
@@ -43,7 +43,7 @@
         <el-input v-model="formData.email" maxlength="50" placeholder="请输入邮箱" />
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-select v-model="formData.status" clearable placeholder="请选择状态">
+        <el-select filterable v-model="formData.status" clearable placeholder="请选择状态">
           <el-option
             v-for="dict in getIntDictOptions(DICT_TYPE.COMMON_STATUS)"
             :key="dict.value"

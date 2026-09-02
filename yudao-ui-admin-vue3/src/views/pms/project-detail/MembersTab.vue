@@ -72,7 +72,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="项目角色" required>
-          <el-select v-model="form.roleCode" class="w-full">
+          <el-select filterable v-model="form.roleCode" class="w-full">
             <el-option label="项目经理" value="pm" />
             <el-option label="部门负责人" value="dept_head" />
             <el-option label="主责任人" value="main_owner" />
@@ -90,7 +90,7 @@
           <el-switch v-model="form.isExternal" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="form.status" class="w-full">
+          <el-select filterable v-model="form.status" class="w-full">
             <el-option label="活跃" value="active" />
             <el-option label="停用" value="inactive" />
           </el-select>

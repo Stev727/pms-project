@@ -54,7 +54,7 @@
           <el-input v-model="form.ruleName" placeholder="如：本项目任务延期超3天提醒" />
         </el-form-item>
         <el-form-item label="触发条件" required>
-          <el-select v-model="form.triggerEvent" placeholder="请选择" class="w-full" @change="onEventChange">
+          <el-select filterable v-model="form.triggerEvent" placeholder="请选择" class="w-full" @change="onEventChange">
             <el-option v-for="e in triggerEvents" :key="e.value" :label="e.label" :value="e.value" />
           </el-select>
           <div v-if="form.triggerEvent === '__custom__'" class="mt-8px">
@@ -72,7 +72,7 @@
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="通知对象">
-          <el-select v-model="form.notifyTargets" multiple placeholder="选择通知对象" class="w-full">
+          <el-select filterable v-model="form.notifyTargets" multiple placeholder="选择通知对象" class="w-full">
             <el-option label="主责任人" value="main_owner" />
             <el-option label="协助人" value="helper" />
             <el-option label="项目经理" value="pm" />

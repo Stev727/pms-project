@@ -7,12 +7,12 @@
           <el-input v-model="filters.name" placeholder="请输入" clearable style="width: 140px" />
         </el-form-item>
         <el-form-item label="项目">
-          <el-select v-model="filters.projectId" clearable placeholder="全部" style="width: 140px">
+          <el-select filterable v-model="filters.projectId" clearable placeholder="全部" style="width: 140px">
             <el-option v-for="p in projects" :key="p.projectId" :label="p.projectName" :value="p.projectId" />
           </el-select>
         </el-form-item>
         <el-form-item label="预警状态">
-          <el-select v-model="filters.status" clearable placeholder="全部" style="width: 120px">
+          <el-select filterable v-model="filters.status" clearable placeholder="全部" style="width: 120px">
             <el-option label="正常" value="normal" />
             <el-option label="预警中" value="warning" />
             <el-option label="紧急" value="urgent" />
@@ -175,7 +175,7 @@
           </el-col>
         </el-row>
         <el-form-item label="当前状态">
-          <el-select v-model="createForm.currentStatus" placeholder="请选择" style="width: 100%">
+          <el-select filterable v-model="createForm.currentStatus" placeholder="请选择" style="width: 100%">
             <el-option label="未下单" value="not_ordered" />
             <el-option label="已下单" value="ordered" />
             <el-option label="已到货" value="delivered" />

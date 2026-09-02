@@ -20,7 +20,7 @@
         />
       </el-form-item>
       <el-form-item label="社交平台" prop="socialType">
-        <el-select
+        <el-select filterable
           v-model="queryParams.socialType"
           class="!w-240px"
           clearable
@@ -35,7 +35,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="用户类型" prop="userType">
-        <el-select
+        <el-select filterable
           v-model="queryParams.userType"
           class="!w-240px"
           clearable
@@ -59,7 +59,7 @@
         />
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-select v-model="queryParams.status" class="!w-240px" clearable placeholder="请选择状态">
+        <el-select filterable v-model="queryParams.status" class="!w-240px" clearable placeholder="请选择状态">
           <el-option
             v-for="dict in getIntDictOptions(DICT_TYPE.COMMON_STATUS)"
             :key="dict.value"

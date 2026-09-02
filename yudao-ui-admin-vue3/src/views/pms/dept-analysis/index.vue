@@ -4,7 +4,7 @@
     <ContentWrap>
       <el-form :inline="true" class="mb-0">
         <el-form-item v-if="deptTreeData.length > 0" label="部门">
-          <el-tree-select
+          <el-tree-select filterable :filter-node-method="(value, data) => !value || String(data.name || '').includes(value)"
             v-model="selectedDeptId"
             :data="deptTreeData"
             :props="{ value: 'id', label: 'name', children: 'children' }"

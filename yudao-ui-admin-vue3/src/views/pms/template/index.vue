@@ -8,7 +8,7 @@
             <el-input v-model="queryName" placeholder="搜索模板名称" clearable @keyup.enter="getList" class="!w-240px" />
           </el-form-item>
           <el-form-item label="类型">
-            <el-select v-model="queryType" placeholder="全部" clearable class="!w-160px" @change="getList">
+            <el-select filterable v-model="queryType" placeholder="全部" clearable class="!w-160px" @change="getList">
               <el-option label="标准板" value="standard_template" />
             </el-select>
           </el-form-item>
@@ -126,12 +126,12 @@
           <el-input v-model="createForm.projectName" placeholder="请输入模板名称" />
         </el-form-item>
         <el-form-item label="模板类型" prop="projectType">
-          <el-select v-model="createForm.projectType" placeholder="请选择" class="w-full">
+          <el-select filterable v-model="createForm.projectType" placeholder="请选择" class="w-full">
             <el-option label="标准板" value="standard_template" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="status">
-          <el-select v-model="createForm.status" placeholder="请选择" class="w-full">
+          <el-select filterable v-model="createForm.status" placeholder="请选择" class="w-full">
             <el-option label="启用" value="active" />
             <el-option label="归档" value="archived" />
           </el-select>
@@ -229,7 +229,7 @@
                 </el-col>
                 <el-col :span="12">
                   <el-form-item label="状态" prop="status">
-                    <el-select v-model="editForm.status" placeholder="请选择" class="w-full">
+                    <el-select filterable v-model="editForm.status" placeholder="请选择" class="w-full">
                       <el-option label="启用" value="active" />
                       <el-option label="归档" value="archived" />
                     </el-select>
@@ -342,7 +342,7 @@
           <el-input v-model="taskEditForm.taskName" placeholder="请输入" />
         </el-form-item>
         <el-form-item v-if="!taskEditForm.isStage" label="所属阶段" required>
-          <el-select v-model="taskEditForm.stageId" placeholder="请选择" class="w-full">
+          <el-select filterable v-model="taskEditForm.stageId" placeholder="请选择" class="w-full">
             <el-option v-for="s in editStageList" :key="s.stageId" :label="s.stageName" :value="s.stageId" />
           </el-select>
         </el-form-item>

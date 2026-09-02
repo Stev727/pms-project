@@ -20,7 +20,7 @@
         />
       </el-form-item>
       <el-form-item label="邮箱账号" prop="accountId">
-        <el-select
+        <el-select filterable
           v-model="queryParams.accountId"
           placeholder="请选择邮箱账号"
           clearable
@@ -44,7 +44,7 @@
         />
       </el-form-item>
       <el-form-item label="发送状态" prop="sendStatus">
-        <el-select
+        <el-select filterable
           v-model="queryParams.sendStatus"
           placeholder="请选择发送状态"
           clearable
@@ -68,7 +68,7 @@
         />
       </el-form-item>
       <el-form-item label="用户类型" prop="userType">
-        <el-select
+        <el-select filterable
           v-model="queryParams.userType"
           placeholder="请选择用户类型"
           clearable

@@ -3,10 +3,10 @@
     <div class="tab-toolbar">
       <span class="toolbar-title">质量问题 ({{ filteredList.length }})</span>
       <div style="display: flex; gap: 8px">
-        <el-select v-model="filterSeverity" placeholder="严重程度" clearable size="small" style="width: 110px">
+        <el-select filterable v-model="filterSeverity" placeholder="严重程度" clearable size="small" style="width: 110px">
           <el-option v-for="opt in severityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
+        <el-select filterable v-model="filterStatus" placeholder="状态" clearable size="small" style="width: 100px">
           <el-option v-for="opt in statusOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
         </el-select>
         <el-button type="primary" size="small" @click="showForm = true" v-if="checkPermi(['pms:quality:create'])">
@@ -84,10 +84,10 @@
         <el-form-item label="问题描述" required><el-input v-model="newIssue.description" type="textarea" :rows="3" /></el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="严重程度"><el-select v-model="newIssue.severity" class="w-full"><el-option v-for="opt in severityOptions" :key="opt.value" :label="opt.label" :value="opt.value" /></el-select></el-form-item>
+            <el-form-item label="严重程度"><el-select filterable v-model="newIssue.severity" class="w-full"><el-option v-for="opt in severityOptions" :key="opt.value" :label="opt.label" :value="opt.value" /></el-select></el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="分类"><el-select v-model="newIssue.category" class="w-full"><el-option v-for="opt in categoryOptions" :key="opt.value" :label="opt.label" :value="opt.value" /></el-select></el-form-item>
+            <el-form-item label="分类"><el-select filterable v-model="newIssue.category" class="w-full"><el-option v-for="opt in categoryOptions" :key="opt.value" :label="opt.label" :value="opt.value" /></el-select></el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">

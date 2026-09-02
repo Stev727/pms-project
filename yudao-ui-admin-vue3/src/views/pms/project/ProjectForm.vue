@@ -17,14 +17,14 @@
       <el-row :gutter="20">
         <el-col :span="12">
           <el-form-item label="项目类型" prop="projectType">
-            <el-select v-model="formData.projectType" placeholder="请选择" style="width: 100%">
+            <el-select filterable v-model="formData.projectType" placeholder="请选择" style="width: 100%">
               <el-option v-for="opt in projectTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
             </el-select>
           </el-form-item>
         </el-col>
         <el-col :span="12">
           <el-form-item label="优先级" prop="priority">
-            <el-select v-model="formData.priority" placeholder="请选择" style="width: 100%">
+            <el-select filterable v-model="formData.priority" placeholder="请选择" style="width: 100%">
               <el-option v-for="opt in priorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
             </el-select>
           </el-form-item>

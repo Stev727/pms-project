@@ -8,7 +8,7 @@
         <el-tag>{{ formData.code }}</el-tag>
       </el-form-item>
       <el-form-item label="权限范围">
-        <el-select v-model="formData.dataScope">
+        <el-select filterable v-model="formData.dataScope">
           <el-option
             v-for="item in getIntDictOptions(DICT_TYPE.SYSTEM_DATA_SCOPE)"
             :key="item.value"

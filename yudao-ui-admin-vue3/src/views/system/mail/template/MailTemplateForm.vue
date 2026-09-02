@@ -8,7 +8,7 @@
       label-width="140px"
     >
       <el-form-item label="邮箱账号" prop="accountId">
-        <el-select v-model="formData.accountId" placeholder="请选择邮箱账号">
+        <el-select filterable v-model="formData.accountId" placeholder="请选择邮箱账号">
           <el-option
             v-for="account in accountList"
             :key="account.id"

@@ -21,7 +21,7 @@
         />
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-select
+        <el-select filterable
           v-model="queryParams.status"
           class="!w-240px"
           clearable

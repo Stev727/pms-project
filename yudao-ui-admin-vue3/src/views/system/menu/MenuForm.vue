@@ -8,7 +8,7 @@
       label-width="100px"
     >
       <el-form-item label="上级菜单">
-        <el-tree-select
+        <el-tree-select filterable :filter-node-method="(value, data) => !value || String(data.name || '').includes(value)"
           v-model="formData.parentId"
           :data="menuTree"
           :default-expanded-keys="[0]"

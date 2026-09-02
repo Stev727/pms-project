@@ -11,7 +11,7 @@
         <el-input v-model="formData.name" placeholder="请输入租户名" />
       </el-form-item>
       <el-form-item label="租户套餐" prop="packageId">
-        <el-select v-model="formData.packageId" clearable placeholder="请选择租户套餐">
+        <el-select filterable v-model="formData.packageId" clearable placeholder="请选择租户套餐">
           <el-option
             v-for="item in packageList"
             :key="item.id"

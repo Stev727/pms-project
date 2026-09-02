@@ -13,7 +13,7 @@
       <span class="toolbar-title">项目文档 ({{ filteredDocs.length }})</span>
       <div style="display: flex; gap: 8px">
         <el-input v-model="searchName" placeholder="搜索文档名" clearable size="small" style="width: 180px" />
-        <el-select v-model="filterCategory" placeholder="文档分类" clearable size="small" style="width: 120px">
+        <el-select filterable v-model="filterCategory" placeholder="文档分类" clearable size="small" style="width: 120px">
           <el-option label="技术文档" value="tech_doc" />
           <el-option label="管理文档" value="mgmt_doc" />
           <el-option label="项目文档" value="project_doc" />
@@ -109,7 +109,7 @@
     <el-dialog v-model="uploadVisible" title="上传项目文档" width="560px">
       <el-form label-width="90px">
         <el-form-item label="文档分类">
-          <el-select v-model="uploadCategory" placeholder="选择分类" class="w-full">
+          <el-select filterable v-model="uploadCategory" placeholder="选择分类" class="w-full">
             <el-option label="技术文档" value="tech_doc" />
             <el-option label="管理文档" value="mgmt_doc" />
             <el-option label="项目文档" value="project_doc" />

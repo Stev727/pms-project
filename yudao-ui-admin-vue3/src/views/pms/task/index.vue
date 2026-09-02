@@ -12,7 +12,7 @@
           <el-input v-model="queryParams.taskName" placeholder="请输入任务名称" clearable style="width: 180px" @keyup.enter="handleSearch" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="queryParams.completeStatus" placeholder="全部" clearable style="width: 100px">
+          <el-select filterable v-model="queryParams.completeStatus" placeholder="全部" clearable style="width: 100px">
             <el-option v-for="(v, k) in taskStatusMap" :key="k" :label="v.label" :value="k" />
           </el-select>
         </el-form-item>
@@ -203,7 +203,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="任务类型" prop="taskType">
-              <el-select v-model="taskForm.taskType" placeholder="请选择任务类型" class="w-full">
+              <el-select filterable v-model="taskForm.taskType" placeholder="请选择任务类型" class="w-full">
                 <el-option v-for="opt in currentTaskTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
@@ -228,7 +228,7 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="优先级" prop="priority">
-              <el-select v-model="taskForm.priority" placeholder="请选择" class="w-full">
+              <el-select filterable v-model="taskForm.priority" placeholder="请选择" class="w-full">
                 <el-option v-for="opt in currentPriorityOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>

@@ -2,7 +2,7 @@
   <div class="pms-notify">
     <ContentWrap>
       <div class="toolbar">
-        <el-select v-model="selectedModeId" placeholder="选择通知模式" style="width: 240px" @change="fetchList">
+        <el-select filterable v-model="selectedModeId" placeholder="选择通知模式" style="width: 240px" @change="fetchList">
           <el-option v-for="m in modeList" :key="m.modeId" :label="m.modeName" :value="m.modeId" />
         </el-select>
         <el-button @click="createMode">新建模式</el-button>
@@ -74,7 +74,7 @@
           <el-input v-model="form.ruleName" placeholder="如：任务即将到期提醒" />
         </el-form-item>
         <el-form-item label="触发事件" required>
-          <el-select v-model="form.triggerEvent" placeholder="请选择" class="w-full">
+          <el-select filterable v-model="form.triggerEvent" placeholder="请选择" class="w-full">
             <el-option label="任务即将到期(T-3)" value="task_t_minus_3" />
             <el-option label="任务即将到期(T-1)" value="task_t_minus_1" />
             <el-option label="任务已延期(D+1)" value="task_d_plus_1" />
@@ -100,7 +100,7 @@
           </el-checkbox-group>
         </el-form-item>
         <el-form-item label="通知对象">
-          <el-select v-model="form.notifyTargets" multiple placeholder="选择通知对象" class="w-full">
+          <el-select filterable v-model="form.notifyTargets" multiple placeholder="选择通知对象" class="w-full">
             <el-option label="主责任人" value="main_owner" />
             <el-option label="协助人" value="helper" />
             <el-option label="项目经理" value="pm" />
@@ -132,7 +132,7 @@
             <el-input v-model="form.escalationCondition" placeholder="如：延期3天" />
           </el-form-item>
           <el-form-item label="升级通知人">
-            <el-select v-model="form.escalationTarget" placeholder="请选择" class="w-full">
+            <el-select filterable v-model="form.escalationTarget" placeholder="请选择" class="w-full">
               <el-option label="项目经理" value="project_manager" />
               <el-option label="部门负责人" value="dept_head" />
               <el-option label="总监" value="director" />

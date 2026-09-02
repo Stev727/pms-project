@@ -53,7 +53,7 @@
               />
             </el-form-item>
             <el-form-item label="状态">
-              <el-select
+              <el-select filterable
                 v-model="queryParams.status"
                 placeholder="请选择状态"
                 clearable

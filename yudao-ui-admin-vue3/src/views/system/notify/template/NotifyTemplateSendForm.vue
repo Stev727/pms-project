@@ -30,7 +30,7 @@
         <el-input v-model="formData.userId" style="width: 160px" />
       </el-form-item>
       <el-form-item v-show="formData.userType === 2" label="接收人" prop="userId">
-        <el-select v-model="formData.userId" placeholder="请选择接收人">
+        <el-select filterable v-model="formData.userId" placeholder="请选择接收人">
           <el-option
             v-for="item in userOption"
             :key="item.id"

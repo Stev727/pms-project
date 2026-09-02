@@ -35,7 +35,7 @@
         </el-radio-group>
       </el-form-item>
       <el-form-item label="颜色类型" prop="colorType">
-        <el-select v-model="formData.colorType">
+        <el-select filterable v-model="formData.colorType">
           <el-option
             v-for="item in colorTypeOptions"
             :key="item.value"

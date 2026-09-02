@@ -14,7 +14,7 @@
         <Editor v-model="formData.content" height="150px" />
       </el-form-item>
       <el-form-item label="公告类型" prop="type">
-        <el-select v-model="formData.type" clearable placeholder="请选择公告类型">
+        <el-select filterable v-model="formData.type" clearable placeholder="请选择公告类型">
           <el-option
             v-for="dict in getIntDictOptions(DICT_TYPE.SYSTEM_NOTICE_TYPE)"
             :key="parseInt(dict.value as any)"
@@ -24,7 +24,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-select v-model="formData.status" clearable placeholder="请选择状态">
+        <el-select filterable v-model="formData.status" clearable placeholder="请选择状态">
           <el-option
             v-for="dict in getIntDictOptions(DICT_TYPE.COMMON_STATUS)"
             :key="parseInt(dict.value as any)"

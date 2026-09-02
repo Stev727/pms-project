@@ -18,7 +18,7 @@
         />
       </el-form-item>
       <el-form-item label="公告状态" prop="status">
-        <el-select
+        <el-select filterable
           v-model="queryParams.status"
           placeholder="请选择公告状态"
           clearable

@@ -8,7 +8,7 @@
       label-width="140px"
     >
       <el-form-item label="短信渠道编号" prop="channelId">
-        <el-select v-model="formData.channelId" placeholder="请选择短信渠道编号">
+        <el-select filterable v-model="formData.channelId" placeholder="请选择短信渠道编号">
           <el-option
             v-for="channel in channelList"
             :key="channel.id"
@@ -21,7 +21,7 @@
         </el-select>
       </el-form-item>
       <el-form-item label="短信类型" prop="type">
-        <el-select v-model="formData.type" placeholder="请选择短信类型">
+        <el-select filterable v-model="formData.type" placeholder="请选择短信类型">
           <el-option
             v-for="dict in getIntDictOptions(DICT_TYPE.SYSTEM_SMS_TEMPLATE_TYPE)"
             :key="dict.value"

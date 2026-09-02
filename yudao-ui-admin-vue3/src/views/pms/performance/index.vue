@@ -4,7 +4,7 @@
     <ContentWrap>
       <div class="toolbar">
         <el-date-picker v-model="selectedMonth" type="month" placeholder="选择月份" value-format="YYYY-MM" :disabled-date="disabledDate" style="width: 160px" />
-        <el-select v-model="selectedDept" placeholder="部门" clearable style="width: 160px">
+        <el-select filterable v-model="selectedDept" placeholder="部门" clearable style="width: 160px">
           <el-option v-for="d in deptList" :key="d.id" :label="d.name" :value="d.id" />
         </el-select>
         <el-button @click="exportReport" v-if="false">

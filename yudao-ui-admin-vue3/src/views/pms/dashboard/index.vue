@@ -4,7 +4,7 @@
     <ContentWrap>
       <el-form :inline="true" class="mb-0">
         <el-form-item label="时间范围">
-          <el-select v-model="timeRange" style="width: 120px" @change="loadData">
+          <el-select filterable v-model="timeRange" style="width: 120px" @change="loadData">
             <el-option label="本周" value="week" />
             <el-option label="本月" value="month" />
             <el-option label="本季度" value="quarter" />
@@ -13,7 +13,7 @@
         </el-form-item>
         <!-- #9 部门筛选器：只显示自己有权看的部门树，默认选中自己所在部门 -->
         <el-form-item v-if="deptTreeData.length > 0" label="部门">
-          <el-tree-select
+          <el-tree-select filterable :filter-node-method="(value, data) => !value || String(data.name || '').includes(value)"
             v-model="selectedDeptId"
             :data="deptTreeData"
             :props="{ value: 'id', label: 'name', children: 'children' }"

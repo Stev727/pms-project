@@ -12,12 +12,12 @@
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="queryParams.status" placeholder="全部" clearable style="width: 120px">
+          <el-select filterable v-model="queryParams.status" placeholder="全部" clearable style="width: 120px">
             <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="严重度">
-          <el-select v-model="queryParams.severity" placeholder="全部" clearable style="width: 110px">
+          <el-select filterable v-model="queryParams.severity" placeholder="全部" clearable style="width: 110px">
             <el-option v-for="s in severityOptions" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item>
@@ -127,7 +127,7 @@
         <div class="section-title">处理操作</div>
         <el-form :model="actionForm" label-width="80px" class="action-form">
           <el-form-item label="操作类型">
-            <el-select v-model="actionForm.action" placeholder="选择操作" style="width: 100%">
+            <el-select filterable v-model="actionForm.action" placeholder="选择操作" style="width: 100%">
               <el-option v-for="a in availableActions" :key="a.value" :label="a.label" :value="a.value" />
             </el-select>
           </el-form-item>

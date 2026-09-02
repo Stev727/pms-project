@@ -20,7 +20,7 @@
         />
       </el-form-item>
       <el-form-item label="用户类型" prop="userType">
-        <el-select
+        <el-select filterable
           v-model="queryParams.userType"
           placeholder="请选择用户类型"
           clearable

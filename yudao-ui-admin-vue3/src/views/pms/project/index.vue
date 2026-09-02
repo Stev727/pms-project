@@ -7,12 +7,12 @@
           <el-input v-model="queryParams.projectName" placeholder="请输入项目名称" clearable style="width: 200px" @keyup.enter="handleSearch" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="queryParams.status" placeholder="全部" clearable style="width: 120px">
+          <el-select filterable v-model="queryParams.status" placeholder="全部" clearable style="width: 120px">
             <el-option v-for="(v, k) in projectStatusMap" :key="k" :label="v.label" :value="k" />
           </el-select>
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="queryParams.projectType" placeholder="全部" clearable style="width: 120px">
+          <el-select filterable v-model="queryParams.projectType" placeholder="全部" clearable style="width: 120px">
             <el-option v-for="opt in projectTypeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>

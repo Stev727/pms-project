@@ -8,7 +8,7 @@
       label-width="68px"
     >
       <el-form-item label="字典名称" prop="dictType">
-        <el-select v-model="queryParams.dictType" class="!w-240px" @change="dictChange">
+        <el-select filterable v-model="queryParams.dictType" class="!w-240px" @change="dictChange">
           <el-option
             v-for="item in dictTypeList"
             :key="item.type"
@@ -27,7 +27,7 @@
         />
       </el-form-item>
       <el-form-item label="状态" prop="status">
-        <el-select v-model="queryParams.status" placeholder="数据状态" clearable class="!w-240px">
+        <el-select filterable v-model="queryParams.status" placeholder="数据状态" clearable class="!w-240px">
           <el-option
             v-for="dict in getIntDictOptions(DICT_TYPE.COMMON_STATUS)"
             :key="dict.value"
