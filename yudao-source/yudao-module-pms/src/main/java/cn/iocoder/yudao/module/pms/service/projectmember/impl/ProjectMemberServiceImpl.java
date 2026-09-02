@@ -26,6 +26,26 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
     @Override
     public Long createProjectMember(PmsProjectMemberDO entity) {
         requireProjectManager(entity.getProjectId());
+        // 唯一索引 uk_member_project_user(project_id,user_id) 不含 deleted:
+        // 成员被移除(逻辑删除)后再添加, 直接 insert 会报 Duplicate entry。
+        // 先查含已删除的历史记录: 活跃→报已存在; 已删除→复活; 无→正常插入。
+        PmsProjectMemberDO existing = projectMemberMapper.selectOneIncludeDeleted(
+                entity.getProjectId(), entity.getUserId());
+        if (existing != null) {
+            if (Boolean.FALSE.equals(existing.getDeleted())) {
+                throw new ServiceException(ErrorCodeConstants.PROJECT_MEMBER_ALREADY_EXISTS);
+            }
+            existing.setDeleted(false);
+            existing.setRoleCode(entity.getRoleCode());
+            existing.setIsExternal(entity.getIsExternal());
+            existing.setStatus(entity.getStatus());
+            existing.setJoinTime(java.time.LocalDateTime.now());
+            existing.setQuitTime(null);
+            Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
+            existing.setUpdater(loginUserId != null ? String.valueOf(loginUserId) : null);
+            projectMemberMapper.reviveById(existing);
+            return existing.getMemberId();
+        }
         projectMemberMapper.insert(entity);
         return entity.getMemberId();
     }

@@ -322,6 +322,12 @@
                     </el-button>
                   </template>
                   <template v-else>
+                    <el-button v-hasPermi="['pms:template:query']" link type="default" size="small" :disabled="isFirstTask(row)" @click="moveTask(row, -1)">
+                      <Icon icon="ep:top" />上移
+                    </el-button>
+                    <el-button v-hasPermi="['pms:template:query']" link type="default" size="small" :disabled="isLastTask(row)" @click="moveTask(row, 1)">
+                      <Icon icon="ep:bottom" />下移
+                    </el-button>
                     <el-button link type="primary" size="small" @click="openEditTask(row)">
                       <Icon icon="ep:edit" />编辑
                     </el-button>
@@ -836,6 +842,49 @@ const moveStage = (row: any, dir: number) => {
   list.splice(target, 0, moved)
   // 按新顺序归一化 sortOrder
   list.forEach((s, i) => { s.sortOrder = i + 1 })
+}
+
+// 任务排序：上移/下移（同阶段内交换，归一化 sortOrder=1..n，保存时随 updateTask 一并提交）
+// children 按 sortOrder 值排序展示(editStageTreeData)，改 sortOrder 值即触发重排
+const sortedStageTasks = (stageId: any) =>
+  editTaskList.value
+    .filter(t => String(t.stageId) === String(stageId))
+    .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+
+const findTaskIdx = (sorted: any[], row: any) => {
+  // children 直接透传任务对象引用，优先引用匹配
+  const byRef = sorted.findIndex(t => t === row)
+  if (byRef !== -1) return byRef
+  if (row.taskId != null) {
+    return sorted.findIndex(t => t.taskId != null && String(t.taskId) === String(row.taskId))
+  }
+  return sorted.findIndex(t => t.taskName === row.taskName)
+}
+
+const isFirstTask = (row: any) => {
+  const sorted = sortedStageTasks(row.stageId)
+  if (sorted.length === 0) return true
+  return findTaskIdx(sorted, row) === 0
+}
+
+const isLastTask = (row: any) => {
+  const sorted = sortedStageTasks(row.stageId)
+  if (sorted.length === 0) return true
+  return findTaskIdx(sorted, row) === sorted.length - 1
+}
+
+const moveTask = (row: any, dir: number) => {
+  // 同阶段任务按当前 sortOrder 排序后与相邻任务交换位置, 再归一化写回 sortOrder=1..n;
+  // 修改的是 ref 数组内 reactive 对象的属性, computed editStageTreeData 会重算,
+  // children 按 sortOrder 重排后界面立即反映新顺序
+  const sorted = sortedStageTasks(row.stageId)
+  const idx = findTaskIdx(sorted, row)
+  if (idx === -1) return
+  const target = idx + dir
+  if (target < 0 || target >= sorted.length) return
+  const [moved] = sorted.splice(idx, 1)
+  sorted.splice(target, 0, moved)
+  sorted.forEach((t, i) => { t.sortOrder = i + 1 })
 }
 
 const openEditStage = (row: any) => {

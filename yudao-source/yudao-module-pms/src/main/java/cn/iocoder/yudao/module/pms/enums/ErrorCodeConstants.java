@@ -59,5 +59,8 @@ public interface ErrorCodeConstants {
     // ========== #4 消息提醒 031 ==========
     ErrorCode DINGTALK_TODO_FAILED = new ErrorCode(1_040_000_031, "钉钉待办创建失败");
 
+    // ========== 项目成员 036 ==========
+    ErrorCode PROJECT_MEMBER_ALREADY_EXISTS = new ErrorCode(1_040_000_036, "该用户已经是项目成员，请勿重复添加");
+
 }
 
