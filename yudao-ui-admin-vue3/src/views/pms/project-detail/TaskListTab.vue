@@ -161,9 +161,18 @@
           </template>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="100" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
+            <!-- 父任务支持同阶段内上下移动（子任务保持层级关系不参与排序） -->
+            <template v-if="!row.parentTaskId && (row.level || 1) === 1">
+              <el-button link type="default" size="small" :disabled="isFirstInStage(row)" @click.stop="moveTaskInStage(row, -1)">
+                <Icon icon="ep:top" />上移
+              </el-button>
+              <el-button link type="default" size="small" :disabled="isLastInStage(row)" @click.stop="moveTaskInStage(row, 1)">
+                <Icon icon="ep:bottom" />下移
+              </el-button>
+            </template>
             <!-- 方案 A：操作列只保留「详情」，其余操作在工具条按选中行展示 -->
             <el-button link type="primary" size="small" @click.stop="$emit('taskClick', row)">详情</el-button>
           </template>
@@ -549,6 +558,55 @@ const canAddSubtask = (row: TreeRow): boolean => {
   if (!canProject(PERM.TASK_CREATE)) return false
   const level = row.level || 1
   return level < 3
+}
+
+// ==================== 任务上下移动（同阶段内父任务排序） ====================
+// 同阶段父任务列表（按 sortOrder 排序）；子任务不参与跨任务排序
+const getStageParentTasks = (row: TreeRow): TaskVO[] => {
+  return props.tasks
+    .filter(t => String(t.stageId) === String(row.stageId) && !t.parentTaskId)
+    .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+}
+
+const isFirstInStage = (row: TreeRow): boolean => {
+  if (row.isStageRow || row.parentTaskId) return true
+  const list = getStageParentTasks(row)
+  return list[0]?.taskId === row.taskId
+}
+
+const isLastInStage = (row: TreeRow): boolean => {
+  if (row.isStageRow || row.parentTaskId) return true
+  const list = getStageParentTasks(row)
+  return list[list.length - 1]?.taskId === row.taskId
+}
+
+const moveTaskInStage = async (row: TreeRow, dir: -1 | 1) => {
+  if (row.isStageRow || row.parentTaskId) return
+  const list = getStageParentTasks(row)
+  const idx = list.findIndex(t => t.taskId === row.taskId)
+  const targetIdx = idx + dir
+  if (targetIdx < 0 || targetIdx >= list.length) return
+  const cur = list[idx]
+  const tgt = list[targetIdx]
+  // 记录旧值用于失败回滚
+  const oldCur = cur.sortOrder
+  const oldTgt = tgt.sortOrder
+  // 交换 sortOrder 值（Vue 3 响应式会触发 filteredTreeData 重算）
+  cur.sortOrder = tgt.sortOrder
+  tgt.sortOrder = oldCur
+  try {
+    await Promise.all([
+      updateTask({ taskId: cur.taskId, sortOrder: cur.sortOrder } as any),
+      updateTask({ taskId: tgt.taskId, sortOrder: tgt.sortOrder } as any)
+    ])
+    ElMessage.success('任务顺序已更新')
+  } catch (e: any) {
+    console.error('移动任务失败', e)
+    ElMessage.error(e?.message || '移动任务失败')
+    // 回滚到交换前的状态
+    cur.sortOrder = oldCur
+    tgt.sortOrder = oldTgt
+  }
 }
 
 // 过滤后的任务总数（不含阶段行）
