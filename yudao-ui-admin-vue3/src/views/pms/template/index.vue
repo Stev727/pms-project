@@ -198,12 +198,6 @@
               <el-tag v-else size="small" effect="plain">{{ getPreviewStageName(row.stageId) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="计划工期" width="80" align="center">
-            <template #default="{ row }">
-              <span v-if="row.cycle">{{ row.cycle }}天</span>
-              <span v-else>-</span>
-            </template>
-          </el-table-column>
           <el-table-column label="关键路径" width="80" align="center">
             <template #default="{ row }">
               <el-tag v-if="row.isCriticalPath" type="danger" size="small">是</el-tag>
@@ -291,12 +285,6 @@
                   <el-tag v-if="row.isStage" type="warning" size="small">阶段</el-tag>
                   <el-tag v-else-if="row.isMilestone" type="danger" size="small">里程碑</el-tag>
                   <el-tag v-else size="small" effect="plain">{{ getEditStageName(row.stageId) }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="工期" width="80" align="center">
-                <template #default="{ row }">
-                  <span v-if="row.cycle">{{ row.cycle }}天</span>
-                  <span v-else>-</span>
                 </template>
               </el-table-column>
               <el-table-column label="关键路径" width="80" align="center">
