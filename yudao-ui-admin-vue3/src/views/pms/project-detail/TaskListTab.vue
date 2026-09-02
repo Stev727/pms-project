@@ -438,9 +438,16 @@ interface TreeRow extends TaskVO {
 }
 
 // 将任务列表按 parentTaskId 组装成层级树（仅在同一阶段分组内嵌套）
+// 先按 sortOrder 升序排序（null/0 视为同一档放末尾），保证根任务顺序与持久化一致
 function buildHierarchy(list: TaskVO[]): TreeRow[] {
+  const sortedList = [...list].sort((a, b) => {
+    const sa = Number(a.sortOrder) || 999999
+    const sb = Number(b.sortOrder) || 999999
+    if (sa !== sb) return sa - sb
+    return String(a.taskId).localeCompare(String(b.taskId))
+  })
   const map = new Map<string, TreeRow>()
-  list.forEach(t => {
+  sortedList.forEach(t => {
     map.set(String(t.taskId), { ...t, rowKey: `task_${t.taskId}`, children: [], hasChildren: false })
   })
   const roots: TreeRow[] = []
@@ -448,7 +455,15 @@ function buildHierarchy(list: TaskVO[]): TreeRow[] {
     const pid = node.parentTaskId
     if (pid && map.has(String(pid))) {
       const parent = map.get(String(pid))!
-      parent.children!.push(node)
+      // 子任务也按 sortOrder 排序插入
+      let i = 0
+      while (i < parent.children!.length) {
+        const csa = Number(parent.children![i].sortOrder) || 999999
+        const nsa = Number(node.sortOrder) || 999999
+        if (csa > nsa || (csa === nsa && String(parent.children![i].taskId).localeCompare(String(node.taskId)) > 0)) break
+        i++
+      }
+      parent.children!.splice(i, 0, node)
       parent.hasChildren = true
     } else {
       roots.push(node)
@@ -582,30 +597,42 @@ const isLastInStage = (row: TreeRow): boolean => {
 
 const moveTaskInStage = async (row: TreeRow, dir: -1 | 1) => {
   if (row.isStageRow || row.parentTaskId) return
-  const list = getStageParentTasks(row)
+  const list = getStageParentTasks(row)  // 已按 sortOrder 升序
   const idx = list.findIndex(t => t.taskId === row.taskId)
   const targetIdx = idx + dir
   if (targetIdx < 0 || targetIdx >= list.length) return
-  const cur = list[idx]
-  const tgt = list[targetIdx]
-  // 记录旧值用于失败回滚
-  const oldCur = cur.sortOrder
-  const oldTgt = tgt.sortOrder
-  // 交换 sortOrder 值（Vue 3 响应式会触发 filteredTreeData 重算）
-  cur.sortOrder = tgt.sortOrder
-  tgt.sortOrder = oldCur
+  // 拍快照用于失败回滚
+  const snapshot = list.map(t => ({ taskId: t.taskId, sortOrder: t.sortOrder }))
+  // 在副本里重排并归一化 1..n
+  const reordered = [...list]
+  const [moved] = reordered.splice(idx, 1)
+  reordered.splice(targetIdx, 0, moved)
+  reordered.forEach((t, i) => { t.sortOrder = i + 1 })
+  // 计算真正变化的行（避免无变更的 updateTask 噪声）
+  const changed = reordered.filter(t => {
+    const orig = snapshot.find(o => o.taskId === t.taskId)
+    return !orig || Number(orig.sortOrder) !== Number(t.sortOrder) || orig.sortOrder == null
+  })
+  if (!changed.length) {
+    ElMessage.warning('无需移动')
+    return
+  }
   try {
-    await Promise.all([
-      updateTask({ taskId: cur.taskId, sortOrder: cur.sortOrder } as any),
-      updateTask({ taskId: tgt.taskId, sortOrder: tgt.sortOrder } as any)
-    ])
+    // 并行更新；sortOrder 用 Number 包一层，防 Number 与 String 类型不通
+    await Promise.all(
+      changed.map(t => updateTask({ taskId: t.taskId, sortOrder: Number(t.sortOrder) } as any))
+    )
     ElMessage.success('任务顺序已更新')
+    // 通知父组件重新拉数据 → projectTasks.value 重置 → props 整体刷新
+    emit('refresh')
   } catch (e: any) {
     console.error('移动任务失败', e)
     ElMessage.error(e?.message || '移动任务失败')
-    // 回滚到交换前的状态
-    cur.sortOrder = oldCur
-    tgt.sortOrder = oldTgt
+    // 失败回滚到原值（只回滚变化过的行）
+    snapshot.forEach(o => {
+      const t = list.find(x => x.taskId === o.taskId)
+      if (t) t.sortOrder = o.sortOrder
+    })
   }
 }
 
