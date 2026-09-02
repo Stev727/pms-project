@@ -62,5 +62,10 @@ public interface ErrorCodeConstants {
     // ========== 项目成员 036 ==========
     ErrorCode PROJECT_MEMBER_ALREADY_EXISTS = new ErrorCode(1_040_000_036, "该用户已经是项目成员，请勿重复添加");
 
+    // ========== 模板阶段任务导入 037-039 ==========
+    ErrorCode TEMPLATE_IMPORT_FILE_EMPTY = new ErrorCode(1_040_000_037, "导入文件为空或无有效数据行");
+    ErrorCode TEMPLATE_IMPORT_VALIDATE_FAILED = new ErrorCode(1_040_000_038, "导入数据校验未通过，请下载错误文件修正后重试");
+    ErrorCode TEMPLATE_PROJECT_NOT_TEMPLATE = new ErrorCode(1_040_000_039, "目标项目不是标准模板，禁止导入");
+
 }
 

@@ -255,6 +255,12 @@
             <div class="flex justify-between items-center mb-12px">
               <span class="text-14px font-600">阶段与任务</span>
               <div class="flex gap-8px">
+                <el-button type="warning" size="small" plain @click="downloadStageTaskTemplate" v-hasPermi="['pms:template:query']">
+                  <Icon icon="ep:download" /> 下载模板
+                </el-button>
+                <el-button type="primary" size="small" plain @click="chooseImportFile" :loading="importing" v-hasPermi="['pms:template:query']">
+                  <Icon icon="ep:upload" /> Excel导入
+                </el-button>
                 <el-button type="success" size="small" @click="openAddStage" v-hasPermi="['pms:template:query']">
                   <Icon icon="ep:plus" /> 添加阶段
                 </el-button>
@@ -328,6 +334,7 @@
             </el-table>
           </el-tab-pane>
         </el-tabs>
+        <input ref="importFileInput" type="file" accept=".xlsx,.xls" style="display: none" @change="handleImportFile" />
       </div>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
@@ -390,6 +397,8 @@ import { getStageList, createStage, updateStage, deleteStage, StageVO } from '@/
 import { dateFormatter } from '@/utils/formatTime'
 import { getSimpleDeptList } from '@/api/system/dept'
 import { useUserStore } from '@/store/modules/user'
+import { getStageTaskImportTemplate, importStageTask } from '@/api/pms/template'
+import download from '@/utils/download'
 
 defineOptions({ name: 'PmsTemplate' })
 
@@ -799,6 +808,76 @@ const saveEdit = async () => {
   } finally {
     editSaving.value = false
   }
+}
+
+// ==================== 阶段任务 Excel 导入（全量覆盖） ====================
+const importing = ref(false)
+const importFileInput = ref<HTMLInputElement | null>(null)
+
+/** 下载当前模板的阶段任务导入模板（预填现有数据，便于增量修改） */
+const downloadStageTaskTemplate = async () => {
+  try {
+    const data = await getStageTaskImportTemplate(editForm.projectId)
+    download.excel(data as Blob, '模板阶段任务导入模板.xlsx')
+  } catch (e: any) {
+    message.error(e?.message || '模板下载失败')
+  }
+}
+
+/** 选择导入文件前先做覆盖确认 */
+const chooseImportFile = async () => {
+  try {
+    await message.confirm(
+      '导入为全量覆盖：当前模板的全部阶段与任务将被删除，并按 Excel 内容重建（未保存的编辑也会丢失）。已应用到项目的任务不受影响。',
+      '覆盖确认',
+      { confirmButtonText: '确认覆盖导入', cancelButtonText: '取消', type: 'warning' }
+    )
+    importFileInput.value?.click()
+  } catch {
+    // 用户取消
+  }
+}
+
+/** 处理导入文件：json 响应=成功，blob(Excel)=校验失败明细 */
+const handleImportFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  importing.value = true
+  try {
+    const response: any = await importStageTask(editForm.projectId, file)
+    const blob = response.data as Blob
+    if ((response.headers?.['content-type'] || '').includes('application/json')) {
+      const result = JSON.parse(await blob.text())
+      if (result.code !== 0) throw new Error(result.msg || '导入失败')
+      message.success(`导入成功：${result.data?.stageCount || 0} 个阶段 / ${result.data?.taskCount || 0} 个任务`)
+      await reloadEditStageTask()
+    } else {
+      download.excel(blob, '模板阶段任务导入错误.xlsx')
+      message.warning('导入数据校验未通过，已下载错误明细')
+    }
+  } catch (error: any) {
+    message.error(error?.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
+/** 导入成功后重新加载编辑弹窗内的阶段任务（覆盖确认里的"未保存编辑丢失"在成功后即成为新基线） */
+const reloadEditStageTask = async () => {
+  const [allTasks, allStages] = await Promise.all([getTaskList({ projectType: 'standard_template' }), getStageList()])
+  const tplId = String(editForm.projectId)
+  editTaskList.value = (allTasks as TaskVO[]).filter(t => String(t.projectId) === tplId)
+  editDeletedTaskIds.value = []
+  const stages = (allStages as StageVO[]).filter(s => String(s.projectId) === tplId)
+  editStageList.value = stages
+    .map((s, i) => ({
+      ...s,
+      stageId: s.stageId != null ? s.stageId : `legacy_${s.stageName || 'stage'}_${i}`
+    }))
+    .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+  editDeletedStageIds.value = []
 }
 
 // 阶段排序：上移/下移（交换相邻阶段的 sortOrder 并归一化为 1..n，保存时随 updateStage 一并提交）
