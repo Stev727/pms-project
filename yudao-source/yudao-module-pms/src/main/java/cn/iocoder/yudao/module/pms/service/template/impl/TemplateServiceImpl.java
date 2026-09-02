@@ -183,6 +183,12 @@ public class TemplateServiceImpl implements TemplateService {
             excelRowNo++;
             List<String> errors = new ArrayList<>();
 
+            // 纯阶段行：任务序号与任务名称均空 → 仅声明阶段（无任务的阶段），
+            // 跳过任务字段校验。与导出逻辑对齐：无任务阶段导出一行仅含阶段信息的行，
+            // 用户下载后不改直接导回应无损通过。
+            boolean pureStageRow = row.getTaskNo() == null
+                    && (row.getTaskName() == null || row.getTaskName().trim().isEmpty());
+
             // 2.1 阶段序号：必填正整数
             if (row.getStageNo() == null || row.getStageNo() < 1) {
                 errors.add("阶段序号必填且为正整数");
@@ -191,31 +197,35 @@ public class TemplateServiceImpl implements TemplateService {
             if (row.getStageName() == null || row.getStageName().trim().isEmpty()) {
                 errors.add("阶段名称必填");
             }
-            // 2.3 任务序号：必填正整数
-            if (row.getTaskNo() == null || row.getTaskNo() < 1) {
+            // 2.3 任务序号：必填正整数（纯阶段行除外）
+            if (!pureStageRow && (row.getTaskNo() == null || row.getTaskNo() < 1)) {
                 errors.add("任务序号必填且为正整数");
             }
-            // 2.4 任务名称：必填
-            if (row.getTaskName() == null || row.getTaskName().trim().isEmpty()) {
+            // 2.4 任务名称：必填（纯阶段行除外）
+            if (!pureStageRow && (row.getTaskName() == null || row.getTaskName().trim().isEmpty())) {
                 errors.add("任务名称必填");
             }
-            // 2.5 任务类型：可空默认 other，填了必须可识别
             String taskTypeValue = null;
-            if (row.getTaskType() != null && !row.getTaskType().trim().isEmpty()) {
-                taskTypeValue = TASK_TYPE_ALIAS.get(row.getTaskType().trim());
-                if (taskTypeValue == null) {
-                    errors.add("任务类型无法识别：" + row.getTaskType()
-                            + "（可选：设计/评审/测试/采购/试制/文档/审批/供应商协同/其他）");
+            Boolean milestone = null;
+            Boolean criticalPath = null;
+            if (!pureStageRow) {
+                // 2.5 任务类型：可空默认 other，填了必须可识别
+                if (row.getTaskType() != null && !row.getTaskType().trim().isEmpty()) {
+                    taskTypeValue = TASK_TYPE_ALIAS.get(row.getTaskType().trim());
+                    if (taskTypeValue == null) {
+                        errors.add("任务类型无法识别：" + row.getTaskType()
+                                + "（可选：设计/评审/测试/采购/试制/文档/审批/供应商协同/其他）");
+                    }
                 }
-            }
-            // 2.6 里程碑 / 关键路径：是/否，可空默认否
-            Boolean milestone = parseYesNo(row.getMilestone(), errors, "里程碑");
-            Boolean criticalPath = parseYesNo(row.getCriticalPath(), errors, "关键路径");
-            // 2.7 工期：必填 1-365
-            if (row.getCycle() == null) {
-                errors.add("工期必填");
-            } else if (row.getCycle() < 1 || row.getCycle() > 365) {
-                errors.add("工期需在 1-365 天之间");
+                // 2.6 里程碑 / 关键路径：是/否，可空默认否
+                milestone = parseYesNo(row.getMilestone(), errors, "里程碑");
+                criticalPath = parseYesNo(row.getCriticalPath(), errors, "关键路径");
+                // 2.7 工期：必填 1-365
+                if (row.getCycle() == null) {
+                    errors.add("工期必填");
+                } else if (row.getCycle() < 1 || row.getCycle() > 365) {
+                    errors.add("工期需在 1-365 天之间");
+                }
             }
 
             if (!errors.isEmpty()) {
@@ -231,6 +241,13 @@ public class TemplateServiceImpl implements TemplateService {
             } else if (!group.stageName.equals(row.getStageName().trim())) {
                 failureRows.add(buildErrorRow(row, "第" + excelRowNo + "行：同一阶段序号("
                         + row.getStageNo() + ")的阶段名称必须一致（已出现\"" + group.stageName + "\"）"));
+                continue;
+            }
+            if (group.firstRow == null) {
+                group.firstRow = row;
+            }
+            if (pureStageRow) {
+                // 纯阶段行：不登记任务（该阶段可为 0 任务）
                 continue;
             }
             // 组内任务序号唯一
@@ -253,8 +270,9 @@ public class TemplateServiceImpl implements TemplateService {
                     // 第一处不连续即报整体错误（挂在首个不连续阶段的行上）
                     int expect = i + 1;
                     StageGroup g = groups.get(stageNos.get(i));
-                    TemplateStageTaskImportExcel firstRow = g == null ? null : g.tasks.values().iterator().next();
-                    failureRows.add(buildErrorRow(firstRow != null ? firstRow : new TemplateStageTaskImportExcel(),
+                    TemplateStageTaskImportExcel firstRow = g != null && g.firstRow != null
+                            ? g.firstRow : new TemplateStageTaskImportExcel();
+                    failureRows.add(buildErrorRow(firstRow,
                             "整体校验：阶段序号需从 1 开始连续（缺少阶段序号 " + expect + "）"));
                     break;
                 }
@@ -404,6 +422,8 @@ public class TemplateServiceImpl implements TemplateService {
     /** 阶段分组中间结构 */
     private static class StageGroup {
         String stageName;
+        /** 该组首个出现的行（结构性校验报错时定位用，纯阶段组也安全） */
+        TemplateStageTaskImportExcel firstRow;
         /** taskNo -> 行（LinkedHashMap 保持插入序） */
         final Map<Integer, TemplateStageTaskImportExcel> tasks = new LinkedHashMap<>();
     }
