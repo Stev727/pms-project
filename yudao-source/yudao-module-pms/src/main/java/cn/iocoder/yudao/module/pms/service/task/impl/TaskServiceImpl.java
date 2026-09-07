@@ -1569,8 +1569,7 @@ public class TaskServiceImpl implements TaskService {
             cv.setTaskId(t.getTaskId());
             cv.setTaskName(t.getTaskName());
             if (t.getProjectId() != null) {
-                PmsProjectDO p = projectMapper.selectById(t.getProjectId());
-                cv.setProjectName(p != null && p.getProjectName() != null ? p.getProjectName() : "未知项目");
+                cv.setProjectName(resolveProjectName(t.getProjectId()));
             }
             List<TaskWeeklyReportVO.ChangeItemVO> items = new ArrayList<>();
             for (PmsTaskLogDO lg : entry.getValue()) {
