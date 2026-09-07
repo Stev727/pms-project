@@ -81,12 +81,13 @@
               <el-tag size="small" effect="plain" type="info" class="ml-8px">{{ group.tasks.length }}</el-tag>
             </div>
             <div class="task-list">
-              <task-board-card :show-header="true" />
+              <task-board-card :show-header="true" :hide-project="true" />
               <task-board-card
                 v-for="t in group.tasks"
                 :key="t.taskId"
                 :task="t"
                 :project-name="group.projectName"
+                :hide-project="true"
                 :current-user-id="currentUserId"
                 @detail="openDetail"
                 @submit-review="handleSubmitReview"
@@ -113,12 +114,13 @@
           <el-tag size="small" effect="plain" class="ml-8px">{{ group.tasks.length }}</el-tag>
         </div>
         <div v-show="!isProjectCollapsed(group.projectId)" class="task-list">
-            <task-board-card :show-header="true" />
+            <task-board-card :show-header="true" :hide-project="true" />
             <task-board-card
               v-for="t in group.tasks"
               :key="t.taskId"
               :task="t"
               :project-name="group.projectName"
+              :hide-project="true"
               :current-user-id="currentUserId"
               @detail="openDetail"
               @submit-review="handleSubmitReview"
@@ -138,11 +140,12 @@
         </template>
         <el-empty v-if="board.dailyTasks.length === 0" description="该范围内无日常任务" :image-size="60" />
         <div v-else class="task-list">
-          <task-board-card :show-header="true" />
+          <task-board-card :show-header="true" :hide-project="true" />
           <task-board-card
             v-for="t in board.dailyTasks"
             :key="t.taskId"
             :task="t"
+            :hide-project="true"
             :current-user-id="currentUserId"
             @detail="openDetail"
             @submit-review="handleSubmitReview"
@@ -244,7 +247,7 @@ const legacyGroups = computed(() => {
     let idx = idxMap.get(key)
     if (idx === undefined) {
       const name = key !== null
-        ? (projectNameMap.get(key) || `项目 ${key}`)
+        ? (projectNameMap.get(key) || t.projectName || `项目 ${key}`)
         : '日常任务'
       idx = groups.length
       groups.push({ projectId: key, projectName: name, tasks: [] })

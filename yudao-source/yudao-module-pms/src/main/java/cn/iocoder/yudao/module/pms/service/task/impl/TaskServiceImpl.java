@@ -1239,16 +1239,18 @@ public class TaskServiceImpl implements TaskService {
             }
         }
 
-        // 组装项目分组（带项目名称）
+        // 组装项目分组（带项目名称；jdbc 直查含已逻辑删除项目，避免显示「未知项目」/「项目 ID」）
         List<TaskBoardVO.ProjectTaskGroup> projectGroups = new ArrayList<>();
         for (Map.Entry<Long, List<PmsTaskDO>> entry : projectMap.entrySet()) {
-            PmsProjectDO proj = projectMapper.selectById(entry.getKey());
             TaskBoardVO.ProjectTaskGroup group = new TaskBoardVO.ProjectTaskGroup();
             group.setProjectId(entry.getKey());
-            group.setProjectName(proj != null && proj.getProjectName() != null ? proj.getProjectName() : "未知项目");
-            group.setTasks(entry.getValue());
+            group.setProjectName(resolveProjectName(entry.getKey()));
+            fillProjectName(entry.getValue());
             projectGroups.add(group);
         }
+
+        // 历史遗留任务填充项目名（jdbc 直查，含已逻辑删除项目）
+        fillProjectName(legacy);
 
         TaskBoardVO vo = new TaskBoardVO();
         vo.setLegacyTasks(legacy);
@@ -1437,6 +1439,26 @@ public class TaskServiceImpl implements TaskService {
         fillProjectName(delayed);
 
         return vo;
+    }
+
+    /** 单项目名解析（jdbc 直查含已逻辑删除项目；查不到回落「未知项目」） */
+    private String resolveProjectName(Long projectId) {
+        if (projectId == null) {
+            return "未知项目";
+        }
+        if (jdbcTemplate != null) {
+            try {
+                List<String> names = jdbcTemplate.queryForList(
+                        "SELECT project_name FROM pms_project WHERE project_id = ?", String.class, projectId);
+                if (!names.isEmpty() && names.get(0) != null) {
+                    return names.get(0);
+                }
+            } catch (Exception ignore) {
+                // 失败走 mapper 兜底（仅未删项目）
+            }
+        }
+        PmsProjectDO p = projectMapper.selectById(projectId);
+        return p != null && p.getProjectName() != null ? p.getProjectName() : "未知项目";
     }
 
     /** 批量填充任务所属项目名称（@TableField(exist=false) 展示字段） */

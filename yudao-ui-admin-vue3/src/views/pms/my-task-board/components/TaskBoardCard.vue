@@ -1,7 +1,7 @@
 <template>
   <!-- 表头模式 -->
   <div v-if="showHeader" class="task-row task-header">
-    <div class="row-cell cell-project"><span class="header-text">项目</span></div>
+    <div v-if="!hideProject" class="row-cell cell-project"><span class="header-text">项目</span></div>
     <div class="row-name"><span class="header-text">任务名称</span></div>
     <div class="row-cell cell-owner"><span class="header-text">责任人</span></div>
     <div class="row-cell cell-helper"><span class="header-text">协助人</span></div>
@@ -14,7 +14,7 @@
   <!-- 数据行 -->
   <div v-else class="task-row" @click="emit('detail', task)">
     <!-- 项目名称（独立列；日常任务留空） -->
-    <div class="row-cell cell-project" :title="projectName || ''">
+    <div v-if="!hideProject" class="row-cell cell-project" :title="projectName || ''">
       <el-tag v-if="projectName" type="primary" size="small" effect="plain" class="project-tag">{{ projectName }}</el-tag>
       <span v-else class="cell-empty">—</span>
     </div>
@@ -82,6 +82,8 @@ const props = defineProps<{
   task?: TaskVO
   currentUserId?: string | number
   projectName?: string
+  /** 隐藏「项目」列（看板按项目分组时组标题已含项目名，行内列冗余） */
+  hideProject?: boolean
   /** 是否渲染为表头行（显示列标题而非数据） */
   showHeader?: boolean
 }>()
