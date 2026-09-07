@@ -209,12 +209,13 @@ public class TemplateServiceImpl implements TemplateService {
             Boolean milestone = null;
             Boolean criticalPath = null;
             if (!pureStageRow) {
-                // 2.5 任务类型：可空默认 other，填了必须可识别
+                // 2.5 任务类型：可空默认 other；填了先查字典别名映射，识别不到则透传原值（兼容历史脏数据，如 standard）
                 if (row.getTaskType() != null && !row.getTaskType().trim().isEmpty()) {
-                    taskTypeValue = TASK_TYPE_ALIAS.get(row.getTaskType().trim());
+                    String trimmed = row.getTaskType().trim();
+                    taskTypeValue = TASK_TYPE_ALIAS.get(trimmed);
                     if (taskTypeValue == null) {
-                        errors.add("任务类型无法识别：" + row.getTaskType()
-                                + "（可选：设计/评审/测试/采购/试制/文档/审批/供应商协同/其他）");
+                        // 字典未识别：透传原值到 DB，不阻断导入（历史数据存在 standard 等字典外值）
+                        taskTypeValue = trimmed;
                     }
                 }
                 // 2.6 里程碑 / 关键路径：是/否，可空默认否
@@ -279,18 +280,9 @@ public class TemplateServiceImpl implements TemplateService {
             }
         }
         if (failureRows.isEmpty()) {
-            for (Map.Entry<Integer, StageGroup> e : groups.entrySet()) {
-                List<Integer> taskNos = new ArrayList<>(e.getValue().tasks.keySet());
-                for (int i = 0; i < taskNos.size(); i++) {
-                    if (taskNos.get(i) != i + 1) {
-                        TemplateStageTaskImportExcel firstRow = e.getValue().tasks.values().iterator().next();
-                        failureRows.add(buildErrorRow(firstRow,
-                                "整体校验：阶段 " + e.getKey() + " 内任务序号需从 1 开始连续（缺少任务序号 "
-                                        + (i + 1) + "）"));
-                        break;
-                    }
-                }
-            }
+            // 阶段内任务序号仅需唯一即可，不强制 1..N 连续（历史模板常存在跳号，
+            // 例如「标准板模板-6阶段64任务」阶段1只有2-8、阶段4缺3号）。
+            // 这样才能保证「导出→原样导回」的无损往返承诺。
         }
 
         // 3. 存在错误行 → 整批不落库，返回错误行供 Controller 生成错误 Excel 下载
