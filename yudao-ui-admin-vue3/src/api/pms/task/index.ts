@@ -21,6 +21,8 @@ import request from '@/config/axios'
 export interface TaskVO {
   taskId: string
   projectId: string
+  /** 所属项目名称（非表字段，周报看板等聚合接口由后端注入） */
+  projectName?: string
   stageId?: string
   parentTaskId?: string
   predecessorTaskIds?: string  // 前置任务ID列表(逗号分隔)
