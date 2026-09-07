@@ -7,6 +7,7 @@ import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.tasklog.PmsTaskLogDO;
+import org.springframework.jdbc.core.JdbcTemplate;
 import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.tasklog.TaskLogMapper;
@@ -156,6 +157,8 @@ public class TaskServiceImpl implements TaskService {
     private TaskMapper taskMapper;
     @Resource
     private ProjectMapper projectMapper;
+    @org.springframework.beans.factory.annotation.Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Resource
     private DingTalkNotifyService dingTalkNotifyService;
@@ -1437,8 +1440,37 @@ public class TaskServiceImpl implements TaskService {
         if (projectIds.isEmpty()) {
             return;
         }
-        Map<Long, String> nameMap = projectMapper.selectBatchIds(projectIds).stream()
-                .collect(Collectors.toMap(PmsProjectDO::getProjectId, PmsProjectDO::getProjectName, (a, b) -> a));
+        // 用 jdbcTemplate 直接查，绕开 mybatis 拦截器链（含 @TableLogic/@Tenant），返回包含已逻辑删除的项目名
+        final Map<Long, String> nameMap = new java.util.HashMap<>();
+        if (jdbcTemplate != null) {
+            // 拼 IN 子句（jdbcTemplate 不会自动展开 Collection）
+            StringBuilder sb = new StringBuilder("SELECT project_id, project_name FROM pms_project WHERE project_id IN (");
+            List<Long> idList = new java.util.ArrayList<>(projectIds);
+            for (int i = 0; i < idList.size(); i++) {
+                if (i > 0) sb.append(",");
+                sb.append("?");
+            }
+            sb.append(")");
+            try {
+                jdbcTemplate.query(sb.toString(), rs -> {
+                    try {
+                        long pid = rs.getLong("project_id");
+                        String pname = rs.getString("project_name");
+                        if (pname != null) nameMap.put(pid, pname);
+                    } catch (Exception ignore) {}
+                }, idList.toArray());
+            } catch (Exception ignore) {
+                // 极端兜底：jdbc 失败时退回原 mapper selectBatchIds（仅未删项目）
+                projectMapper.selectBatchIds(projectIds).forEach(p -> {
+                    if (p.getProjectName() != null) nameMap.put(p.getProjectId(), p.getProjectName());
+                });
+            }
+        } else {
+            // 没有 JdbcTemplate 注入（理论不会）走原 mapper
+            projectMapper.selectBatchIds(projectIds).forEach(p -> {
+                if (p.getProjectName() != null) nameMap.put(p.getProjectId(), p.getProjectName());
+            });
+        }
         tasks.forEach(t -> {
             if (t.getProjectId() != null) {
                 t.setProjectName(nameMap.get(t.getProjectId()));

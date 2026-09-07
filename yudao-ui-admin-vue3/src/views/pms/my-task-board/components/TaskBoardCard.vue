@@ -1,6 +1,7 @@
 <template>
   <!-- 表头模式 -->
   <div v-if="showHeader" class="task-row task-header">
+    <div class="row-cell cell-project"><span class="header-text">项目</span></div>
     <div class="row-name"><span class="header-text">任务名称</span></div>
     <div class="row-cell cell-owner"><span class="header-text">责任人</span></div>
     <div class="row-cell cell-helper"><span class="header-text">协助人</span></div>
@@ -12,11 +13,15 @@
   </div>
   <!-- 数据行 -->
   <div v-else class="task-row" @click="emit('detail', task)">
+    <!-- 项目名称（独立列；日常任务留空） -->
+    <div class="row-cell cell-project" :title="projectName || ''">
+      <el-tag v-if="projectName" type="primary" size="small" effect="plain" class="project-tag">{{ projectName }}</el-tag>
+      <span v-else class="cell-empty">—</span>
+    </div>
     <!-- 名称 + 标签 -->
     <div class="row-name" :title="task.taskName">
       <span class="name-text">{{ task.taskName }}</span>
       <el-tag v-if="isDaily" type="warning" size="small" effect="plain">日常</el-tag>
-      <el-tag v-else-if="projectName" type="primary" size="small" effect="plain">{{ projectName }}</el-tag>
       <el-tag v-if="task.taskType" size="small" effect="plain" type="info">{{ typeName }}</el-tag>
     </div>
 
@@ -64,11 +69,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { taskStatusMap, getDailyTaskTypeOptions, calcDelayDays, priorityMap, formatDate } from '../../pms-utils'
+import { taskStatusMap, getDailyTaskTypeOptions, getDynamicTaskTypeOptions, calcDelayDays, priorityMap, formatDate } from '../../pms-utils'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 // 【PMS】日常任务类型下拉统一走系统字典真源
 const dailyTaskTypeOptions = getDailyTaskTypeOptions()
+// 【PMS】项目任务类型同样走字典真源（修复：原本直接显示 design/review 英文值，看不懂）
+const projectTaskTypeOptions = getDynamicTaskTypeOptions()
 
 const props = defineProps<{
   task?: TaskVO
@@ -110,7 +117,9 @@ const typeName = computed(() => {
       || dailyTaskTypeOptions.find(o => o.value === props.task.taskType)?.label
       || '其他'
   }
-  return props.task.taskType || '-'
+  // 项目任务：走 pms_task_type 字典翻译；字典查不到回落 taskType 原文（兼容性）
+  return projectTaskTypeOptions.find(o => o.value === props.task.taskType)?.label
+    || props.task.taskType || '-'
 })
 // 延期天数：未完成且计划结束日期早于今天
 const delayDays = computed(() => calcDelayDays(props.task.planEndDate, props.task.completeStatus))
@@ -202,6 +211,8 @@ const canSubmitReview = computed(() => {
 .cell-empty {
   color: #c9cdd4;
 }
+.cell-project { width: 140px; flex-shrink: 0; justify-content: flex-start; }
+.cell-project .project-tag { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-owner { width: 88px; flex-shrink: 0; }
 .cell-helper { flex: 1 1 120px; min-width: 90px; max-width: 180px; }
 .helper-text {
