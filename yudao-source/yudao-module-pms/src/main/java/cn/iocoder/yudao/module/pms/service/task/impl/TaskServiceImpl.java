@@ -1246,6 +1246,7 @@ public class TaskServiceImpl implements TaskService {
             group.setProjectId(entry.getKey());
             group.setProjectName(resolveProjectName(entry.getKey()));
             fillProjectName(entry.getValue());
+            group.setTasks(entry.getValue());
             projectGroups.add(group);
         }
 
