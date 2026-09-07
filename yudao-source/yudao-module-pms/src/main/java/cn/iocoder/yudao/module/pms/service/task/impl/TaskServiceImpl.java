@@ -1419,7 +1419,31 @@ public class TaskServiceImpl implements TaskService {
         List<TaskWeeklyReportVO.TaskChangeLogVO> changes = buildChangeLogs(owners, isAll, lastWeekStart, lastWeekEnd);
         vo.setLastWeekChanges(changes);
 
+        // 注入项目名称（周报看板任务卡展示；日常任务 projectId 为空自动跳过）
+        fillProjectName(completed);
+        fillProjectName(plan);
+        fillProjectName(delayed);
+
         return vo;
+    }
+
+    /** 批量填充任务所属项目名称（@TableField(exist=false) 展示字段） */
+    private void fillProjectName(List<PmsTaskDO> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return;
+        }
+        Set<Long> projectIds = tasks.stream().map(PmsTaskDO::getProjectId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        if (projectIds.isEmpty()) {
+            return;
+        }
+        Map<Long, String> nameMap = projectMapper.selectBatchIds(projectIds).stream()
+                .collect(Collectors.toMap(PmsProjectDO::getProjectId, PmsProjectDO::getProjectName, (a, b) -> a));
+        tasks.forEach(t -> {
+            if (t.getProjectId() != null) {
+                t.setProjectName(nameMap.get(t.getProjectId()));
+            }
+        });
     }
 
     private List<Long> resolveReportOwners(Long userId, BoardScope scope) {

@@ -54,6 +54,7 @@
             v-for="t in report.lastWeekCompleted"
             :key="t.taskId"
             :task="t"
+            :project-name="t.projectName"
             :current-user-id="currentUserId"
             @detail="openDetail"
           />
@@ -76,6 +77,7 @@
             v-for="t in report.thisWeekPlan"
             :key="t.taskId"
             :task="t"
+            :project-name="t.projectName"
             :current-user-id="currentUserId"
             @detail="openDetail"
           />
@@ -94,7 +96,7 @@
         <el-empty v-if="report.lastWeekDelayed.length === 0" description="上周无延期任务" :image-size="60" />
         <div v-else class="delay-list">
           <div v-for="d in report.lastWeekDelayed" :key="d.task.taskId" class="delay-row">
-            <task-board-card :task="d.task" :current-user-id="currentUserId" @detail="openDetail" />
+            <task-board-card :task="d.task" :project-name="d.task.projectName" :current-user-id="currentUserId" @detail="openDetail" />
             <el-tag type="danger" effect="dark" class="delay-badge">
               逾期 {{ d.overdueDays }} 天（截至 {{ report.lastWeekEnd }}）
             </el-tag>

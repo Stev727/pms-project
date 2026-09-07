@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.pms.dal.dataobject.task;
 
 import cn.iocoder.yudao.framework.tenant.core.db.TenantBaseDO;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.IdType;
@@ -246,5 +247,12 @@ public class PmsTaskDO extends TenantBaseDO {
      */
     private String reviewPolicy;
 
-}
 
+    // ==================== 周报看板展示字段（非表字段） ====================
+
+    /**
+     * 所属项目名称（非表字段，聚合查询场景由 Service 注入用于展示；日常任务为 null）
+     */
+    @TableField(exist = false)
+    private String projectName;
+}
