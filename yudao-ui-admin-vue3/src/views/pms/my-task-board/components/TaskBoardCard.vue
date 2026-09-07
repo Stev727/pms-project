@@ -40,6 +40,7 @@
     <!-- 延期 -->
     <div class="row-cell cell-delay">
       <el-tag v-if="delayDays > 0" type="danger" size="small" effect="dark" class="delay-tag">延期 {{ delayDays }} 天</el-tag>
+      <el-tag v-else-if="completionDelayDays > 0" type="warning" size="small" effect="dark" class="delay-tag">延期 {{ completionDelayDays }} 天完成</el-tag>
       <span v-else class="cell-empty">—</span>
     </div>
 
@@ -69,7 +70,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { taskStatusMap, getDailyTaskTypeOptions, getDynamicTaskTypeOptions, calcDelayDays, priorityMap, formatDate } from '../../pms-utils'
+import { taskStatusMap, getDailyTaskTypeOptions, getDynamicTaskTypeOptions, calcDelayDays, priorityMap, formatDate, parseDate } from '../../pms-utils'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 
 // 【PMS】日常任务类型下拉统一走系统字典真源
@@ -123,6 +124,15 @@ const typeName = computed(() => {
 })
 // 延期天数：未完成且计划结束日期早于今天
 const delayDays = computed(() => calcDelayDays(props.task.planEndDate, props.task.completeStatus))
+// 延期完成天数：已完成但实际完成日期晚于计划结束日期（延期后完成的任务也要体现延期事实）
+const completionDelayDays = computed(() => {
+  if (props.task?.completeStatus !== 'completed') return 0
+  const end = parseDate(props.task.planEndDate)
+  const actual = parseDate(props.task.actualCompleteDate)
+  if (!end || !actual) return 0
+  const days = Math.floor((actual.getTime() - end.getTime()) / (1000 * 60 * 60 * 24))
+  return days > 0 ? days : 0
+})
 const statusLabel = computed(() => taskStatusMap[props.task.completeStatus || '']?.label || '-')
 const statusStyle = computed(() => {
   const s = taskStatusMap[props.task.completeStatus || '']
@@ -221,7 +231,7 @@ const canSubmitReview = computed(() => {
   white-space: nowrap;
 }
 .cell-date { flex: 1 1 145px; min-width: 130px; }
-.cell-delay { width: 88px; flex-shrink: 0; justify-content: flex-start; }
+.cell-delay { width: 108px; flex-shrink: 0; justify-content: flex-start; }
 .cell-status { width: 80px; flex-shrink: 0; justify-content: flex-start; }
 .cell-review { width: 70px; flex-shrink: 0; justify-content: flex-start; }
 .cell-progress { flex: 1 1 110px; min-width: 90px; }

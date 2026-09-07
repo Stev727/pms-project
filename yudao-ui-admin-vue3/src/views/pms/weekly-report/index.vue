@@ -84,6 +84,29 @@
         </div>
       </el-card>
 
+      <!-- E 未来计划 -->
+      <el-card class="section" shadow="never">
+        <template #header>
+          <div class="section-header">
+            <span class="section-title">🗓️ 未来计划</span>
+            <el-tag type="warning" effect="plain">{{ report.futurePlans.length }}</el-tag>
+            <span class="section-hint">未完成且计划开始日期晚于本周末（{{ report.weekEnd }}）的任务</span>
+          </div>
+        </template>
+        <el-empty v-if="report.futurePlans.length === 0" description="暂无未来计划任务" :image-size="60" />
+        <div v-else class="task-list">
+          <task-board-card :show-header="true" />
+          <task-board-card
+            v-for="t in report.futurePlans"
+            :key="t.taskId"
+            :task="t"
+            :project-name="t.projectName"
+            :current-user-id="currentUserId"
+            @detail="openDetail"
+          />
+        </div>
+      </el-card>
+
       <!-- C 上周延期 -->
       <el-card class="section" shadow="never">
         <template #header>
@@ -189,6 +212,7 @@ const report = reactive<WeeklyReportVO>({
   isLeader: false,
   lastWeekCompleted: [],
   thisWeekPlan: [],
+  futurePlans: [],
   lastWeekDelayed: [],
   lastWeekChanges: []
 })

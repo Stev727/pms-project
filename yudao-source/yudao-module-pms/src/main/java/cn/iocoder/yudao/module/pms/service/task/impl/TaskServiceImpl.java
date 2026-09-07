@@ -1402,6 +1402,14 @@ public class TaskServiceImpl implements TaskService {
                 .and(ww -> ww.isNull(PmsTaskDO::getPlanEndDate).or().ge(PmsTaskDO::getPlanEndDate, weekStart)));
         vo.setThisWeekPlan(plan);
 
+        // E 未来计划（未完成 + 计划开始日期在本周之后，按计划开始日期升序）
+        List<PmsTaskDO> future = queryOwned(owners, isAll, w -> w
+                .in(PmsTaskDO::getCompleteStatus, notCompleted)
+                .isNotNull(PmsTaskDO::getPlanStartDate)
+                .gt(PmsTaskDO::getPlanStartDate, weekEnd)
+                .orderByAsc(PmsTaskDO::getPlanStartDate));
+        vo.setFuturePlans(future);
+
         // C 上周延期（已启动/流转过但未完成且逾期到上周末）
         List<String> started = List.of("pending_accept", "in_progress", "completion_pending_review",
                 "pending_review", "delayed", "paused", "rejected");
@@ -1425,6 +1433,7 @@ public class TaskServiceImpl implements TaskService {
         // 注入项目名称（周报看板任务卡展示；日常任务 projectId 为空自动跳过）
         fillProjectName(completed);
         fillProjectName(plan);
+        fillProjectName(future);
         fillProjectName(delayed);
 
         return vo;

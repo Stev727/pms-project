@@ -211,6 +211,7 @@ export interface WeeklyReportVO {
   isLeader?: boolean
   lastWeekCompleted?: TaskVO[]
   thisWeekPlan?: TaskVO[]
+  futurePlans?: TaskVO[]
   lastWeekDelayed?: DelayedTaskVO[]
   lastWeekChanges?: TaskChangeLogVO[]
 }

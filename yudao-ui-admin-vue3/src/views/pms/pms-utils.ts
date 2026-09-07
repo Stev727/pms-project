@@ -102,7 +102,7 @@ export function getDelaySeverity(days: number) {
 
 // ==================== 格式化函数 ====================
 // 解析多种日期格式：字符串 | Date | 数组(Java LocalDate序列化如[2026,8,1]) | 时间戳数字
-function parseDate(date: any): Date | null {
+export function parseDate(date: any): Date | null {
   if (!date) return null
   if (date instanceof Date) return date
   if (typeof date === 'number') return new Date(date)
