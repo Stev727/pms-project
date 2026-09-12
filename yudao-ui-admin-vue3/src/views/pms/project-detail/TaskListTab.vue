@@ -150,10 +150,10 @@
             <el-tag v-if="!row.isStageRow && (row.level || 1) > 1" type="info" size="small" effect="plain">
               {{ row.parentTaskId ? '子任务' : '' }}
             </el-tag>
+            <span v-if="row.wbsNo" :style="{ flexShrink: '0', fontFamily: 'monospace', fontWeight: row.isStageRow ? '600' : 'normal', color: row.isStageRow ? '#2468F2' : '#86909C', fontSize: row.isStageRow ? '13px' : '12px' }">{{ row.wbsNo }}</span>
             <span :style="{ fontWeight: row.isStageRow ? '600' : 'normal', color: row.isStageRow ? '#1D2129' : '#4E5969' }">
               {{ row.taskName }}
             </span>
-            <el-tag v-if="row.isStageRow" type="primary" size="small" effect="plain">排序 {{ row.sortOrder ?? 0 }}</el-tag>
             <el-tag v-if="row.isCriticalPath && !row.isStageRow" type="danger" size="small" effect="plain">关键路径</el-tag>
           </span>
         </template>
@@ -584,6 +584,7 @@ interface TreeRow extends TaskVO {
   isStageRow?: boolean
   children?: TreeRow[]
   hasChildren?: boolean
+  wbsNo?: string
 }
 
 // 将任务列表按 parentTaskId 组装成层级树（仅在同一阶段分组内嵌套）
@@ -619,6 +620,15 @@ function buildHierarchy(list: TaskVO[]): TreeRow[] {
     }
   })
   return roots
+}
+
+// WBS 层级编号：阶段=1,2,3；任务=1.1、1.2；子任务=1.1.1
+// 编号由 sortOrder 排序位置派生（纯展示，不落库），上移/下移重排后自动跟随变化
+const assignWbs = (rows: TreeRow[], prefix: string) => {
+  rows.forEach((r, i) => {
+    r.wbsNo = prefix ? `${prefix}.${i + 1}` : `${i + 1}`
+    if (r.children && r.children.length) assignWbs(r.children, r.wbsNo)
+  })
 }
 
 const filteredTreeData = computed<TreeRow[]>(() => {
@@ -671,24 +681,32 @@ const filteredTreeData = computed<TreeRow[]>(() => {
   }
 
   const sortedStages = [...props.stages].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0))
+  let stageIdx = 0
   for (const stage of sortedStages) {
+    stageIdx++
     const stageRow: TreeRow = {
       ...stage,
       taskName: stage.stageName,
       rowKey: `stage_${stage.stageId}`,
       isStageRow: true,
       children: [],
-      hasChildren: true
+      hasChildren: true,
+      wbsNo: String(stageIdx)
     }
     // 阶段内任务按 parentTaskId 组装成层级树
     stageRow.children = buildHierarchy(tasksByStage.get(String(stage.stageId)) || [])
+    assignWbs(stageRow.children, stageRow.wbsNo)
     stageMap.set(String(stage.stageId), stageRow)
     tree.push(stageRow)
   }
 
-  // 无阶段归属的任务，统一挂在表格末尾（同样支持父子嵌套）
+  // 无阶段归属的任务，统一挂在表格末尾（同样支持父子嵌套；编号接在阶段序号之后）
   const noStageRoots = buildHierarchy(tasksByStage.get('') || [])
-  noStageRoots.forEach(r => tree.push(r))
+  noStageRoots.forEach((r, i) => {
+    r.wbsNo = String(stageIdx + i + 1)
+    if (r.children && r.children.length) assignWbs(r.children, r.wbsNo)
+    tree.push(r)
+  })
 
   return tree  // 显示所有阶段（含空阶段），解决新建阶段后不显示的问题
 })
