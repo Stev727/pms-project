@@ -872,7 +872,7 @@ const taskTableRef = ref()
 const checkedTasks = ref<any[]>([])
 const selectableRow = (row: any) => !row.isStageRow
 // 阶段行加 row-stage 类，便于 CSS 样式（如 hover/缩进）+ 让 cell class 容易识别
-const rowClassName = ({ row }: any) => (row?.isStageRow ? 'row-stage' : '')
+const rowClassName = ({ row }: any) => (row?.isStageRow ? 'task-stage-row' : '')
 // 阶段行的选择列单元格加 hide-selection 类，CSS 隐藏复选框
 const selectionCellClass = ({ row }: any) => (row?.isStageRow ? 'hide-selection' : '')
 const handleSelectionChange = (rows: any[]) => { checkedTasks.value = rows || [] }
@@ -1115,18 +1115,21 @@ onMounted(async () => {
 .mb-16px { margin-bottom: 16px; }
 .submit-confirm-content { }
 
-/* ====== 批量派发：阶段行彻底隐藏复选框 ====== */
-.row-stage .hide-selection .el-checkbox,
-.row-stage td.hide-selection .el-checkbox,
-.hide-selection .el-checkbox {
+</style>
+
+<!-- 非 scoped：阶段行隐藏复选框。scoped 样式加的 [data-v-hash] 属性后缀无法穿透 el-table 内部 tr/td/.el-checkbox，所以这里必须全局生效 -->
+<style>
+.task-stage-row .el-checkbox,
+.task-stage-row td.hide-selection .el-checkbox,
+td.hide-selection .el-checkbox {
   visibility: hidden !important;
 }
-/* 空阶段行（无子任务）高度塌陷导致复选框与文本错位——给行最小高度 */
-.row-stage .cell {
-  min-height: 38px;
-}
-.row-stage .el-table__cell {
+/* 空阶段行（无子任务）复选框与文本垂直错位——强制单元格 middle 对齐 */
+.task-stage-row .el-table__cell {
   vertical-align: middle !important;
+}
+.task-stage-row .cell {
+  min-height: 38px;
 }
 </style>
 
