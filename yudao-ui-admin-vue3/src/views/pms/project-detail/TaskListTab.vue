@@ -74,6 +74,9 @@
         <el-button v-if="checkPermi(['pms:task:update'])" size="small" type="primary" @click="openBatchDispatch">
           <Icon icon="ep:promotion" class="mr-4px" />批量派发
         </el-button>
+        <el-button v-if="checkPermi(['pms:task:delete'])" size="small" type="danger" :loading="batchDeleting" @click="handleBatchDelete">
+          <Icon icon="ep:delete" class="mr-4px" />删除
+        </el-button>
         <el-button size="small" text @click="clearCheck">
           <Icon icon="ep:close" class="mr-4px" />取消勾选
         </el-button>
@@ -110,7 +113,9 @@
       <el-table-column type="selection" width="45" :selectable="selectableRow" :cell-class-name="selectionCellClass" reserve-selection />
       <el-table-column label="任务名称" prop="taskName" min-width="250" show-overflow-tooltip>
         <template #default="{ row }">
-          <div style="display: flex; align-items: center; gap: 6px">
+          <div :style="row.isStageRow
+            ? 'display:flex;align-items:center;gap:6px;min-height:46px'
+            : 'display:flex;align-items:center;gap:6px'">
             <el-icon v-if="row.isStageRow" style="color: #2468F2"><Icon icon="ep:folder" /></el-icon>
             <el-icon v-else-if="row.isMilestone" style="color: #FF7D00"><Icon icon="ep:star-filled" /></el-icon>
             <!-- 子任务层级标识 -->
@@ -881,6 +886,41 @@ const clearCheck = () => {
   checkedTasks.value = []
 }
 
+// ---------- 批量删除 ----------
+const batchDeleting = ref(false)
+const handleBatchDelete = async () => {
+  const tasks = checkedTasks.value
+  if (!tasks.length) return
+  const names = tasks.map((t: any) => t.taskName).join('、')
+  try {
+    const displayNames = names.length > 80 ? names.slice(0, 80) + '...' : names
+    await ElMessageBox.confirm(
+      `确定删除以下 ${tasks.length} 个任务吗？（${displayNames}），此操作不可恢复！`,
+      '批量删除任务',
+      { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+  batchDeleting.value = true
+  let okCount = 0
+  const failList: string[] = []
+  for (const t of tasks) {
+    try {
+      await deleteTask(String(t.taskId))
+      okCount++
+    } catch (e: any) {
+      failList.push(`「${t.taskName}」：${e?.message || '删除失败'}`)
+    }
+  }
+  batchDeleting.value = false
+  if (failList.length === 0) {
+    ElMessage.success(`已删除 ${okCount} 个任务`)
+  } else {
+    ElMessage.warning(`已删除 ${okCount} 个，${failList.length} 个失败：${failList.join('；')}`)
+  }
+  clearCheck()
+  emit('refresh')
+}
+
 // ---------- 批量派发 ----------
 const batchDispatchVisible = ref(false)
 const batchDispatching = ref(false)
@@ -1117,30 +1157,12 @@ onMounted(async () => {
 
 </style>
 
-<!-- 非 scoped：阶段行复选框隐藏 + 行高/内容居中（scoped [data-v-hash] 无法穿透 el-table 子组件） -->
+<!-- 非 scoped：阶段行隐藏复选框（scoped [data-v-hash] 无法穿透 el-table 子组件） -->
 <style>
 .task-stage-row .el-checkbox,
 .task-stage-row td.hide-selection .el-checkbox,
 td.hide-selection .el-checkbox {
   visibility: hidden !important;
-}
-/* 阶段行行高与任务行对齐（任务行因 el-input-number 自然 48px，阶段行不锁高会被压到 30px） */
-tr.task-stage-row {
-  height: 48px !important;
-}
-.task-stage-row .el-table__cell {
-  vertical-align: middle !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-}
-/* 任务名称列的 flex div 撑满单元格高度，让 align-items:center 真居中 */
-.task-stage-row .el-table__cell > div {
-  height: 100%;
-}
-/* 任务名称列内 inline 子元素（span/icon/tag）显式中线对齐，避免 baseline 漂移 */
-.task-stage-row .el-table__cell > div > * {
-  vertical-align: middle !important;
-  line-height: 1 !important;
 }
 </style>
 
