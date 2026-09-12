@@ -97,6 +97,7 @@
       ref="taskTableRef"
       :data="filteredTreeData"
       row-key="rowKey"
+      :row-class-name="rowClassName"
       @selection-change="handleSelectionChange"
       :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
       :default-expand-all="expandAll"
@@ -106,7 +107,7 @@
       :current-row-key="selectedRowKey"
       @row-click="handleRowClick"
     >
-      <el-table-column type="selection" width="45" :selectable="selectableRow" reserve-selection />
+      <el-table-column type="selection" width="45" :selectable="selectableRow" :cell-class-name="selectionCellClass" reserve-selection />
       <el-table-column label="任务名称" prop="taskName" min-width="250" show-overflow-tooltip>
         <template #default="{ row }">
           <div style="display: flex; align-items: center; gap: 6px">
@@ -870,6 +871,10 @@ const getDelayDays = (task: TaskVO) => calcDelayDays(task.planEndDate, task.comp
 const taskTableRef = ref()
 const checkedTasks = ref<any[]>([])
 const selectableRow = (row: any) => !row.isStageRow
+// 阶段行加 row-stage 类，便于 CSS 样式（如 hover/缩进）+ 让 cell class 容易识别
+const rowClassName = ({ row }: any) => (row?.isStageRow ? 'row-stage' : '')
+// 阶段行的选择列单元格加 hide-selection 类，CSS 隐藏复选框
+const selectionCellClass = ({ row }: any) => (row?.isStageRow ? 'hide-selection' : '')
 const handleSelectionChange = (rows: any[]) => { checkedTasks.value = rows || [] }
 const clearCheck = () => {
   taskTableRef.value?.clearSelection()
@@ -1109,5 +1114,19 @@ onMounted(async () => {
 }
 .mb-16px { margin-bottom: 16px; }
 .submit-confirm-content { }
+
+/* ====== 批量派发：阶段行彻底隐藏复选框 ====== */
+.row-stage .hide-selection .el-checkbox,
+.row-stage td.hide-selection .el-checkbox,
+.hide-selection .el-checkbox {
+  visibility: hidden !important;
+}
+/* 空阶段行（无子任务）高度塌陷导致复选框与文本错位——给行最小高度 */
+.row-stage .cell {
+  min-height: 38px;
+}
+.row-stage .el-table__cell {
+  vertical-align: middle !important;
+}
 </style>
 
