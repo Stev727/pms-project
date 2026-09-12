@@ -233,7 +233,7 @@ export const exportTask = (projectId: string | number) => {
 // ==================== 批量派发 + 批量导入（2026-09-12 新增） ====================
 
 /** 批量派发任务（逐条独立成败，按负责人聚合钉钉通知；defaultOwnerId 补到未设负责人的任务） */
-export const batchDispatchTask = (data: { taskIds: number[]; defaultOwnerId?: number }) => {
+export const batchDispatchTask = (data: { taskIds: (number | string)[]; defaultOwnerId?: number }) => {
   return request.post({ url: '/pms/task/batch-dispatch', data })
 }
 

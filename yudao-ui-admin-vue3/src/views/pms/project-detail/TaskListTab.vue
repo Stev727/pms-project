@@ -1075,7 +1075,8 @@ const submitBatchDispatch = async () => {
   batchDispatching.value = true
   try {
     const res = await batchDispatchTask({
-      taskIds: batchDispatchable.value.map((r: any) => Number(r.taskId)),
+      // 雪花 ID 必须原样以 String 传参——Number() 会丢失 19 位精度导致后端查不到任务（"任务不存在"）
+      taskIds: batchDispatchable.value.map((r: any) => r.taskId),
       defaultOwnerId: batchDispatchOwnerId.value || undefined
     })
     batchDispatchResult.value = res
