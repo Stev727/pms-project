@@ -86,6 +86,7 @@ import cn.hutool.core.util.StrUtil;
  * ==================================================================
  */
 @Service
+@lombok.extern.slf4j.Slf4j
 public class TaskServiceImpl implements TaskService {
 
     /**
@@ -190,6 +191,10 @@ public class TaskServiceImpl implements TaskService {
     @Resource
     private ProjectStageService projectStageService;
 
+    /** 项目阶段 Mapper（批量导入：直接插入新阶段，绕过 createProjectStage 的 PM 校验——导入端点已做 TASK_CREATE 权限校验） */
+    @Resource
+    private cn.iocoder.yudao.module.pms.dal.mysql.projectstage.ProjectStageMapper projectStageMapper;
+
     /**
      * 项目级权限服务（#2 权限分级）。
      * 用 @Autowired(required = false) 而非 @Resource，是为了让 #1/#3 可以在 #2 尚未部署时独立启动，
@@ -238,7 +243,6 @@ public class TaskServiceImpl implements TaskService {
     @Transactional(rollbackFor = Exception.class)
     public void dispatchTask(Long taskId) {
         PmsTaskDO task = requireTask(taskId);
-        String oldStatus = task.getCompleteStatus();
         if (!("not_started".equals(task.getCompleteStatus()) || "rejected".equals(task.getCompleteStatus()))) {
             throw new ServiceException(ErrorCodeConstants.TASK_STATUS_INVALID);
         }
@@ -247,20 +251,7 @@ public class TaskServiceImpl implements TaskService {
         }
         PmsProjectDO project = projectMapper.selectById(task.getProjectId());
         String projectName = project != null && project.getProjectName() != null ? project.getProjectName() : "";
-        task.setCompleteStatus("pending_accept");
-        task.setIsDispatched(true);
-        task.setDispatchTime(LocalDateTime.now());
-        // #3：记录派发人，并把审核状态复位（重新派发时清掉上一轮的驳回态）
-        task.setAssignerId(SecurityFrameworkUtils.getLoginUserId());
-        task.setReviewStatus(PmsTaskReviewStatusEnum.NONE.getStatus());
-        task.setReviewComment("");
-        // #1/#3：审核人兜底，保证后续「提交审核」不会因无审核人而卡死
-        if (task.getReviewerId() == null) {
-            task.setReviewerId(resolveDefaultReviewer(loadParent(task), task.getProjectId()));
-        }
-        taskMapper.updateById(task);
-        writeTaskLog(taskId, "dispatch", "派发任务给用户[" + task.getMainOwnerId() + "]");
-        logStatusChange(taskId, oldStatus, "pending_accept");
+        doDispatchTransition(task);
         String title = "【PMS】任务派发通知";
         // 构建富文本通知内容（项目名、任务名、计划周期、协助人）
         StringBuilder sb = new StringBuilder();
@@ -1361,6 +1352,573 @@ public class TaskServiceImpl implements TaskService {
         Long reviewerId = securityFrameworkService.hasAnyRoles("super_admin") ? null : userId;
         return taskMapper.selectDeptReviewTasks(reviewerId, status);
     }
+    // ==================================================================
+    // 批量派发 + 批量导入任务（2026-09-12 新增）
+    // ==================================================================
+
+    /** 任务类型中文 → 字典值（批量导入用，含简称别名；未命中透传原值兼容历史数据） */
+    private static final Map<String, String> IMPORT_TASK_TYPE_ALIAS;
+    /** 优先级中文 → 字典值 */
+    private static final Map<String, String> IMPORT_PRIORITY_ALIAS;
+
+    static {
+        Map<String, String> t = new HashMap<>();
+        t.put("设计任务", "design"); t.put("设计", "design"); t.put("design", "design");
+        t.put("评审任务", "review"); t.put("评审", "review"); t.put("review", "review");
+        t.put("测试任务", "testing"); t.put("测试", "testing"); t.put("testing", "testing");
+        t.put("采购任务", "procurement"); t.put("采购", "procurement"); t.put("procurement", "procurement");
+        t.put("试制任务", "prototyping"); t.put("试制", "prototyping"); t.put("打样", "prototyping"); t.put("prototyping", "prototyping");
+        t.put("文档任务", "documentation"); t.put("文档", "documentation"); t.put("documentation", "documentation");
+        t.put("审批任务", "approval"); t.put("审批", "approval"); t.put("approval", "approval");
+        t.put("供应商协同", "supplier_synergy"); t.put("供方协同", "supplier_synergy"); t.put("supplier_synergy", "supplier_synergy");
+        t.put("其他", "other"); t.put("other", "other");
+        IMPORT_TASK_TYPE_ALIAS = Collections.unmodifiableMap(t);
+        Map<String, String> p = new HashMap<>();
+        p.put("紧急", "urgent"); p.put("urgent", "urgent");
+        p.put("高", "high"); p.put("high", "high");
+        p.put("中", "medium"); p.put("medium", "medium");
+        p.put("普通", "normal"); p.put("一般", "normal"); p.put("normal", "normal");
+        p.put("低", "low"); p.put("low", "low");
+        IMPORT_PRIORITY_ALIAS = Collections.unmodifiableMap(p);
+    }
+
+    @Override
+    public cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO batchDispatch(
+            List<Long> taskIds, Long defaultOwnerId) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            throw new ServiceException(ErrorCodeConstants.TASK_BATCH_EMPTY);
+        }
+        cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO resp =
+                new cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO();
+        List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO.Item> items = new ArrayList<>();
+        // 按负责人聚合待通知任务（同一负责人只发一条汇总通知 + 一条待办）
+        Map<Long, List<PmsTaskDO>> notifyGroups = new LinkedHashMap<>();
+        // taskId → 派发后任务（用于回填负责人姓名）
+        Map<Long, PmsTaskDO> touched = new LinkedHashMap<>();
+
+        for (Long taskId : taskIds) {
+            cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO.Item item =
+                    new cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO.Item();
+            item.setTaskId(taskId);
+            item.setNotified(false);
+            try {
+                PmsTaskDO task = taskMapper.selectById(taskId);
+                if (task == null) {
+                    throw new ServiceException(ErrorCodeConstants.TASK_NOT_EXISTS);
+                }
+                item.setTaskName(task.getTaskName());
+                touched.put(taskId, task);
+                String reason = validateDispatchable(task);
+                if (reason == null && task.getMainOwnerId() == null) {
+                    if (defaultOwnerId == null) {
+                        reason = "未设置负责人，无法派发";
+                    } else {
+                        // 统一设置负责人：补到未设置的任务上（已设的不覆盖）
+                        task.setMainOwnerId(defaultOwnerId);
+                        taskMapper.updateById(task);
+                        item.setOwnerPatched(true);
+                    }
+                }
+                if (reason != null) {
+                    item.setSuccess(false);
+                    item.setReason(reason);
+                    items.add(item);
+                    continue;
+                }
+                doDispatchTransition(task);
+                item.setSuccess(true);
+                notifyGroups.computeIfAbsent(task.getMainOwnerId(), k -> new ArrayList<>()).add(task);
+            } catch (Exception e) {
+                item.setSuccess(false);
+                item.setReason(e.getMessage() != null ? e.getMessage() : "派发失败");
+            }
+            items.add(item);
+        }
+
+        // 聚合通知：按负责人分组发一条汇总通知（含任务清单 + 计划周期）
+        Map<Long, String> ownerNameMap = new HashMap<>();
+        if (!notifyGroups.isEmpty()) {
+            for (AdminUserDO u : adminUserMapper.selectBatchIds(new HashSet<>(notifyGroups.keySet()))) {
+                ownerNameMap.put(u.getId(), u.getNickname());
+            }
+        }
+        for (Map.Entry<Long, List<PmsTaskDO>> entry : notifyGroups.entrySet()) {
+            List<PmsTaskDO> group = entry.getValue();
+            PmsTaskDO first = group.get(0);
+            PmsProjectDO project = projectMapper.selectById(first.getProjectId());
+            String projectName = project != null && project.getProjectName() != null ? project.getProjectName() : "";
+            StringBuilder sb = new StringBuilder();
+            sb.append("项目「").append(projectName).append("」向您派发 ").append(group.size()).append(" 项任务：");
+            int idx = 1;
+            for (PmsTaskDO t : group) {
+                sb.append("\n").append(idx++).append(". ").append(t.getTaskName());
+                if (t.getPlanStartDate() != null || t.getPlanEndDate() != null) {
+                    sb.append("（").append(t.getPlanStartDate() != null ? t.getPlanStartDate().toString() : "待定")
+                            .append(" ~ ").append(t.getPlanEndDate() != null ? t.getPlanEndDate().toString() : "待定").append("）");
+                }
+            }
+            sb.append("\n\n请及时查收并处理。");
+            String detailUrl = frontendBaseUrl + "/pms/project-detail/" + first.getProjectId();
+            boolean sent = dingTalkNotifyService.sendNotifyDirect("【PMS】任务批量派发通知", sb.toString(),
+                    List.of(entry.getKey()), "task_dispatched", "task", first.getTaskId(), detailUrl);
+            for (PmsTaskDO t : group) {
+                for (cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO.Item item : items) {
+                    if (item.getTaskId() != null && item.getTaskId().equals(t.getTaskId())
+                            && Boolean.TRUE.equals(item.getSuccess())) {
+                        item.setNotified(sent);
+                        if (!sent) {
+                            item.setReason("派发成功，但钉钉通知发送失败");
+                        }
+                    }
+                }
+            }
+        }
+        // 回填负责人姓名
+        for (cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO.Item item : items) {
+            PmsTaskDO t = touched.get(item.getTaskId());
+            if (t != null && t.getMainOwnerId() != null) {
+                item.setOwnerName(ownerNameMap.get(t.getMainOwnerId()));
+            }
+        }
+        resp.setItems(items);
+        resp.setSuccessCount((int) items.stream().filter(i -> Boolean.TRUE.equals(i.getSuccess())).count());
+        resp.setFailureCount(items.size() - resp.getSuccessCount());
+        log.info("[batchDispatch][共 {} 项，成功 {} 项，失败 {} 项]",
+                items.size(), resp.getSuccessCount(), resp.getFailureCount());
+        return resp;
+    }
+
+    /** 校验任务当前状态是否可派发；可派发返回 null，否则返回中文原因 */
+    private String validateDispatchable(PmsTaskDO task) {
+        String s = task.getCompleteStatus();
+        if (!"not_started".equals(s) && !"rejected".equals(s)) {
+            String label = COMPLETE_STATUS_LABEL.containsKey(s) ? COMPLETE_STATUS_LABEL.get(s) : s;
+            return "当前状态为「" + label + "」，仅未开始/被拒绝的任务可派发";
+        }
+        return null;
+    }
+
+    /** 派发状态流转（不含通知）：供单条 dispatchTask 与批量 batchDispatch 复用 */
+    private void doDispatchTransition(PmsTaskDO task) {
+        String oldStatus = task.getCompleteStatus();
+        task.setCompleteStatus("pending_accept");
+        task.setIsDispatched(true);
+        task.setDispatchTime(LocalDateTime.now());
+        // #3：记录派发人，并把审核状态复位（重新派发时清掉上一轮的驳回态）
+        task.setAssignerId(SecurityFrameworkUtils.getLoginUserId());
+        task.setReviewStatus(PmsTaskReviewStatusEnum.NONE.getStatus());
+        task.setReviewComment("");
+        // #1/#3：审核人兜底，保证后续「提交审核」不会因无审核人而卡死
+        if (task.getReviewerId() == null) {
+            task.setReviewerId(resolveDefaultReviewer(loadParent(task), task.getProjectId()));
+        }
+        taskMapper.updateById(task);
+        writeTaskLog(task.getTaskId(), "dispatch", "派发任务给用户[" + task.getMainOwnerId() + "]");
+        logStatusChange(task.getTaskId(), oldStatus, "pending_accept");
+    }
+
+    @Override
+    public List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> getTaskImportTemplateRows(Long projectId) {
+        List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows = new ArrayList<>();
+        List<PmsProjectStageDO> stages = projectStageMapper.selectList(
+                new LambdaQueryWrapperX<PmsProjectStageDO>().eq(PmsProjectStageDO::getProjectId, projectId));
+        stages.sort(java.util.Comparator.comparing(s -> s.getSortOrder() == null ? Integer.MAX_VALUE : s.getSortOrder()));
+        for (PmsProjectStageDO s : stages) {
+            cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel row =
+                    new cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel();
+            row.setStageNo(s.getSortOrder());
+            row.setStageName(s.getStageName());
+            // 纯阶段参考行：任务列留空；导入时已有阶段直接跳过（仅作名称参考），新阶段按序号创建
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    /** 批量导入解析后的任务行（内部结构） */
+    private static class ImportRow {
+        cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel row;
+        int excelRowNo;
+        String stageName;
+        boolean stageExists;
+        String taskName;
+        boolean isSub;
+        String parentName;
+        Long dbParentId;
+        ImportRow batchParent;
+        String taskType;
+        String priority;
+        Long ownerId;
+        String helperIds;
+        LocalDate planStart;
+        LocalDate planEnd;
+        boolean excluded;
+        Long createdTaskId;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO importTask(
+            Long projectId, List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows) {
+        if (rows == null || rows.isEmpty()) {
+            throw new ServiceException(ErrorCodeConstants.TEMPLATE_IMPORT_FILE_EMPTY);
+        }
+        PmsProjectDO project = projectMapper.selectById(projectId);
+        if (project == null || "standard_template".equals(project.getProjectType())) {
+            throw new ServiceException(ErrorCodeConstants.TASK_IMPORT_PROJECT_INVALID);
+        }
+
+        // ---------- 已有数据索引 ----------
+        List<PmsProjectStageDO> existingStages = projectStageMapper.selectList(
+                new LambdaQueryWrapperX<PmsProjectStageDO>().eq(PmsProjectStageDO::getProjectId, projectId));
+        Map<String, Long> stageIdByName = new HashMap<>();
+        for (PmsProjectStageDO s : existingStages) {
+            if (s.getStageName() != null) {
+                stageIdByName.put(s.getStageName().trim(), s.getStageId());
+            }
+        }
+        List<PmsTaskDO> existingTasks = taskMapper.selectList(
+                new LambdaQueryWrapperX<PmsTaskDO>().eq(PmsTaskDO::getProjectId, projectId));
+        // 阶段内全部任务名（同名查重）
+        Map<Long, Set<String>> namesByStage = new HashMap<>();
+        // 阶段内顶层任务名 → taskId（父任务解析）
+        Map<Long, Map<String, Long>> topIdByStage = new HashMap<>();
+        for (PmsTaskDO t : existingTasks) {
+            if (t.getStageId() == null || t.getTaskName() == null) {
+                continue;
+            }
+            String name = t.getTaskName().trim();
+            namesByStage.computeIfAbsent(t.getStageId(), k -> new HashSet<>()).add(name);
+            if (t.getParentTaskId() == null) {
+                topIdByStage.computeIfAbsent(t.getStageId(), k -> new HashMap<>()).put(name, t.getTaskId());
+            }
+        }
+
+        List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel> failureRows = new ArrayList<>();
+        // 新阶段声明：阶段名 → 序号（纯阶段行 或 任务行上的新阶段）
+        Map<String, Integer> newStageNo = new LinkedHashMap<>();
+        List<ImportRow> parsed = new ArrayList<>();
+
+        // ---------- 逐行校验 ----------
+        int excelRowNo = 1;
+        for (cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel row : rows) {
+            excelRowNo++;
+            List<String> errors = new ArrayList<>();
+            String prefix = "第" + excelRowNo + "行：";
+            String stageName = row.getStageName() == null ? "" : row.getStageName().trim();
+            boolean pureStageRow = row.getTaskNo() == null
+                    && (row.getTaskName() == null || row.getTaskName().trim().isEmpty());
+
+            if (stageName.isEmpty()) {
+                errors.add("阶段名称必填");
+            }
+            boolean stageExists = !stageName.isEmpty() && stageIdByName.containsKey(stageName);
+            if (!stageName.isEmpty() && !stageExists) {
+                if (row.getStageNo() == null || row.getStageNo() < 1) {
+                    errors.add("阶段「" + stageName + "」在项目中不存在，填写新阶段需提供阶段序号（将自动创建）");
+                } else {
+                    Integer prev = newStageNo.get(stageName);
+                    if (prev == null) {
+                        newStageNo.put(stageName, row.getStageNo());
+                    } else if (!prev.equals(row.getStageNo())) {
+                        errors.add("新阶段「" + stageName + "」的序号前后不一致（" + prev + " / " + row.getStageNo() + "）");
+                    }
+                }
+            }
+            if (pureStageRow) {
+                if (!errors.isEmpty()) {
+                    failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                            row, prefix + String.join("；", errors)));
+                }
+                // 纯阶段行：已有阶段=参考行跳过；新阶段=声明（上面已登记序号）
+                continue;
+            }
+
+            if (row.getTaskNo() == null || row.getTaskNo() < 1) {
+                errors.add("任务序号必填且为正整数");
+            }
+            String taskName = row.getTaskName() == null ? "" : row.getTaskName().trim();
+            if (taskName.isEmpty()) {
+                errors.add("任务名称必填");
+            }
+            String taskType = "other";
+            if (row.getTaskType() != null && !row.getTaskType().trim().isEmpty()) {
+                String mapped = IMPORT_TASK_TYPE_ALIAS.get(row.getTaskType().trim());
+                // 字典未识别：透传原值（兼容历史数据如 standard）
+                taskType = mapped != null ? mapped : row.getTaskType().trim();
+            }
+            String priority = null;
+            if (row.getPriority() != null && !row.getPriority().trim().isEmpty()) {
+                priority = IMPORT_PRIORITY_ALIAS.get(row.getPriority().trim());
+                if (priority == null) {
+                    errors.add("优先级「" + row.getPriority().trim() + "」无法识别（可选：紧急/高/中/普通/低）");
+                }
+            }
+            Long ownerId = null;
+            if (row.getOwnerName() != null && !row.getOwnerName().trim().isEmpty()) {
+                ownerId = resolveImportUser(row.getOwnerName().trim(), errors, "负责人");
+            }
+            String helperIds = null;
+            if (row.getHelperNames() != null && !row.getHelperNames().trim().isEmpty()) {
+                StringBuilder hs = new StringBuilder();
+                for (String h : row.getHelperNames().split("[,，、]")) {
+                    String ht = h.trim();
+                    if (ht.isEmpty()) {
+                        continue;
+                    }
+                    Long hid = resolveImportUser(ht, errors, "协助人「" + ht + "」");
+                    if (hid != null) {
+                        if (hs.length() > 0) {
+                            hs.append(",");
+                        }
+                        hs.append(hid);
+                    }
+                }
+                helperIds = hs.length() > 0 ? hs.toString() : null;
+            }
+            LocalDate planStart = parseImportDate(row.getPlanStartDate(), errors, "计划开始日期");
+            LocalDate planEnd = parseImportDate(row.getPlanEndDate(), errors, "计划结束日期");
+            if ((planStart != null) != (planEnd != null)) {
+                errors.add("计划开始/结束日期须同时填写");
+            }
+            if (planStart != null && planEnd != null && planEnd.isBefore(planStart)) {
+                errors.add("计划结束日期不能早于计划开始日期");
+            }
+            String parentName = row.getParentTaskName() == null ? "" : row.getParentTaskName().trim();
+
+            if (!errors.isEmpty()) {
+                failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                        row, prefix + String.join("；", errors)));
+                continue;
+            }
+            ImportRow pr = new ImportRow();
+            pr.row = row;
+            pr.excelRowNo = excelRowNo;
+            pr.stageName = stageName;
+            pr.stageExists = stageExists;
+            pr.taskName = taskName;
+            pr.parentName = parentName;
+            pr.isSub = !parentName.isEmpty();
+            pr.taskType = taskType;
+            pr.priority = priority;
+            pr.ownerId = ownerId;
+            pr.helperIds = helperIds;
+            pr.planStart = planStart;
+            pr.planEnd = planEnd;
+            parsed.add(pr);
+        }
+
+        // ---------- 结构性校验（父任务解析与行序无关，先全量收集再解析） ----------
+        // 批次内顶层任务：阶段名 → 任务名 → 行
+        Map<String, Map<String, ImportRow>> batchTop = new HashMap<>();
+        for (ImportRow pr : parsed) {
+            if (pr.isSub) {
+                continue;
+            }
+            Map<String, ImportRow> tops = batchTop.computeIfAbsent(pr.stageName, k -> new HashMap<>());
+            if (tops.containsKey(pr.taskName)) {
+                failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                        pr.row, "第" + pr.excelRowNo + "行：阶段「" + pr.stageName + "」内任务名称「" + pr.taskName + "」重复"));
+                pr.excluded = true;
+            } else {
+                tops.put(pr.taskName, pr);
+            }
+        }
+        // 批次内任务名唯一（顶层 + 子任务同池查重）+ 任务序号阶段内唯一 + 与已有任务同名查重
+        Map<String, Set<String>> batchNamesByStage = new HashMap<>();
+        Map<String, Set<Integer>> batchNoByStage = new HashMap<>();
+        for (ImportRow pr : parsed) {
+            if (pr.excluded) {
+                continue;
+            }
+            String prefix = "第" + pr.excelRowNo + "行：";
+            if (!batchNamesByStage.computeIfAbsent(pr.stageName, k -> new HashSet<>()).add(pr.taskName)) {
+                failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                        pr.row, prefix + "阶段「" + pr.stageName + "」内任务名称「" + pr.taskName + "」重复"));
+                pr.excluded = true;
+                continue;
+            }
+            if (!batchNoByStage.computeIfAbsent(pr.stageName, k -> new HashSet<>()).add(pr.row.getTaskNo())) {
+                failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                        pr.row, prefix + "阶段「" + pr.stageName + "」内任务序号 " + pr.row.getTaskNo() + " 重复"));
+                pr.excluded = true;
+                continue;
+            }
+            if (pr.stageExists) {
+                Set<String> names = namesByStage.get(stageIdByName.get(pr.stageName));
+                if (names != null && names.contains(pr.taskName)) {
+                    failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                            pr.row, prefix + "阶段「" + pr.stageName + "」已存在同名任务「" + pr.taskName
+                                    + "」（追加式导入不覆盖已有任务）"));
+                    pr.excluded = true;
+                }
+            }
+        }
+        // 父任务解析（顺序无关）：父任务须为该阶段已有顶层任务或本批次顶层任务，最多两级
+        // 批次内全部行索引（阶段名 → 任务名 → 行）：用于识别「父任务本身是子任务」的精确报错
+        Map<String, Map<String, ImportRow>> batchAll = new HashMap<>();
+        for (ImportRow pr : parsed) {
+            batchAll.computeIfAbsent(pr.stageName, k -> new HashMap<>()).put(pr.taskName, pr);
+        }
+        for (ImportRow pr : parsed) {
+            if (pr.excluded || !pr.isSub) {
+                continue;
+            }
+            String prefix = "第" + pr.excelRowNo + "行：";
+            if (pr.parentName.equals(pr.taskName)) {
+                failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                        pr.row, prefix + "父任务名称不能与任务名称相同"));
+                pr.excluded = true;
+                continue;
+            }
+            Long dbParent = null;
+            ImportRow batchParent = null;
+            if (pr.stageExists) {
+                Map<String, Long> tops = topIdByStage.get(stageIdByName.get(pr.stageName));
+                dbParent = tops != null ? tops.get(pr.parentName) : null;
+            }
+            if (dbParent == null) {
+                // 在本批次全部行中查找（顶层 + 子任务都查，便于精确区分「是子任务」与「不存在」）
+                Map<String, ImportRow> all = batchAll.get(pr.stageName);
+                ImportRow cand = all != null ? all.get(pr.parentName) : null;
+                if (cand != null && cand.excluded) {
+                    cand = null; // 被前序校验排除的行视为不存在
+                }
+                if (cand != null && cand.isSub) {
+                    // 父任务本身是子任务 → 超过两级，明确报错
+                    failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                            pr.row, prefix + "父任务「" + pr.parentName + "」本身是子任务，最多支持两级"));
+                    pr.excluded = true;
+                    continue;
+                }
+                batchParent = cand;
+            }
+            if (dbParent == null && batchParent == null) {
+                failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                        pr.row, prefix + "父任务「" + pr.parentName + "」不存在于阶段「" + pr.stageName
+                                + "」（需为该阶段已有顶层任务或本批次顶层任务）"));
+                pr.excluded = true;
+                continue;
+            }
+            pr.dbParentId = dbParent;
+            pr.batchParent = batchParent;
+        }
+
+        // 任一行失败 → 整批不落库
+        if (!failureRows.isEmpty()) {
+            log.warn("[importTask][projectId={} 共 {} 行校验失败，整批不落库]", projectId, failureRows.size());
+            return cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO.builder()
+                    .success(false)
+                    .stageCount(0)
+                    .taskCount(0)
+                    .failureRows(failureRows)
+                    .build();
+        }
+
+        // ---------- 落库（同一事务） ----------
+        int stageCount = 0;
+        Map<String, Long> finalStageId = new HashMap<>(stageIdByName);
+        List<Map.Entry<String, Integer>> newStages = new ArrayList<>(newStageNo.entrySet());
+        newStages.sort(Map.Entry.comparingByValue());
+        for (Map.Entry<String, Integer> e : newStages) {
+            PmsProjectStageDO s = new PmsProjectStageDO();
+            s.setProjectId(projectId);
+            s.setStageName(e.getKey());
+            s.setSortOrder(e.getValue());
+            s.setStatus("not_started");
+            projectStageMapper.insert(s);
+            finalStageId.put(e.getKey(), s.getStageId());
+            stageCount++;
+        }
+
+        int taskCount = 0;
+        // 顶层任务先建（父任务先于子任务落库；createTask 自动算 level/审核人兜底/进度汇总）
+        for (ImportRow pr : parsed) {
+            if (pr.excluded || pr.isSub) {
+                continue;
+            }
+            PmsTaskDO entity = buildImportTask(projectId, finalStageId.get(pr.stageName), pr);
+            createTask(entity);
+            pr.createdTaskId = entity.getTaskId();
+            taskCount++;
+        }
+        // 子任务后建（父任务可能是本批次新建的顶层任务）
+        for (ImportRow pr : parsed) {
+            if (pr.excluded || !pr.isSub) {
+                continue;
+            }
+            Long parentId = pr.dbParentId != null ? pr.dbParentId
+                    : (pr.batchParent != null ? pr.batchParent.createdTaskId : null);
+            if (parentId == null) {
+                // 理论不可达（校验阶段已保证），兜底抛错回滚
+                throw new ServiceException(ErrorCodeConstants.TASK_PARENT_NOT_EXISTS);
+            }
+            PmsTaskDO entity = buildImportTask(projectId, finalStageId.get(pr.stageName), pr);
+            entity.setParentTaskId(parentId);
+            createTask(entity);
+            pr.createdTaskId = entity.getTaskId();
+            taskCount++;
+        }
+        log.info("[importTask][projectId={} 追加导入完成：新阶段 {} 个 / 新任务 {} 条]",
+                projectId, stageCount, taskCount);
+        return cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO.builder()
+                .success(true)
+                .stageCount(stageCount)
+                .taskCount(taskCount)
+                .build();
+    }
+
+    /** 组装导入任务的 DO（completeStatus 固定为未开始） */
+    private PmsTaskDO buildImportTask(Long projectId, Long stageId, ImportRow pr) {
+        PmsTaskDO entity = new PmsTaskDO();
+        entity.setProjectId(projectId);
+        entity.setStageId(stageId);
+        entity.setTaskName(pr.taskName);
+        entity.setTaskType(pr.taskType);
+        if (pr.priority != null) {
+            entity.setPriority(pr.priority);
+        }
+        entity.setMainOwnerId(pr.ownerId);
+        entity.setHelperIds(pr.helperIds);
+        entity.setPlanStartDate(pr.planStart);
+        entity.setPlanEndDate(pr.planEnd);
+        entity.setCompleteStatus("not_started");
+        entity.setSortOrder(pr.row.getTaskNo());
+        if (pr.row.getRemark() != null && !pr.row.getRemark().trim().isEmpty()) {
+            entity.setDescription(pr.row.getRemark().trim());
+        }
+        return entity;
+    }
+
+    /** 解析导入的用户（工号优先，其次姓名精确匹配）；命中唯一返回ID，否则写入错误信息返回 null */
+    private Long resolveImportUser(String key, List<String> errors, String label) {
+        List<Long> ids = jdbcTemplate.queryForList(
+                "SELECT id FROM system_users WHERE deleted = 0 AND status = 0 AND tenant_id = 1 "
+                        + "AND (employee_no = ? OR nickname = ?)",
+                Long.class, key, key);
+        if (ids.isEmpty()) {
+            errors.add(label + "「" + key + "」未找到（需工号或姓名精确匹配）");
+            return null;
+        }
+        if (ids.size() > 1) {
+            errors.add(label + "「" + key + "」匹配到多个用户，请改用工号");
+            return null;
+        }
+        return ids.get(0);
+    }
+
+    /** 解析导入日期（yyyy-MM-dd）；空返回 null，格式非法写入错误信息 */
+    private LocalDate parseImportDate(String value, List<String> errors, String label) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim(), DATE_FMT);
+        } catch (Exception e) {
+            errors.add(label + "格式须为 yyyy-MM-dd（当前值「" + value.trim() + "」）");
+            return null;
+        }
+    }
+
     // ==================================================================
     // 周报看板
     // ==================================================================

@@ -229,3 +229,32 @@ export const getWeeklyReport = (params: { date?: string; userId?: number | strin
 export const exportTask = (projectId: string | number) => {
   return request.download({ url: '/pms/task/export', params: { projectId } })
 }
+
+// ==================== 批量派发 + 批量导入（2026-09-12 新增） ====================
+
+/** 批量派发任务（逐条独立成败，按负责人聚合钉钉通知；defaultOwnerId 补到未设负责人的任务） */
+export const batchDispatchTask = (data: { taskIds: number[]; defaultOwnerId?: number }) => {
+  return request.post({ url: '/pms/task/batch-dispatch', data })
+}
+
+/** 下载任务批量导入模板（预填当前项目已有阶段参考行） */
+export const getTaskImportTemplate = (projectId: string | number) => {
+  return request.download({
+    url: '/pms/task/get-task-import-template',
+    params: { projectId }
+  })
+}
+
+/** Excel 批量导入任务（追加式：只新增不覆盖）
+ *  返回原始 blob 响应：content-type 为 json 即成功，否则为错误行 Excel */
+export const importTaskExcel = (projectId: string | number, file: File) => {
+  const data = new FormData()
+  data.append('file', file)
+  return request.postOriginal({
+    url: '/pms/task/import-task',
+    params: { projectId },
+    data,
+    headersType: 'multipart/form-data',
+    responseType: 'blob'
+  })
+}

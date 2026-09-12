@@ -98,6 +98,61 @@ public class TaskController {
         return success(true);
     }
 
+    @PostMapping("/batch-dispatch")
+    @Operation(summary = "批量派发任务（逐条独立成败，按负责人聚合钉钉通知）")
+    @PreAuthorize("@ss.hasPermission('pms:task:update')")
+    public CommonResult<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO> batchDispatch(
+            @RequestBody cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchReqVO reqVO) {
+        // 逐条项目级权限校验（与单条派发一致，任一无权限即 403）
+        for (Long taskId : reqVO.getTaskIds()) {
+            requireProjectPerm(getTaskProjectId(taskId), PmsPermKeyEnum.TASK_ASSIGN.getKey());
+        }
+        return success(taskService.batchDispatch(reqVO.getTaskIds(), reqVO.getDefaultOwnerId()));
+    }
+
+    @GetMapping("/get-task-import-template")
+    @Operation(summary = "下载任务批量导入模板（预填当前项目已有阶段参考行）")
+    @Parameter(name = "projectId", description = "项目ID", required = true)
+    @PreAuthorize("@ss.hasPermission('pms:task:query')")
+    public void getTaskImportTemplate(HttpServletResponse response,
+                                      @RequestParam("projectId") Long projectId) throws IOException {
+        List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows =
+                taskService.getTaskImportTemplateRows(projectId);
+        ExcelUtils.write(response, "任务批量导入模板.xlsx", "任务",
+                cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel.class, rows);
+    }
+
+    @PostMapping("/import-task")
+    @Operation(summary = "Excel 批量导入任务（追加式：只新增不覆盖）")
+    @io.swagger.v3.oas.annotations.Parameters({
+            @Parameter(name = "file", description = "Excel 文件", required = true),
+            @Parameter(name = "projectId", description = "项目ID", required = true)
+    })
+    @PreAuthorize("@ss.hasPermission('pms:task:create')")
+    public void importTask(@RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+                           @RequestParam("projectId") Long projectId,
+                           HttpServletResponse response) throws IOException {
+        // 项目级任务创建权限（与新建任务一致）
+        requireProjectPerm(projectId, PmsPermKeyEnum.TASK_CREATE.getKey());
+        // 1. 解析 Excel
+        List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows =
+                ExcelUtils.read(file, cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel.class);
+        // 2. 整批校验 + 追加导入（事务内有错不落库）
+        cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO result =
+                taskService.importTask(projectId, rows);
+        if (result.getSuccess()) {
+            // 3a. 校验通过 → 返回 JSON 成功响应
+            response.setContentType("application/json;charset=UTF-8");
+            CommonResult<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO> cr =
+                    CommonResult.success(result);
+            response.getWriter().write(cn.hutool.json.JSONUtil.toJsonStr(cr));
+        } else {
+            // 3b. 校验失败 → 输出标红错误 Excel 供用户下载修正后重试
+            ExcelUtils.write(response, "任务批量导入错误明细.xlsx", "错误行",
+                    cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.class, result.getFailureRows());
+        }
+    }
+
     @PostMapping("/submit-completion")
     @Operation(summary = "提交任务完成（进入待审核）")
     @Parameter(name = "taskId", description = "任务编号", required = true)

@@ -26,6 +26,9 @@
         </el-select>
       </div>
       <div>
+        <el-button size="small" type="primary" plain @click="openImportDialog" v-if="checkPermi(['pms:task:create']) && canProject(PERM.TASK_CREATE)">
+          <Icon icon="ep:upload" class="mr-4px" />批量导入
+        </el-button>
         <el-button size="small" :loading="exporting" @click="handleExport" v-if="checkPermi(['pms:task:query'])">
           <Icon icon="ep:download" class="mr-4px" />导出
         </el-button>
@@ -37,7 +40,7 @@
     </div>
 
     <!-- 下层工具栏：选中任务后的操作按钮（独立 sticky 行，滚动时始终可见） -->
-    <div v-if="selectedTask && !selectedTask.isStageRow" class="task-toolbar task-toolbar-action"
+    <div v-if="selectedTask && !selectedTask.isStageRow && checkedTasks.length === 0" class="task-toolbar task-toolbar-action"
          :style="{ left: taskActionBarLeft }">
       <div class="task-op-actions">
         <span class="task-op-label" :title="selectedTask.taskName">
@@ -62,6 +65,20 @@
         </el-button>
       </div>
     </div>
+    <div v-else-if="checkedTasks.length > 0" class="task-toolbar task-toolbar-action"
+         :style="{ left: taskActionBarLeft }">
+      <div class="task-op-actions">
+        <span class="task-op-label">
+          <Icon icon="ep:finished" class="mr-4px" />已勾选 {{ checkedTasks.length }} 项
+        </span>
+        <el-button v-if="checkPermi(['pms:task:update'])" size="small" type="primary" @click="openBatchDispatch">
+          <Icon icon="ep:promotion" class="mr-4px" />批量派发
+        </el-button>
+        <el-button size="small" text @click="clearCheck">
+          <Icon icon="ep:close" class="mr-4px" />取消勾选
+        </el-button>
+      </div>
+    </div>
     <div v-else class="task-toolbar task-toolbar-hint">
       <span class="task-op-hint">
         <Icon icon="ep:info-filled" class="mr-4px" />点击任务行后可在此操作（开始/派发/提交/审核/进度填报/变更 等）
@@ -77,8 +94,10 @@
 
     <!-- 树形表格（阶段 → 父任务 → 子任务，三级） -->
     <el-table
+      ref="taskTableRef"
       :data="filteredTreeData"
       row-key="rowKey"
+      @selection-change="handleSelectionChange"
       :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
       :default-expand-all="expandAll"
       :expand-row-keys="expandedRowKeys"
@@ -87,6 +106,7 @@
       :current-row-key="selectedRowKey"
       @row-click="handleRowClick"
     >
+      <el-table-column type="selection" width="45" :selectable="selectableRow" reserve-selection />
       <el-table-column label="任务名称" prop="taskName" min-width="250" show-overflow-tooltip>
         <template #default="{ row }">
           <div style="display: flex; align-items: center; gap: 6px">
@@ -237,12 +257,90 @@
       </template>
     </el-dialog>
   </div>
+    <!-- 批量派发弹窗 -->
+    <el-dialog v-model="batchDispatchVisible" title="批量派发任务" width="720px" :close-on-click-modal="false">
+      <template v-if="!batchDispatchResult">
+        <el-alert type="info" :closable="false" show-icon
+          :title="`共勾选 ${batchPreviewList.length} 项，可派发 ${batchDispatchable.length} 项` + (batchBlocked.length ? `，不可派发 ${batchBlocked.length} 项（提交时自动跳过）` : '')" />
+        <div v-if="batchNeedOwner.length > 0" style="display: flex; align-items: center; gap: 8px; margin: 12px 0 4px">
+          <span style="font-size: 13px; color: #4e5969; white-space: nowrap">统一设置负责人</span>
+          <el-select v-model="batchDispatchOwnerId" filterable clearable placeholder="选择负责人（补到未设负责人的任务，已设的不覆盖）" style="width: 300px">
+            <el-option v-for="u in userSelectList" :key="u.id" :label="u.nickname" :value="u.id" />
+          </el-select>
+          <span style="font-size: 12px; color: #86909c">{{ batchNeedOwner.length }} 项未设负责人</span>
+        </div>
+        <el-table :data="batchPreviewList" size="small" max-height="360" border>
+          <el-table-column label="任务名称" prop="taskName" min-width="200" show-overflow-tooltip />
+          <el-table-column label="负责人" width="110">
+            <template #default="{ row }">{{ row.ownerName || '未设置' }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">{{ getTaskStatusLabel(row.completeStatus) }}</template>
+          </el-table-column>
+          <el-table-column label="可派发" width="130">
+            <template #default="{ row }">
+              <el-tag v-if="row.dispatchable" type="success" size="small" effect="light">可派发</el-tag>
+              <el-tooltip v-else :content="row.blockReason" placement="top">
+                <el-tag type="danger" size="small" effect="light">不可派发</el-tag>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template v-else>
+        <el-alert :type="batchDispatchResult.failureCount ? 'warning' : 'success'" :closable="false" show-icon
+          :title="`派发成功 ${batchDispatchResult.successCount} 项，失败 ${batchDispatchResult.failureCount} 项`" />
+        <el-table :data="(batchDispatchResult.items || []).filter((i: any) => !i.success || i.reason)" size="small" max-height="360" border style="margin-top: 10px">
+          <el-table-column label="任务" prop="taskName" min-width="200" show-overflow-tooltip />
+          <el-table-column label="负责人" prop="ownerName" width="110" />
+          <el-table-column label="结果" min-width="220">
+            <template #default="{ row }">
+              <span v-if="row.success" style="color: #00b42a">已派发{{ row.notified === false ? '（通知发送失败，请手动告知）' : '' }}</span>
+              <span v-else style="color: #f53f3f">{{ row.reason }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
+      <template #footer>
+        <template v-if="!batchDispatchResult">
+          <el-button @click="batchDispatchVisible = false">取消</el-button>
+          <el-button type="primary" :disabled="batchDispatchable.length === 0" :loading="batchDispatching" @click="submitBatchDispatch">
+            派发 {{ batchDispatchable.length }} 项
+          </el-button>
+        </template>
+        <template v-else>
+          <el-button type="primary" @click="closeBatchDispatch">完成</el-button>
+        </template>
+      </template>
+    </el-dialog>
+
+    <!-- 批量导入弹窗 -->
+    <el-dialog v-model="importVisible" title="批量导入任务" width="560px" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" show-icon title="追加式导入：只新增任务，不修改已有任务和进度"
+        description="已有阶段填阶段名称即可；新阶段填名称+序号将自动创建；父任务名称留空为顶层任务（最多两级）；负责人填工号或姓名精确匹配。任一行校验失败则整批不导入，可下载标红错误明细修正后重试。" />
+      <div style="margin: 14px 0 4px">
+        <el-button size="small" :loading="templateDownloading" @click="downloadImportTemplate">
+          <Icon icon="ep:download" class="mr-4px" />下载导入模板（预填当前阶段）
+        </el-button>
+      </div>
+      <el-upload drag :auto-upload="false" :limit="1" accept=".xlsx,.xls"
+        :on-change="onImportFileChange" :on-remove="() => (importFile = null)">
+        <div style="padding: 18px 0">
+          <Icon icon="ep:upload-filled" style="font-size: 38px; color: #c0c4cc" />
+          <div style="font-size: 13px; color: #606266; margin-top: 4px">拖拽或点击选择 Excel 文件（.xlsx）</div>
+        </div>
+      </el-upload>
+      <template #footer>
+        <el-button @click="importVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!importFile" :loading="importing" @click="submitImport">开始导入</el-button>
+      </template>
+    </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress, exportTask } from '@/api/pms/task'
+import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress, exportTask, batchDispatchTask, getTaskImportTemplate, importTaskExcel } from '@/api/pms/task'
 import download from '@/utils/download'
 import { getDocumentList } from '@/api/pms/document'
 import { StageVO, createStage, updateStage, deleteStage } from '@/api/pms/stage'
@@ -412,7 +510,7 @@ const emit = defineEmits<{
   'start-change': [task: TaskVO]
 }>()
 
-const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+const { getUserName, ensureLoaded: ensureUsersLoaded, userList } = useUserNames()
 const searchKeyword = ref('')
 const filterStage = ref<string | undefined>()
 const filterStatus = ref('')
@@ -767,6 +865,118 @@ const isDelayed = (task: TaskVO) => calcDelayDays(task.planEndDate, task.complet
 const getDelayDays = (task: TaskVO) => calcDelayDays(task.planEndDate, task.completeStatus)
 
 // ==================== 导出任务（新增） ====================
+// ==================== 批量勾选 + 批量派发 + 批量导入（2026-09-12 新增） ====================
+
+const taskTableRef = ref()
+const checkedTasks = ref<any[]>([])
+const selectableRow = (row: any) => !row.isStageRow
+const handleSelectionChange = (rows: any[]) => { checkedTasks.value = rows || [] }
+const clearCheck = () => {
+  taskTableRef.value?.clearSelection()
+  checkedTasks.value = []
+}
+
+// ---------- 批量派发 ----------
+const batchDispatchVisible = ref(false)
+const batchDispatching = ref(false)
+const batchDispatchOwnerId = ref<number | undefined>(undefined)
+const batchDispatchResult = ref<any>(null)
+
+const canDispatchStatus = (t: any) => ['not_started', 'rejected'].includes(t.completeStatus)
+const batchPreviewList = computed(() => checkedTasks.value.map((t: any) => {
+  const statusOk = canDispatchStatus(t)
+  let blockReason = ''
+  if (!statusOk) {
+    blockReason = `状态为「${getTaskStatusLabel(t.completeStatus)}」，仅未开始/被拒绝的任务可派发`
+  } else if (!t.mainOwnerId) {
+    blockReason = '未设置负责人（可在下方统一设置负责人后派发）'
+  }
+  return {
+    ...t,
+    ownerName: t.mainOwnerId ? getUserName(t.mainOwnerId) : '',
+    dispatchable: statusOk,
+    blockReason
+  }
+}))
+const batchDispatchable = computed(() => batchPreviewList.value.filter((r: any) => r.dispatchable))
+const batchBlocked = computed(() => batchPreviewList.value.filter((r: any) => !r.dispatchable))
+const batchNeedOwner = computed(() => batchDispatchable.value.filter((r: any) => !r.mainOwnerId))
+const userSelectList = computed(() => ((userList.value as any[]) || []).map((u: any) => ({ id: u.id, nickname: u.nickname })))
+
+const openBatchDispatch = () => {
+  batchDispatchResult.value = null
+  batchDispatchOwnerId.value = undefined
+  ensureUsersLoaded()
+  batchDispatchVisible.value = true
+}
+const submitBatchDispatch = async () => {
+  batchDispatching.value = true
+  try {
+    const res = await batchDispatchTask({
+      taskIds: batchDispatchable.value.map((r: any) => Number(r.taskId)),
+      defaultOwnerId: batchDispatchOwnerId.value || undefined
+    })
+    batchDispatchResult.value = res
+    emit('refresh')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '批量派发失败')
+  } finally {
+    batchDispatching.value = false
+  }
+}
+const closeBatchDispatch = () => {
+  batchDispatchVisible.value = false
+  clearCheck()
+}
+
+// ---------- 批量导入 ----------
+const importVisible = ref(false)
+const importing = ref(false)
+const templateDownloading = ref(false)
+const importFile = ref<File | null>(null)
+
+const openImportDialog = () => {
+  importFile.value = null
+  importVisible.value = true
+}
+const onImportFileChange = (file: any) => {
+  importFile.value = file.raw || null
+}
+const downloadImportTemplate = async () => {
+  templateDownloading.value = true
+  try {
+    const res: any = await getTaskImportTemplate(props.projectId)
+    const blob = res && res.data ? res.data : res
+    download.excel(blob as Blob, '任务批量导入模板.xlsx')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '模板下载失败')
+  } finally {
+    templateDownloading.value = false
+  }
+}
+const submitImport = async () => {
+  if (!importFile.value) return
+  importing.value = true
+  try {
+    const response: any = await importTaskExcel(props.projectId, importFile.value)
+    const blob = response.data as Blob
+    if ((response.headers?.['content-type'] || '').includes('application/json')) {
+      const result = JSON.parse(await blob.text())
+      if (result.code !== 0) throw new Error(result.msg || '导入失败')
+      ElMessage.success(`导入成功：新增 ${result.data?.stageCount || 0} 个阶段 / ${result.data?.taskCount || 0} 条任务`)
+      importVisible.value = false
+      emit('refresh')
+    } else {
+      download.excel(blob, '任务批量导入错误明细.xlsx')
+      ElMessage.warning('导入数据校验未通过，已下载错误明细，修正后可重新上传')
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导入失败')
+  } finally {
+    importing.value = false
+  }
+}
+
 async function handleExport() {
   if (!props.projectId) return
   exporting.value = true

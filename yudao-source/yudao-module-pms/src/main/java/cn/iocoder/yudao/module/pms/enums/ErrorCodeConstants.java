@@ -67,5 +67,8 @@ public interface ErrorCodeConstants {
     ErrorCode TEMPLATE_IMPORT_VALIDATE_FAILED = new ErrorCode(1_040_000_038, "导入数据校验未通过，请下载错误文件修正后重试");
     ErrorCode TEMPLATE_PROJECT_NOT_TEMPLATE = new ErrorCode(1_040_000_039, "目标项目不是标准模板，禁止导入");
 
+    // ========== 任务批量派发/批量导入 040-041 ==========
+    ErrorCode TASK_BATCH_EMPTY = new ErrorCode(1_040_000_040, "批量操作的任务列表为空");
+    ErrorCode TASK_IMPORT_PROJECT_INVALID = new ErrorCode(1_040_000_041, "目标项目不存在或为模板项目（模板请用模板导入功能）");
 }
 

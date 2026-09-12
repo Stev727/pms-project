@@ -196,5 +196,25 @@ public interface TaskService {
      */
     List<TaskExportExcel> exportTaskByProject(Long projectId);
 
+    // ==================== 批量派发 + 批量导入任务（2026-09-12 新增） ====================
+
+    /**
+     * 批量派发任务：逐条独立成败（不整批回滚），按负责人聚合发送一条汇总钉钉通知+待办。
+     *
+     * @param taskIds        任务ID列表
+     * @param defaultOwnerId 统一设置的负责人ID（补到未设置负责人的任务上，已设的不覆盖）；可空
+     */
+    cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDispatchRespVO batchDispatch(List<Long> taskIds, Long defaultOwnerId);
+
+    /**
+     * 任务批量导入模板行（预填当前项目已有阶段作为参考行；纯阶段行导入时跳过）。
+     */
+    List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> getTaskImportTemplateRows(Long projectId);
+
+    /**
+     * Excel 批量导入任务（追加式：只新增任务，不修改已有任务和进度；支持两级子任务与新阶段自动创建）。
+     * 任一行校验失败 → 整批不落库，返回失败行明细供生成错误 Excel。
+     */
+    cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO importTask(Long projectId, List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows);
 }
 
