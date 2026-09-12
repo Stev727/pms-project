@@ -1117,19 +1117,30 @@ onMounted(async () => {
 
 </style>
 
-<!-- 非 scoped：阶段行隐藏复选框。scoped 样式加的 [data-v-hash] 属性后缀无法穿透 el-table 内部 tr/td/.el-checkbox，所以这里必须全局生效 -->
+<!-- 非 scoped：阶段行复选框隐藏 + 行高/内容居中（scoped [data-v-hash] 无法穿透 el-table 子组件） -->
 <style>
 .task-stage-row .el-checkbox,
 .task-stage-row td.hide-selection .el-checkbox,
 td.hide-selection .el-checkbox {
   visibility: hidden !important;
 }
-/* 空阶段行（无子任务）复选框与文本垂直错位——强制单元格 middle 对齐 */
+/* 阶段行行高与任务行对齐（任务行因 el-input-number 自然 48px，阶段行不锁高会被压到 30px） */
+tr.task-stage-row {
+  height: 48px !important;
+}
 .task-stage-row .el-table__cell {
   vertical-align: middle !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
 }
-.task-stage-row .cell {
-  min-height: 38px;
+/* 任务名称列的 flex div 撑满单元格高度，让 align-items:center 真居中 */
+.task-stage-row .el-table__cell > div {
+  height: 100%;
+}
+/* 任务名称列内 inline 子元素（span/icon/tag）显式中线对齐，避免 baseline 漂移 */
+.task-stage-row .el-table__cell > div > * {
+  vertical-align: middle !important;
+  line-height: 1 !important;
 }
 </style>
 
