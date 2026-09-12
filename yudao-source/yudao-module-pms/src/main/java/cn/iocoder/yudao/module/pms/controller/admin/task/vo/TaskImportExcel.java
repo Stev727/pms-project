@@ -17,13 +17,13 @@ import lombok.Data;
 @Data
 public class TaskImportExcel {
 
-    @ExcelProperty("阶段序号")
+    @ExcelProperty("阶段序号(必填)")
     private Integer stageNo;
 
-    @ExcelProperty("阶段名称")
+    @ExcelProperty("阶段名称(新阶段必填)")
     private String stageName;
 
-    @ExcelProperty("任务序号")
+    @ExcelProperty("任务序号(选填)")
     private Integer taskNo;
 
     @ExcelProperty("任务名称")

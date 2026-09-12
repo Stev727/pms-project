@@ -1540,6 +1540,8 @@ public class TaskServiceImpl implements TaskService {
         int excelRowNo;
         String stageName;
         boolean stageExists;
+        String stageKey;
+        Long dbStageId;
         String taskName;
         boolean isSub;
         String parentName;
@@ -1570,17 +1572,28 @@ public class TaskServiceImpl implements TaskService {
         // ---------- 已有数据索引 ----------
         List<PmsProjectStageDO> existingStages = projectStageMapper.selectList(
                 new LambdaQueryWrapperX<PmsProjectStageDO>().eq(PmsProjectStageDO::getProjectId, projectId));
+        // 序号 → 已有阶段（任务行按「阶段序号」关联阶段）
+        Map<Integer, PmsProjectStageDO> stageByNo = new HashMap<>();
+        // 序号冲突的已有阶段（同序号多阶段 → 该序号不可引用）
+        Set<Integer> ambiguousStageNos = new HashSet<>();
+        // 阶段名 → id（新阶段重名检查）
         Map<String, Long> stageIdByName = new HashMap<>();
         for (PmsProjectStageDO s : existingStages) {
             if (s.getStageName() != null) {
                 stageIdByName.put(s.getStageName().trim(), s.getStageId());
             }
+            if (s.getSortOrder() != null) {
+                PmsProjectStageDO prev = stageByNo.put(s.getSortOrder(), s);
+                if (prev != null && !prev.getStageId().equals(s.getStageId())) {
+                    ambiguousStageNos.add(s.getSortOrder());
+                }
+            }
         }
         List<PmsTaskDO> existingTasks = taskMapper.selectList(
                 new LambdaQueryWrapperX<PmsTaskDO>().eq(PmsTaskDO::getProjectId, projectId));
-        // 阶段内全部任务名（同名查重）
+        // stageId → 阶段内全部任务名（同名查重）
         Map<Long, Set<String>> namesByStage = new HashMap<>();
-        // 阶段内顶层任务名 → taskId（父任务解析）
+        // stageId → 阶段内顶层任务名 → taskId（父任务解析）
         Map<Long, Map<String, Long>> topIdByStage = new HashMap<>();
         for (PmsTaskDO t : existingTasks) {
             if (t.getStageId() == null || t.getTaskName() == null) {
@@ -1594,52 +1607,117 @@ public class TaskServiceImpl implements TaskService {
         }
 
         List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel> failureRows = new ArrayList<>();
-        // 新阶段声明：阶段名 → 序号（纯阶段行 或 任务行上的新阶段）
-        Map<String, Integer> newStageNo = new LinkedHashMap<>();
+        // 新阶段声明：序号 → 名称（阶段定义行 或 任务行内联声明）
+        Map<Integer, String> declaredStages = new LinkedHashMap<>();
         List<ImportRow> parsed = new ArrayList<>();
 
-        // ---------- 逐行校验 ----------
+        // ---------- 第一遍：阶段行（任务名称为空的行）----------
         int excelRowNo = 1;
         for (cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel row : rows) {
             excelRowNo++;
+            String taskName = row.getTaskName() == null ? "" : row.getTaskName().trim();
+            if (!taskName.isEmpty()) {
+                continue;
+            }
+            String stageName = row.getStageName() == null ? "" : row.getStageName().trim();
+            Integer stageNo = row.getStageNo();
+            if (stageName.isEmpty() && stageNo == null) {
+                continue; // 完全空行
+            }
             List<String> errors = new ArrayList<>();
             String prefix = "第" + excelRowNo + "行：";
-            String stageName = row.getStageName() == null ? "" : row.getStageName().trim();
-            boolean pureStageRow = row.getTaskNo() == null
-                    && (row.getTaskName() == null || row.getTaskName().trim().isEmpty());
-
-            if (stageName.isEmpty()) {
-                errors.add("阶段名称必填");
-            }
-            boolean stageExists = !stageName.isEmpty() && stageIdByName.containsKey(stageName);
-            if (!stageName.isEmpty() && !stageExists) {
-                if (row.getStageNo() == null || row.getStageNo() < 1) {
-                    errors.add("阶段「" + stageName + "」在项目中不存在，填写新阶段需提供阶段序号（将自动创建）");
+            if (stageNo == null || stageNo < 1) {
+                errors.add("阶段行需填写阶段序号（1、2、3…，新阶段将按此序号创建）");
+            } else if (stageName.isEmpty()) {
+                errors.add("新阶段需填写阶段名称");
+            } else {
+                PmsProjectStageDO exist = stageByNo.get(stageNo);
+                if (exist != null) {
+                    if (!exist.getStageName().trim().equals(stageName)) {
+                        errors.add("阶段序号 " + stageNo + " 已对应阶段「" + exist.getStageName().trim()
+                                + "」，与填写名称「" + stageName + "」不一致");
+                    }
+                    // 名称一致 → 模板预填参考行，跳过
+                } else if (stageIdByName.containsKey(stageName)) {
+                    errors.add("阶段「" + stageName + "」已存在，请改用该阶段的原有序号");
                 } else {
-                    Integer prev = newStageNo.get(stageName);
+                    String prev = declaredStages.get(stageNo);
                     if (prev == null) {
-                        newStageNo.put(stageName, row.getStageNo());
-                    } else if (!prev.equals(row.getStageNo())) {
-                        errors.add("新阶段「" + stageName + "」的序号前后不一致（" + prev + " / " + row.getStageNo() + "）");
+                        declaredStages.put(stageNo, stageName);
+                    } else if (!prev.equals(stageName)) {
+                        errors.add("阶段序号 " + stageNo + " 声明的名称前后不一致（" + prev + " / " + stageName + "）");
                     }
                 }
             }
-            if (pureStageRow) {
-                if (!errors.isEmpty()) {
-                    failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
-                            row, prefix + String.join("；", errors)));
-                }
-                // 纯阶段行：已有阶段=参考行跳过；新阶段=声明（上面已登记序号）
-                continue;
+            if (!errors.isEmpty()) {
+                failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
+                        row, prefix + String.join("；", errors)));
             }
+        }
 
-            if (row.getTaskNo() == null || row.getTaskNo() < 1) {
-                errors.add("任务序号必填且为正整数");
-            }
+        // ---------- 第二遍：任务行校验 ----------
+        excelRowNo = 1;
+        for (cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel row : rows) {
+            excelRowNo++;
             String taskName = row.getTaskName() == null ? "" : row.getTaskName().trim();
             if (taskName.isEmpty()) {
-                errors.add("任务名称必填");
+                continue; // 阶段行已在第一遍处理
             }
+            List<String> errors = new ArrayList<>();
+            String prefix = "第" + excelRowNo + "行：";
+            String stageName = row.getStageName() == null ? "" : row.getStageName().trim();
+            Integer stageNo = row.getStageNo();
+
+            // 阶段解析：序号必填 → 已有阶段 / 批次声明阶段 / 内联声明新阶段
+            String stageKey = null;
+            boolean stageExists = false;
+            Long dbStageId = null;
+            String resolvedStageName = null;
+            if (stageNo == null || stageNo < 1) {
+                errors.add("阶段序号必填（参照模板预填的序号，任务将挂到该阶段下）");
+            } else if (ambiguousStageNos.contains(stageNo)) {
+                errors.add("阶段序号 " + stageNo + " 在项目内对应多个阶段，无法引用");
+            } else {
+                PmsProjectStageDO exist = stageByNo.get(stageNo);
+                if (exist != null) {
+                    if (!stageName.isEmpty() && !exist.getStageName().trim().equals(stageName)) {
+                        errors.add("阶段序号 " + stageNo + " 对应阶段「" + exist.getStageName().trim()
+                                + "」，与填写名称「" + stageName + "」不一致");
+                    }
+                    stageKey = "S" + exist.getStageId();
+                    stageExists = true;
+                    dbStageId = exist.getStageId();
+                    resolvedStageName = exist.getStageName().trim();
+                } else {
+                    String declared = declaredStages.get(stageNo);
+                    if (declared == null && !stageName.isEmpty()) {
+                        // 内联声明：任务行直接填新阶段序号+名称
+                        if (stageIdByName.containsKey(stageName)) {
+                            errors.add("阶段序号 " + stageNo + " 不存在，且名称「" + stageName
+                                    + "」与已有阶段重名（请改用该阶段的原有序号）");
+                        } else {
+                            declaredStages.put(stageNo, stageName);
+                            declared = stageName;
+                        }
+                    }
+                    if (declared == null) {
+                        errors.add("阶段序号 " + stageNo + " 不存在；若要新建阶段，请同时填写「阶段名称」");
+                    } else {
+                        if (!stageName.isEmpty() && !declared.equals(stageName)) {
+                            errors.add("阶段序号 " + stageNo + " 已声明为阶段「" + declared
+                                    + "」，与填写名称「" + stageName + "」不一致");
+                        }
+                        stageKey = "N" + stageNo;
+                        resolvedStageName = declared;
+                    }
+                }
+            }
+
+            // 任务序号：选填（留空系统自动编号）；填写须为正整数、阶段内唯一（结构校验阶段检查唯一性）
+            if (row.getTaskNo() != null && row.getTaskNo() < 1) {
+                errors.add("任务序号须为正整数（留空则系统自动编号）");
+            }
+            String parentName = row.getParentTaskName() == null ? "" : row.getParentTaskName().trim();
             String taskType = "other";
             if (row.getTaskType() != null && !row.getTaskType().trim().isEmpty()) {
                 String mapped = IMPORT_TASK_TYPE_ALIAS.get(row.getTaskType().trim());
@@ -1683,7 +1761,6 @@ public class TaskServiceImpl implements TaskService {
             if (planStart != null && planEnd != null && planEnd.isBefore(planStart)) {
                 errors.add("计划结束日期不能早于计划开始日期");
             }
-            String parentName = row.getParentTaskName() == null ? "" : row.getParentTaskName().trim();
 
             if (!errors.isEmpty()) {
                 failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
@@ -1693,8 +1770,10 @@ public class TaskServiceImpl implements TaskService {
             ImportRow pr = new ImportRow();
             pr.row = row;
             pr.excelRowNo = excelRowNo;
-            pr.stageName = stageName;
+            pr.stageKey = stageKey;
+            pr.stageName = resolvedStageName;
             pr.stageExists = stageExists;
+            pr.dbStageId = dbStageId;
             pr.taskName = taskName;
             pr.parentName = parentName;
             pr.isSub = !parentName.isEmpty();
@@ -1707,14 +1786,14 @@ public class TaskServiceImpl implements TaskService {
             parsed.add(pr);
         }
 
-        // ---------- 结构性校验（父任务解析与行序无关，先全量收集再解析） ----------
-        // 批次内顶层任务：阶段名 → 任务名 → 行
+        // ---------- 结构性校验（stageKey 维度，父任务解析与行序无关） ----------
+        // 批次内顶层任务：stageKey → 任务名 → 行
         Map<String, Map<String, ImportRow>> batchTop = new HashMap<>();
         for (ImportRow pr : parsed) {
             if (pr.isSub) {
                 continue;
             }
-            Map<String, ImportRow> tops = batchTop.computeIfAbsent(pr.stageName, k -> new HashMap<>());
+            Map<String, ImportRow> tops = batchTop.computeIfAbsent(pr.stageKey, k -> new HashMap<>());
             if (tops.containsKey(pr.taskName)) {
                 failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
                         pr.row, "第" + pr.excelRowNo + "行：阶段「" + pr.stageName + "」内任务名称「" + pr.taskName + "」重复"));
@@ -1723,7 +1802,7 @@ public class TaskServiceImpl implements TaskService {
                 tops.put(pr.taskName, pr);
             }
         }
-        // 批次内任务名唯一（顶层 + 子任务同池查重）+ 任务序号阶段内唯一 + 与已有任务同名查重
+        // 批次内任务名唯一 + 显式任务序号阶段内唯一 + 与已有任务同名查重
         Map<String, Set<String>> batchNamesByStage = new HashMap<>();
         Map<String, Set<Integer>> batchNoByStage = new HashMap<>();
         for (ImportRow pr : parsed) {
@@ -1731,20 +1810,21 @@ public class TaskServiceImpl implements TaskService {
                 continue;
             }
             String prefix = "第" + pr.excelRowNo + "行：";
-            if (!batchNamesByStage.computeIfAbsent(pr.stageName, k -> new HashSet<>()).add(pr.taskName)) {
+            if (!batchNamesByStage.computeIfAbsent(pr.stageKey, k -> new HashSet<>()).add(pr.taskName)) {
                 failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
                         pr.row, prefix + "阶段「" + pr.stageName + "」内任务名称「" + pr.taskName + "」重复"));
                 pr.excluded = true;
                 continue;
             }
-            if (!batchNoByStage.computeIfAbsent(pr.stageName, k -> new HashSet<>()).add(pr.row.getTaskNo())) {
+            if (pr.row.getTaskNo() != null
+                    && !batchNoByStage.computeIfAbsent(pr.stageKey, k -> new HashSet<>()).add(pr.row.getTaskNo())) {
                 failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
                         pr.row, prefix + "阶段「" + pr.stageName + "」内任务序号 " + pr.row.getTaskNo() + " 重复"));
                 pr.excluded = true;
                 continue;
             }
             if (pr.stageExists) {
-                Set<String> names = namesByStage.get(stageIdByName.get(pr.stageName));
+                Set<String> names = namesByStage.get(pr.dbStageId);
                 if (names != null && names.contains(pr.taskName)) {
                     failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
                             pr.row, prefix + "阶段「" + pr.stageName + "」已存在同名任务「" + pr.taskName
@@ -1754,10 +1834,9 @@ public class TaskServiceImpl implements TaskService {
             }
         }
         // 父任务解析（顺序无关）：父任务须为该阶段已有顶层任务或本批次顶层任务，最多两级
-        // 批次内全部行索引（阶段名 → 任务名 → 行）：用于识别「父任务本身是子任务」的精确报错
         Map<String, Map<String, ImportRow>> batchAll = new HashMap<>();
         for (ImportRow pr : parsed) {
-            batchAll.computeIfAbsent(pr.stageName, k -> new HashMap<>()).put(pr.taskName, pr);
+            batchAll.computeIfAbsent(pr.stageKey, k -> new HashMap<>()).put(pr.taskName, pr);
         }
         for (ImportRow pr : parsed) {
             if (pr.excluded || !pr.isSub) {
@@ -1773,18 +1852,16 @@ public class TaskServiceImpl implements TaskService {
             Long dbParent = null;
             ImportRow batchParent = null;
             if (pr.stageExists) {
-                Map<String, Long> tops = topIdByStage.get(stageIdByName.get(pr.stageName));
+                Map<String, Long> tops = topIdByStage.get(pr.dbStageId);
                 dbParent = tops != null ? tops.get(pr.parentName) : null;
             }
             if (dbParent == null) {
-                // 在本批次全部行中查找（顶层 + 子任务都查，便于精确区分「是子任务」与「不存在」）
-                Map<String, ImportRow> all = batchAll.get(pr.stageName);
+                Map<String, ImportRow> all = batchAll.get(pr.stageKey);
                 ImportRow cand = all != null ? all.get(pr.parentName) : null;
                 if (cand != null && cand.excluded) {
-                    cand = null; // 被前序校验排除的行视为不存在
+                    cand = null;
                 }
                 if (cand != null && cand.isSub) {
-                    // 父任务本身是子任务 → 超过两级，明确报错
                     failureRows.add(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportErrorExcel.of(
                             pr.row, prefix + "父任务「" + pr.parentName + "」本身是子任务，最多支持两级"));
                     pr.excluded = true;
@@ -1816,18 +1893,62 @@ public class TaskServiceImpl implements TaskService {
 
         // ---------- 落库（同一事务） ----------
         int stageCount = 0;
-        Map<String, Long> finalStageId = new HashMap<>(stageIdByName);
-        List<Map.Entry<String, Integer>> newStages = new ArrayList<>(newStageNo.entrySet());
-        newStages.sort(Map.Entry.comparingByValue());
-        for (Map.Entry<String, Integer> e : newStages) {
+        Map<String, Long> finalStageId = new HashMap<>();
+        for (PmsProjectStageDO s : stageByNo.values()) {
+            finalStageId.put("S" + s.getStageId(), s.getStageId());
+        }
+        List<Map.Entry<Integer, String>> newStages = new ArrayList<>(declaredStages.entrySet());
+        newStages.sort(Map.Entry.comparingByKey());
+        for (Map.Entry<Integer, String> e : newStages) {
             PmsProjectStageDO s = new PmsProjectStageDO();
             s.setProjectId(projectId);
-            s.setStageName(e.getKey());
-            s.setSortOrder(e.getValue());
+            s.setStageName(e.getValue());
+            s.setSortOrder(e.getKey());
             s.setStatus("not_started");
             projectStageMapper.insert(s);
-            finalStageId.put(e.getKey(), s.getStageId());
+            finalStageId.put("N" + e.getKey(), s.getStageId());
             stageCount++;
+        }
+
+        // 任务序号自动编号：留空 → 阶段内按文件顺序顺延（已有任务之后，避开批次显式序号）
+        Map<String, Integer> autoNext = new HashMap<>();
+        Map<String, Set<Integer>> autoUsed = new HashMap<>();
+        for (ImportRow pr : parsed) {
+            if (!autoUsed.containsKey(pr.stageKey)) {
+                Set<Integer> u = new HashSet<>();
+                int start = 1;
+                if (pr.stageExists) {
+                    for (PmsTaskDO t : existingTasks) {
+                        if (t.getStageId() != null && t.getStageId().equals(pr.dbStageId)) {
+                            if (t.getSortOrder() != null) {
+                                u.add(t.getSortOrder());
+                                if (t.getSortOrder() >= start) {
+                                    start = t.getSortOrder() + 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                autoUsed.put(pr.stageKey, u);
+                autoNext.put(pr.stageKey, start);
+            }
+        }
+        for (ImportRow pr : parsed) {
+            if (pr.row.getTaskNo() != null) {
+                autoUsed.get(pr.stageKey).add(pr.row.getTaskNo());
+            }
+        }
+        for (ImportRow pr : parsed) {
+            if (pr.row.getTaskNo() != null) {
+                continue;
+            }
+            int next = autoNext.get(pr.stageKey);
+            while (autoUsed.get(pr.stageKey).contains(next)) {
+                next++;
+            }
+            pr.row.setTaskNo(next);
+            autoUsed.get(pr.stageKey).add(next);
+            autoNext.put(pr.stageKey, next + 1);
         }
 
         int taskCount = 0;
@@ -1836,7 +1957,7 @@ public class TaskServiceImpl implements TaskService {
             if (pr.excluded || pr.isSub) {
                 continue;
             }
-            PmsTaskDO entity = buildImportTask(projectId, finalStageId.get(pr.stageName), pr);
+            PmsTaskDO entity = buildImportTask(projectId, finalStageId.get(pr.stageKey), pr);
             createTask(entity);
             pr.createdTaskId = entity.getTaskId();
             taskCount++;
@@ -1852,7 +1973,7 @@ public class TaskServiceImpl implements TaskService {
                 // 理论不可达（校验阶段已保证），兜底抛错回滚
                 throw new ServiceException(ErrorCodeConstants.TASK_PARENT_NOT_EXISTS);
             }
-            PmsTaskDO entity = buildImportTask(projectId, finalStageId.get(pr.stageName), pr);
+            PmsTaskDO entity = buildImportTask(projectId, finalStageId.get(pr.stageKey), pr);
             entity.setParentTaskId(parentId);
             createTask(entity);
             pr.createdTaskId = entity.getTaskId();

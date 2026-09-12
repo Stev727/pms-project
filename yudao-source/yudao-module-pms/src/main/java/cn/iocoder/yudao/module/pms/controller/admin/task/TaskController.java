@@ -111,15 +111,66 @@ public class TaskController {
     }
 
     @GetMapping("/get-task-import-template")
-    @Operation(summary = "下载任务批量导入模板（预填当前项目已有阶段参考行）")
+    @Operation(summary = "下载任务批量导入模板（Sheet1 填写说明 + Sheet2 数据表预填已有阶段）")
     @Parameter(name = "projectId", description = "项目ID", required = true)
     @PreAuthorize("@ss.hasPermission('pms:task:query')")
     public void getTaskImportTemplate(HttpServletResponse response,
                                       @RequestParam("projectId") Long projectId) throws IOException {
         List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows =
                 taskService.getTaskImportTemplateRows(projectId);
-        ExcelUtils.write(response, "任务批量导入模板.xlsx", "任务",
-                cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel.class, rows);
+        // Sheet1 填写说明 + Sheet2 数据表（ExcelUtils 只支持单 Sheet，这里手写 FastExcel 多 Sheet）
+        List<List<Object>> guide = new java.util.ArrayList<>();
+        guide.add(java.util.Collections.singletonList("【任务批量导入模板 — 填写说明】"));
+        guide.add(java.util.Collections.singletonList("请在第二个 Sheet「任务导入」中填写数据，本页仅为说明。"));
+        guide.add(java.util.Collections.singletonList(""));
+        guide.add(java.util.Collections.singletonList("一、阶段怎么填（任务挂在哪个阶段下）"));
+        guide.add(java.util.Collections.singletonList("1. 已有阶段：数据表已预填「阶段序号+阶段名称」参考行（任务列为空，可忽略）"));
+        guide.add(java.util.Collections.singletonList("   → 任务行只需在「阶段序号(必填)」列填该阶段的序号，任务自动挂到该阶段下"));
+        guide.add(java.util.Collections.singletonList("2. 新阶段：单独一行填「阶段序号+阶段名称」，任务列全部留空，导入时自动创建"));
+        guide.add(java.util.Collections.singletonList("   （也可在任务行直接填新的序号+名称，效果相同）"));
+        guide.add(java.util.Collections.singletonList("3. 阶段名称仅创建新阶段时必填；序号须与已有阶段一致（1、2、3…）"));
+        guide.add(java.util.Collections.singletonList(""));
+        guide.add(java.util.Collections.singletonList("二、任务序号（选填）"));
+        guide.add(java.util.Collections.singletonList("1. 留空：系统按该阶段内的填写顺序自动编号（已有任务之后顺延）"));
+        guide.add(java.util.Collections.singletonList("2. 填写：阶段内唯一即可（不要求连续），仅决定阶段内的排序"));
+        guide.add(java.util.Collections.singletonList(""));
+        guide.add(java.util.Collections.singletonList("三、其他列"));
+        guide.add(java.util.Collections.singletonList("1. 父任务名称：留空=顶层任务；填某任务名称=作为其子任务（最多两级，父任务须在同阶段）"));
+        guide.add(java.util.Collections.singletonList("2. 任务类型/优先级：填中文名（如 设计/高），留空默认 其他/普通"));
+        guide.add(java.util.Collections.singletonList("3. 负责人/协助人：填工号或姓名（精确匹配，重名请用工号）；协助人多人用逗号分隔"));
+        guide.add(java.util.Collections.singletonList("4. 计划开始/结束日期：同时填或同时空，格式 2026-09-12"));
+        guide.add(java.util.Collections.singletonList(""));
+        guide.add(java.util.Collections.singletonList("四、示例"));
+        guide.add(java.util.Collections.singletonList("行1: 阶段序号1、任务名称「需求调研」、其余留空 → 挂到序号1的阶段，顶层任务"));
+        guide.add(java.util.Collections.singletonList("行2: 阶段序号1、任务名称「客户访谈」、父任务名称「需求调研」 → 成为「需求调研」的子任务"));
+        guide.add(java.util.Collections.singletonList("行3: 阶段序号2、阶段名称「上线准备」、任务列留空 → 新建阶段"));
+        guide.add(java.util.Collections.singletonList("行4: 阶段序号2、任务名称「数据迁移」 → 挂到新建的「上线准备」阶段"));
+        guide.add(java.util.Collections.singletonList(""));
+        guide.add(java.util.Collections.singletonList("五、重要规则"));
+        guide.add(java.util.Collections.singletonList("1. 追加式导入：只新增任务，不修改已有任务和进度"));
+        guide.add(java.util.Collections.singletonList("2. 任一行校验失败 → 整批不导入；错误以 Excel 返回并标红原因"));
+        try {
+            cn.idev.excel.ExcelWriter writer = cn.idev.excel.FastExcelFactory
+                    .write(response.getOutputStream())
+                    .autoCloseStream(false)
+                    .build();
+            cn.idev.excel.write.metadata.WriteSheet guideSheet = cn.idev.excel.FastExcelFactory
+                    .writerSheet(0, "填写说明")
+                    .head(java.util.Collections.singletonList(
+                            java.util.Collections.singletonList("填写说明")))
+                    .build();
+            writer.write(guide, guideSheet);
+            cn.idev.excel.write.metadata.WriteSheet dataSheet = cn.idev.excel.FastExcelFactory
+                    .writerSheet(1, "任务导入")
+                    .head(cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel.class)
+                    .build();
+            writer.write(rows, dataSheet);
+            writer.finish();
+        } finally {
+            response.addHeader("Content-Disposition", "attachment;filename="
+                    + cn.iocoder.yudao.framework.common.util.http.HttpUtils.encodeUtf8("任务批量导入模板.xlsx"));
+            response.setContentType("application/vnd.ms-excel;charset=UTF-8");
+        }
     }
 
     @PostMapping("/import-task")
@@ -134,9 +185,28 @@ public class TaskController {
                            HttpServletResponse response) throws IOException {
         // 项目级任务创建权限（与新建任务一致）
         requireProjectPerm(projectId, PmsPermKeyEnum.TASK_CREATE.getKey());
-        // 1. 解析 Excel
-        List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows =
-                ExcelUtils.read(file, cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel.class);
+        // 1. 解析 Excel（模板含「填写说明」Sheet，只读「任务导入」数据 Sheet；单 Sheet 自制文件读第一个）
+        List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows = new java.util.ArrayList<>();
+        cn.idev.excel.ExcelReader excelReader = null;
+        try {
+            excelReader = cn.idev.excel.FastExcelFactory.read(file.getInputStream(),
+                            cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel.class,
+                            new cn.idev.excel.read.listener.PageReadListener<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel>(rows::addAll))
+                    .build();
+            java.util.List<cn.idev.excel.read.metadata.ReadSheet> sheetList = excelReader.excelExecutor().sheetList();
+            Integer targetSheetNo = 0;
+            for (cn.idev.excel.read.metadata.ReadSheet sh : sheetList) {
+                if ("任务导入".equals(sh.getSheetName())) {
+                    targetSheetNo = sh.getSheetNo();
+                    break;
+                }
+            }
+            excelReader.read(cn.idev.excel.FastExcelFactory.readSheet(targetSheetNo).build());
+        } finally {
+            if (excelReader != null) {
+                excelReader.finish();
+            }
+        }
         // 2. 整批校验 + 追加导入（事务内有错不落库）
         cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO result =
                 taskService.importTask(projectId, rows);
