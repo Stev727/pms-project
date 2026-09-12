@@ -346,10 +346,10 @@
     <!-- 批量导入弹窗 -->
     <el-dialog v-model="importVisible" title="批量导入任务" width="560px" :close-on-click-modal="false">
       <el-alert type="info" :closable="false" show-icon title="追加式导入：只新增任务，不修改已有任务和进度"
-        description="任务行填「阶段序号」即自动挂到对应阶段下（序号见模板预填参考行，规则详见模板第一个Sheet）；新阶段填序号+名称将自动创建；任务序号可留空，系统按阶段内行序自动编号；父任务名称留空为顶层任务（最多两级）；负责人填工号或姓名精确匹配。任一行校验失败则整批不导入，可下载标红错误明细修正后重试。" />
+        description="任务行填「阶段序号」即挂到对应阶段下（序号见模板预填参考行）；新阶段填序号+名称自动创建；任务序号留空自动编号；父任务名称留空为顶层任务；负责人填工号或姓名。带【示例】前缀的行仅作参考，导入时自动跳过。" />
       <div style="margin: 14px 0 4px">
         <el-button size="small" :loading="templateDownloading" @click="downloadImportTemplate">
-          <Icon icon="ep:download" class="mr-4px" />下载导入模板（含填写说明）
+          <Icon icon="ep:download" class="mr-4px" />下载导入模板
         </el-button>
       </div>
       <el-upload drag :auto-upload="false" :limit="1" accept=".xlsx,.xls"

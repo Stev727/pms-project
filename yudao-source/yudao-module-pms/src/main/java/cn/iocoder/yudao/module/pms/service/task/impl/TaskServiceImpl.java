@@ -1531,6 +1531,39 @@ public class TaskServiceImpl implements TaskService {
             // 纯阶段参考行：任务列留空；导入时已有阶段直接跳过（仅作名称参考），新阶段按序号创建
             rows.add(row);
         }
+        // 示例行：任务名称带【示例】前缀，导入时自动跳过（用户可保留参考或删除）
+        if (!stages.isEmpty()) {
+            Integer no1 = stages.get(0).getSortOrder();
+            Integer no2 = stages.size() > 1 ? stages.get(1).getSortOrder() : null;
+            Integer maxNo = stages.stream().map(PmsProjectStageDO::getSortOrder)
+                    .filter(java.util.Objects::nonNull).max(Integer::compareTo).orElse(0);
+            cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel ex1 =
+                    new cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel();
+            ex1.setStageNo(no1); ex1.setTaskNo(1); ex1.setTaskName("【示例】需求调研");
+            ex1.setTaskType("设计"); ex1.setPriority("高"); ex1.setOwnerName("张三");
+            ex1.setPlanStartDate("2026-09-15"); ex1.setPlanEndDate("2026-09-20");
+            ex1.setRemark("填阶段序号即挂到该阶段下");
+            rows.add(ex1);
+            cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel ex2 =
+                    new cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel();
+            ex2.setStageNo(no1); ex2.setTaskName("【示例】客户访谈");
+            ex2.setParentTaskName("【示例】需求调研"); ex2.setOwnerName("李四");
+            ex2.setRemark("填父任务名称即成为其子任务");
+            rows.add(ex2);
+            if (no2 != null) {
+                cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel ex3 =
+                        new cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel();
+                ex3.setStageNo(no2); ex3.setTaskName("【示例】方案评审");
+                ex3.setOwnerName("王五"); ex3.setRemark("任务序号留空，自动编号");
+                rows.add(ex3);
+            }
+            cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel ex4 =
+                    new cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel();
+            ex4.setStageNo(maxNo + 1); ex4.setStageName("上线准备"); ex4.setTaskNo(1);
+            ex4.setTaskName("【示例】数据迁移"); ex4.setOwnerName("张三");
+            ex4.setRemark("新阶段填序号+名称，自动创建");
+            rows.add(ex4);
+        }
         return rows;
     }
 
@@ -1662,6 +1695,9 @@ public class TaskServiceImpl implements TaskService {
             String taskName = row.getTaskName() == null ? "" : row.getTaskName().trim();
             if (taskName.isEmpty()) {
                 continue; // 阶段行已在第一遍处理
+            }
+            if (taskName.startsWith("【示例】")) {
+                continue; // 示例行，自动跳过
             }
             List<String> errors = new ArrayList<>();
             String prefix = "第" + excelRowNo + "行：";
