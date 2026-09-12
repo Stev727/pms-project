@@ -58,6 +58,9 @@
         <el-button v-if="canTransition(selectedTask, 'resume')" size="small" type="primary" @click.stop="handleTransition(selectedTask, 'resume')">恢复</el-button>
         <el-button v-if="canReportProgress(selectedTask)" size="small" type="primary" @click.stop="$emit('taskClick', selectedTask)">进度填报</el-button>
         <el-button v-if="canAddSubtask(selectedTask)" size="small" type="primary" @click.stop="$emit('add-subtask', selectedTask)">添加子任务</el-button>
+        <el-button size="small" type="primary" plain @click.stop="$emit('taskClick', selectedTask)">
+          <Icon icon="ep:edit" class="mr-4px" />编辑
+        </el-button>
         <el-button v-if="ALLOW_CHANGE_STATUSES.includes(selectedTask.completeStatus)" size="small" type="warning" @click.stop="handleChangeRequest(selectedTask)">发起变更</el-button>
         <el-button v-if="checkPermi(['pms:task:delete']) && (isPM || String(selectedTask.mainOwnerId) === currentUserId)" size="small" type="danger" @click.stop="handleDeleteTask(selectedTask)">删除</el-button>
         <el-button size="small" text @click.stop="clearSelection">
@@ -73,6 +76,12 @@
         </span>
         <el-button v-if="checkPermi(['pms:task:update'])" size="small" type="primary" @click="openBatchDispatch">
           <Icon icon="ep:promotion" class="mr-4px" />批量派发
+        </el-button>
+        <el-button v-if="checkPermi(['pms:task:update'])" size="small" type="success" :loading="batchStarting" @click="handleBatchStart">
+          <Icon icon="ep:video-play" class="mr-4px" />批量开始
+        </el-button>
+        <el-button v-if="checkPermi(['pms:task:update'])" size="small" type="warning" @click="batchOwnerVisible = true">
+          <Icon icon="ep:user" class="mr-4px" />设负责人
         </el-button>
         <el-button v-if="checkPermi(['pms:task:delete'])" size="small" type="danger" :loading="batchDeleting" @click="handleBatchDelete">
           <Icon icon="ep:delete" class="mr-4px" />删除
@@ -105,7 +114,7 @@
       :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
       :default-expand-all="expandAll"
       :expand-row-keys="expandedRowKeys"
-      border stripe style="width: 100%"
+      border stripe style="width: 100%" class="task-list-table"
       highlight-current-row
       :current-row-key="selectedRowKey"
       @row-click="handleRowClick"
@@ -263,6 +272,20 @@
       </template>
     </el-dialog>
   </div>
+    <!-- 批量设置负责人弹窗 -->
+    <el-dialog v-model="batchOwnerVisible" title="批量设置负责人" width="420px" :close-on-click-modal="false">
+      <div style="margin-bottom: 12px; font-size: 13px; color: #4e5969">
+        将为已勾选的 {{ checkedTasks.length }} 个任务统一设置负责人（覆盖现有负责人）
+      </div>
+      <el-select v-model="batchOwnerId" filterable clearable placeholder="选择负责人" style="width: 100%">
+        <el-option v-for="u in userSelectList" :key="u.id" :label="u.nickname" :value="u.id" />
+      </el-select>
+      <template #footer>
+        <el-button @click="batchOwnerVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchOwnerSaving" @click="handleBatchSetOwner">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 批量派发弹窗 -->
     <el-dialog v-model="batchDispatchVisible" title="批量派发任务" width="720px" :close-on-click-modal="false">
       <template v-if="!batchDispatchResult">
@@ -921,6 +944,65 @@ const handleBatchDelete = async () => {
   emit('refresh')
 }
 
+// ---------- 批量开始 ----------
+const batchStarting = ref(false)
+const handleBatchStart = async () => {
+  const tasks = checkedTasks.value.filter((t: any) => t.completeStatus === 'not_started')
+  const skipped = checkedTasks.value.length - tasks.length
+  if (!tasks.length) {
+    ElMessage.warning('所选任务均已开始，无可操作项')
+    return
+  }
+  batchStarting.value = true
+  let okCount = 0
+  const failList: string[] = []
+  for (const t of tasks) {
+    try {
+      await updateTask({ taskId: t.taskId, completeStatus: 'in_progress' } as any)
+      okCount++
+    } catch (e: any) {
+      failList.push(`「${t.taskName}」：${e?.message || '失败'}`)
+    }
+  }
+  batchStarting.value = false
+  let msg = `已开始 ${okCount} 个任务`
+  if (skipped > 0) msg += `，跳过 ${skipped} 个（非未开始状态）`
+  if (failList.length > 0) msg += `，${failList.length} 个失败：${failList.join('；')}`
+  failList.length > 0 ? ElMessage.warning(msg) : ElMessage.success(msg)
+  clearCheck()
+  emit('refresh')
+}
+
+// ---------- 批量设置负责人 ----------
+const batchOwnerVisible = ref(false)
+const batchOwnerId = ref<number | undefined>(undefined)
+const batchOwnerSaving = ref(false)
+const handleBatchSetOwner = async () => {
+  if (!batchOwnerId.value) {
+    ElMessage.warning('请选择负责人')
+    return
+  }
+  batchOwnerSaving.value = true
+  let okCount = 0
+  const failList: string[] = []
+  for (const t of checkedTasks.value) {
+    try {
+      await updateTask({ taskId: t.taskId, mainOwnerId: batchOwnerId.value } as any)
+      okCount++
+    } catch (e: any) {
+      failList.push(`「${t.taskName}」：${e?.message || '失败'}`)
+    }
+  }
+  batchOwnerSaving.value = false
+  batchOwnerVisible.value = false
+  batchOwnerId.value = undefined
+  failList.length > 0
+    ? ElMessage.warning(`已设置 ${okCount} 个，${failList.length} 个失败：${failList.join('；')}`)
+    : ElMessage.success(`已为 ${okCount} 个任务设置负责人`)
+  clearCheck()
+  emit('refresh')
+}
+
 // ---------- 批量派发 ----------
 const batchDispatchVisible = ref(false)
 const batchDispatching = ref(false)
@@ -1157,12 +1239,16 @@ onMounted(async () => {
 
 </style>
 
-<!-- 非 scoped：阶段行隐藏复选框（scoped [data-v-hash] 无法穿透 el-table 子组件） -->
+<!-- 非 scoped：阶段行隐藏复选框 + 全局行内容垂直居中（scoped [data-v-hash] 无法穿透 el-table 子组件） -->
 <style>
 .task-stage-row .el-checkbox,
 .task-stage-row td.hide-selection .el-checkbox,
 td.hide-selection .el-checkbox {
   visibility: hidden !important;
+}
+/* 全局行内容垂直居中：所有 cell 内容在 td 内中线对齐 */
+.task-list-table .el-table__cell {
+  vertical-align: middle !important;
 }
 </style>
 
