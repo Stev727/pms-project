@@ -119,12 +119,31 @@
       :current-row-key="selectedRowKey"
       @row-click="handleRowClick"
     >
-      <el-table-column type="selection" width="45" :selectable="selectableRow" :cell-class-name="selectionCellClass" reserve-selection />
+      <el-table-column type="selection" width="45" :selectable="selectableRow" reserve-selection>
+        <template #default="{ row }">
+          <!-- 阶段行：复选框位置渲染展开/折叠箭头（内置树形箭头已通过 CSS 隐藏） -->
+          <el-icon
+            v-if="row.isStageRow"
+            class="stage-expand-icon"
+            :class="{ 'is-collapsed': !isStageExpanded(row) }"
+            @click.stop="toggleStageExpand(row)"
+          >
+            <Icon icon="ep:arrow-right" />
+          </el-icon>
+          <!-- 任务行：自渲染复选框（经 toggleRowSelection 与内置选择状态保持同步，表头全选仍走内置逻辑） -->
+          <el-checkbox
+            v-else
+            :model-value="isRowChecked(row)"
+            @change="toggleRowChecked(row)"
+            @click.stop
+          />
+        </template>
+      </el-table-column>
       <el-table-column label="任务名称" prop="taskName" min-width="250" show-overflow-tooltip>
         <template #default="{ row }">
-          <div :style="row.isStageRow
-            ? 'display:flex;align-items:center;gap:6px;min-height:46px'
-            : 'display:flex;align-items:center;gap:6px'">
+          <!-- inline-flex：与树形缩进/箭头前缀共享同一行盒，天然垂直居中
+               （此前用 block div 会换行到前缀行之下，导致任务名称偏离中线且阶段行被 min-height 撑高） -->
+          <span style="display:inline-flex;align-items:center;gap:6px;vertical-align:middle">
             <el-icon v-if="row.isStageRow" style="color: #2468F2"><Icon icon="ep:folder" /></el-icon>
             <el-icon v-else-if="row.isMilestone" style="color: #FF7D00"><Icon icon="ep:star-filled" /></el-icon>
             <!-- 子任务层级标识 -->
@@ -136,7 +155,7 @@
             </span>
             <el-tag v-if="row.isStageRow" type="primary" size="small" effect="plain">排序 {{ row.sortOrder ?? 0 }}</el-tag>
             <el-tag v-if="row.isCriticalPath && !row.isStageRow" type="danger" size="small" effect="plain">关键路径</el-tag>
-          </div>
+          </span>
         </template>
       </el-table-column>
       <el-table-column label="负责人" width="100">
@@ -902,11 +921,23 @@ const getDelayDays = (task: TaskVO) => calcDelayDays(task.planEndDate, task.comp
 const taskTableRef = ref()
 const checkedTasks = ref<any[]>([])
 const selectableRow = (row: any) => !row.isStageRow
-// 阶段行加 row-stage 类，便于 CSS 样式（如 hover/缩进）+ 让 cell class 容易识别
+// 阶段行加 task-stage-row 类：CSS 隐藏其内置树形箭头（箭头已移至选择列单元格渲染）
 const rowClassName = ({ row }: any) => (row?.isStageRow ? 'task-stage-row' : '')
-// 阶段行的选择列单元格加 hide-selection 类，CSS 隐藏复选框
-const selectionCellClass = ({ row }: any) => (row?.isStageRow ? 'hide-selection' : '')
 const handleSelectionChange = (rows: any[]) => { checkedTasks.value = rows || [] }
+// 选择列自定义渲染：任务行复选框（经 toggleRowSelection 与内置选择状态双向同步；
+// 表头全选仍是内置逻辑，:selectable 继续生效跳过阶段行）
+const isRowChecked = (row: any) => checkedTasks.value.some((t: any) => t.rowKey === row.rowKey)
+const toggleRowChecked = (row: any) => { (taskTableRef.value as any)?.toggleRowSelection(row) }
+// 阶段行展开箭头：读取/切换 el-table store 的树形展开状态（与「展开全部/折叠全部」按钮同源）
+const isStageExpanded = (row: any): boolean => {
+  const td = (taskTableRef.value as any)?.store?.states?.treeData?.value
+  const node = td?.[row.rowKey]
+  return node ? node.expanded !== false : expandAll.value
+}
+const toggleStageExpand = (row: any) => {
+  const store = (taskTableRef.value as any)?.store
+  store?.loadOrToggle?.(row)
+}
 const clearCheck = () => {
   taskTableRef.value?.clearSelection()
   checkedTasks.value = []
@@ -1245,16 +1276,26 @@ onMounted(async () => {
 
 </style>
 
-<!-- 非 scoped：阶段行隐藏复选框 + 全局行内容垂直居中（scoped [data-v-hash] 无法穿透 el-table 子组件） -->
+<!-- 非 scoped：穿透 el-table 子组件内部 DOM（scoped [data-v-hash] 无法命中子组件渲染的 tr/td） -->
 <style>
-.task-stage-row .el-checkbox,
-.task-stage-row td.hide-selection .el-checkbox,
-td.hide-selection .el-checkbox {
-  visibility: hidden !important;
-}
-/* 全局行内容垂直居中：所有 cell 内容在 td 内中线对齐 */
+/* 全局：所有单元格内容在 td 内垂直居中 */
 .task-list-table .el-table__cell {
   vertical-align: middle !important;
+}
+/* 阶段行：隐藏内置树形展开箭头（已移至选择列单元格内自渲染，父任务的子任务箭头保留） */
+.task-stage-row .el-table__expand-icon {
+  display: none !important;
+}
+/* 选择列内的阶段展开箭头：默认朝下（展开态），折叠时朝右 */
+.stage-expand-icon {
+  cursor: pointer;
+  color: #4e5969;
+  font-size: 14px;
+  transition: transform 0.2s;
+  transform: rotate(90deg);
+}
+.stage-expand-icon.is-collapsed {
+  transform: rotate(0deg);
 }
 </style>
 
