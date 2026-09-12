@@ -376,6 +376,7 @@ import { StageVO, createStage, updateStage, deleteStage } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays, getReviewStatusLabel, getReviewStatusStyle } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
 import { useUserNames } from '@/hooks/pms/useUserNames'
+import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
 import { useProjectPerm, PERM } from '@/hooks/pms/useProjectPerm'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/modules/user'
@@ -539,7 +540,9 @@ const emit = defineEmits<{
   'start-change': [task: TaskVO]
 }>()
 
-const { getUserName, ensureLoaded: ensureUsersLoaded, userList } = useUserNames()
+const { getUserName, ensureLoaded: ensureUsersLoaded } = useUserNames()
+// 负责人下拉数据源：当前项目活跃成员（内存缓存，MembersTab 变更后 clearMemberCache 失效重载）
+const { projectMemberUsers, loadProjectMembers: loadMemberUsers } = useProjectMembers()
 const searchKeyword = ref('')
 const filterStage = ref<string | undefined>()
 const filterStatus = ref('')
@@ -1028,7 +1031,8 @@ const batchPreviewList = computed(() => checkedTasks.value.map((t: any) => {
 const batchDispatchable = computed(() => batchPreviewList.value.filter((r: any) => r.dispatchable))
 const batchBlocked = computed(() => batchPreviewList.value.filter((r: any) => !r.dispatchable))
 const batchNeedOwner = computed(() => batchDispatchable.value.filter((r: any) => !r.mainOwnerId))
-const userSelectList = computed(() => ((userList.value as any[]) || []).map((u: any) => ({ id: u.id, nickname: u.nickname })))
+// 只展示当前项目成员（useProjectMembers 已做 status=active 过滤 + 与系统用户取交集）
+const userSelectList = computed(() => ((projectMemberUsers.value as any[]) || []).map((u: any) => ({ id: u.id, nickname: u.nickname })))
 
 const openBatchDispatch = () => {
   batchDispatchResult.value = null
@@ -1155,8 +1159,10 @@ const canReportProgress = (row: any): boolean => {
 
 onMounted(async () => {
   ensureUsersLoaded()
-  // 加载项目级权限矩阵（未初始化时 useProjectPerm 内部按无权限处理，本组件 canProject 会降级放行）
   if (props.projectId) {
+    // 负责人下拉只展示项目成员（不 await，与权限加载并行）
+    loadMemberUsers(props.projectId)
+    // 加载项目级权限矩阵（未初始化时 useProjectPerm 内部按无权限处理，本组件 canProject 会降级放行）
     try {
       await loadPerm(props.projectId)
     } catch { /* 权限模块未部署则忽略，按钮按降级策略显示 */ }
