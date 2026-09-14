@@ -209,14 +209,14 @@ export interface WeeklyReportVO {
   targetUserId?: number
   isAdmin?: boolean
   isLeader?: boolean
-  lastWeekCompleted?: TaskVO[]
+  lastWeekDue?: TaskVO[]
   thisWeekPlan?: TaskVO[]
   futurePlans?: TaskVO[]
   lastWeekDelayed?: DelayedTaskVO[]
   lastWeekChanges?: TaskChangeLogVO[]
 }
 
-/** 周报看板聚合查询：上周完成 / 本周计划 / 上周延期 / 上周动态
+/** 周报看板聚合查询：上周应完成 / 本周计划 / 上周延期 / 上周动态
  *  date 缺省=今天，按自然周（周一~周日）计算；
  *  userId 缺省=本人，0=全部（管理员），或指定人员ID（领导/管理员可切换看下属）
  */

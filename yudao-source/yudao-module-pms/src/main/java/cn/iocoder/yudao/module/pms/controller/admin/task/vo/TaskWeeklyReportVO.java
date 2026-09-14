@@ -12,7 +12,7 @@ import java.util.List;
  * 周报看板聚合返回 VO
  *
  * 五区块：
- *   A 上周完成（actual_complete_date 落在上周）
+ *   A 上周应完成（plan_end_date 落在上周的全部任务，不限状态；配合完成日期列看实际完成情况）
  *   B 本周计划（未完成 + 计划窗口与本周重叠）
  *   E 未来计划（未完成 + 计划开始日期在本周之后）
  *   C 上周延期（已启动/流转过但未完成且逾期到上周末）
@@ -29,7 +29,7 @@ public class TaskWeeklyReportVO {
     private Boolean isAdmin;
     private Boolean isLeader;
 
-    private List<PmsTaskDO> lastWeekCompleted;
+    private List<PmsTaskDO> lastWeekDue;
     private List<PmsTaskDO> thisWeekPlan;
     private List<PmsTaskDO> futurePlans;
     private List<DelayedTaskVO> lastWeekDelayed;

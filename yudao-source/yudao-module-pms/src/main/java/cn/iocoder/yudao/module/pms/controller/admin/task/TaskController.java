@@ -230,7 +230,7 @@ public class TaskController {
     }
 
     @GetMapping("/weekly-report")
-    @Operation(summary = "周报看板聚合查询（上周完成/本周计划/上周延期/上周动态）")
+    @Operation(summary = "周报看板聚合查询（上周应完成/本周计划/上周延期/上周动态）")
     @Parameter(name = "date", description = "基准日期 yyyy-MM-dd，默认今天；按自然周（周一~周日）计算")
     @Parameter(name = "userId", description = "目标人员ID；为空=本人；0=全部（仅管理员）")
     @PreAuthorize("@ss.hasPermission('pms:task:query')")

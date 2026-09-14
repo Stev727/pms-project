@@ -2104,11 +2104,25 @@ public class TaskServiceImpl implements TaskService {
         vo.setIsAdmin(scope.isAdmin);
         vo.setIsLeader(scope.isLeader);
 
-        // A 上周完成
-        List<PmsTaskDO> completed = queryOwned(owners, isAll, w -> w
-                .eq(PmsTaskDO::getCompleteStatus, "completed")
-                .between(PmsTaskDO::getActualCompleteDate, lastWeekStart, lastWeekEnd));
-        vo.setLastWeekCompleted(completed);
+        // A 上周应完成（计划结束日期落上周的全部任务，不限状态；已完成显示完成日期，未完成即延期）
+        List<PmsTaskDO> due = queryOwned(owners, isAll, w -> w
+                .isNotNull(PmsTaskDO::getPlanEndDate)
+                .between(PmsTaskDO::getPlanEndDate, lastWeekStart, lastWeekEnd));
+        // 排序：已完成在前（按实际完成日期降序），未完成在后（按计划结束日期升序）
+        due.sort((a, b) -> {
+            boolean ca = "completed".equals(a.getCompleteStatus());
+            boolean cb = "completed".equals(b.getCompleteStatus());
+            if (ca != cb) return ca ? -1 : 1;
+            if (ca) {
+                LocalDate da = a.getActualCompleteDate() == null ? LocalDate.MIN : a.getActualCompleteDate();
+                LocalDate db = b.getActualCompleteDate() == null ? LocalDate.MIN : b.getActualCompleteDate();
+                return db.compareTo(da);
+            }
+            LocalDate pa = a.getPlanEndDate() == null ? LocalDate.MAX : a.getPlanEndDate();
+            LocalDate pb = b.getPlanEndDate() == null ? LocalDate.MAX : b.getPlanEndDate();
+            return pa.compareTo(pb);
+        });
+        vo.setLastWeekDue(due);
 
         // B 本周计划（未完成 + 计划窗口与本周重叠，且必须有计划开始日期）
         List<String> notCompleted = List.of("not_started", "pending_accept", "in_progress",
@@ -2149,7 +2163,7 @@ public class TaskServiceImpl implements TaskService {
         vo.setLastWeekChanges(changes);
 
         // 注入项目名称（周报看板任务卡展示；日常任务 projectId 为空自动跳过）
-        fillProjectName(completed);
+        fillProjectName(due);
         fillProjectName(plan);
         fillProjectName(future);
         fillProjectName(delayed);

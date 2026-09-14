@@ -38,20 +38,21 @@
     </ContentWrap>
 
     <div v-loading="loading">
-      <!-- A 上周完成 -->
+      <!-- A 上周应完成 -->
       <el-card class="section" shadow="never">
         <template #header>
           <div class="section-header">
-            <span class="section-title">✅ 上周完成</span>
-            <el-tag type="success" effect="plain">{{ report.lastWeekCompleted.length }}</el-tag>
-            <span class="section-hint">上周（{{ report.lastWeekEnd }} 及之前）实际完成归档的任务</span>
+            <span class="section-title">📌 上周应完成</span>
+            <el-tag type="primary" effect="plain">应完成 {{ report.lastWeekDue.length }}</el-tag>
+            <el-tag type="success" effect="plain">已完成 {{ lastWeekDueCompletedCount }}</el-tag>
+            <span class="section-hint">计划结束日期落在上周（{{ report.lastWeekStart }} ~ {{ report.lastWeekEnd }}）的任务；未完成即延期</span>
           </div>
         </template>
-        <el-empty v-if="report.lastWeekCompleted.length === 0" description="上周无完成任务" :image-size="60" />
+        <el-empty v-if="report.lastWeekDue.length === 0" description="上周无应完成任务" :image-size="60" />
         <div v-else class="task-list">
           <task-board-card :show-header="true" />
           <task-board-card
-            v-for="t in report.lastWeekCompleted"
+            v-for="t in report.lastWeekDue"
             :key="t.taskId"
             :task="t"
             :project-name="t.projectName"
@@ -210,13 +211,16 @@ const report = reactive<WeeklyReportVO>({
   targetUserId: undefined,
   isAdmin: false,
   isLeader: false,
-  lastWeekCompleted: [],
+  lastWeekDue: [],
   thisWeekPlan: [],
   futurePlans: [],
   lastWeekDelayed: [],
   lastWeekChanges: []
 })
 
+const lastWeekDueCompletedCount = computed(
+  () => (report.lastWeekDue || []).filter((t: any) => t.completeStatus === 'completed').length
+)
 const taskDrawerRef = ref()
 const openDetail = (task: TaskVO) => taskDrawerRef.value?.open(task)
 

@@ -6,6 +6,7 @@
     <div class="row-cell cell-owner"><span class="header-text">责任人</span></div>
     <div class="row-cell cell-helper"><span class="header-text">协助人</span></div>
     <div class="row-cell cell-date"><span class="header-text">计划日期</span></div>
+    <div class="row-cell cell-complete"><span class="header-text">完成日期</span></div>
     <div class="row-cell cell-delay"><span class="header-text">延期</span></div>
     <div class="row-cell cell-status"><span class="header-text">状态</span></div>
     <div class="row-cell cell-review"><span class="header-text">审核</span></div>
@@ -36,6 +37,12 @@
 
     <!-- 计划日期 -->
     <div class="row-cell cell-date">📅 {{ formatDate(task.planStartDate) }} ~ {{ formatDate(task.planEndDate) }}</div>
+
+    <!-- 完成日期：已完成显示实际完成日期（延期完成红色），未完成显示 — -->
+    <div class="row-cell cell-complete">
+      <span v-if="task.actualCompleteDate" :class="{ 'complete-late': completionDelayDays > 0 }">🏁 {{ formatDate(task.actualCompleteDate) }}</span>
+      <span v-else class="cell-empty">—</span>
+    </div>
 
     <!-- 延期 -->
     <div class="row-cell cell-delay">
@@ -233,6 +240,8 @@ const canSubmitReview = computed(() => {
   white-space: nowrap;
 }
 .cell-date { flex: 1 1 145px; min-width: 130px; }
+.cell-complete { width: 96px; flex-shrink: 0; justify-content: flex-start; }
+.complete-late { color: #f53f3f; font-weight: 600; }
 .cell-delay { width: 108px; flex-shrink: 0; justify-content: flex-start; }
 .cell-status { width: 80px; flex-shrink: 0; justify-content: flex-start; }
 .cell-review { width: 70px; flex-shrink: 0; justify-content: flex-start; }

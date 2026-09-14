@@ -252,8 +252,8 @@
           class="mb-16px"
         />
         <el-form label-width="90px">
-          <el-form-item label="实际完成日期">
-            <el-date-picker v-model="submitForm.actualCompleteDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
+          <el-form-item label="实际完成日期" required>
+            <el-date-picker v-model="submitForm.actualCompleteDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择实际完成日期" class="w-full" />
           </el-form-item>
           <el-form-item label="完成说明">
             <el-input v-model="submitForm.completionNote" type="textarea" :rows="3" placeholder="请描述完成情况" />
@@ -861,7 +861,7 @@ async function handleTransition(row: TreeRow, action: string) {
       const taskDocs = ((docs as any[]) || []).filter(d => String(d.taskId) === String(row.taskId))
       hasDeliverable.value = taskDocs.length > 0
     } catch { hasDeliverable.value = false }
-    submitForm.actualCompleteDate = new Date().toISOString().split('T')[0]
+    submitForm.actualCompleteDate = ''
     submitForm.completionNote = ''
     submitConfirmVisible.value = true
     return
@@ -889,6 +889,10 @@ async function handleTransition(row: TreeRow, action: string) {
 
 async function confirmSubmit() {
   if (!submitTarget.value) return
+  if (!submitForm.actualCompleteDate) {
+    ElMessage.warning('请选择实际完成日期')
+    return
+  }
   try {
     await submitTaskCompletion(submitTarget.value.taskId, submitForm.actualCompleteDate, submitForm.completionNote)
     ElMessage.success('任务已提交审核')

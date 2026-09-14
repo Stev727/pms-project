@@ -377,8 +377,8 @@
       class="mb-16px"
     />
     <el-form label-width="90px">
-      <el-form-item label="实际完成日期">
-        <el-date-picker v-model="submitForm.actualCompleteDate" type="date" value-format="YYYY-MM-DD" class="w-full" />
+      <el-form-item label="实际完成日期" required>
+        <el-date-picker v-model="submitForm.actualCompleteDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择实际完成日期" class="w-full" />
       </el-form-item>
       <el-form-item label="完成说明">
         <el-input v-model="submitForm.completionNote" type="textarea" :rows="3" placeholder="请描述完成情况" />
@@ -873,13 +873,17 @@ const handleSubmitComplete = async () => {
     const taskDocs = ((docs as any[]) || []).filter(d => String(d.taskId) === String(task.value!.taskId))
     hasDeliverable.value = taskDocs.length > 0
   } catch { hasDeliverable.value = false }
-  submitForm.actualCompleteDate = new Date().toISOString().split('T')[0]
+  submitForm.actualCompleteDate = ''
   submitForm.completionNote = ''
   showSubmitDialog.value = true
 }
 
 const confirmSubmitComplete = async () => {
   if (!task.value) return
+  if (!submitForm.actualCompleteDate) {
+    message.warning('请选择实际完成日期')
+    return
+  }
   // 输出物不强制：仅当任务标记为需要输出物时才校验
   if (task.value?.isOutputRequired && !hasDeliverable.value) {
     message.warning('此任务需要输出物，请先上传')
