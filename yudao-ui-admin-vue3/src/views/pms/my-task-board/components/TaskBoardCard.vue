@@ -1,6 +1,6 @@
 <template>
   <!-- 表头模式 -->
-  <div v-if="showHeader" class="task-row task-header">
+  <div v-if="showHeader" class="task-row task-header" :class="{ 'hide-project': hideProject }">
     <div v-if="!hideProject" class="row-cell cell-project"><span class="header-text">项目</span></div>
     <div class="row-name"><span class="header-text">任务名称</span></div>
     <div class="row-cell cell-owner"><span class="header-text">责任人</span></div>
@@ -12,18 +12,25 @@
     <div class="row-cell cell-review"><span class="header-text">审核</span></div>
     <div class="row-cell cell-progress"><span class="header-text">进度</span></div>
   </div>
+
   <!-- 数据行 -->
-  <div v-else class="task-row" @click="emit('detail', task)">
+  <div
+    v-else
+    class="task-row"
+    :class="{ 'hide-project': hideProject }"
+    @click="emit('detail', task)"
+  >
     <!-- 项目名称（独立列；日常任务留空） -->
     <div v-if="!hideProject" class="row-cell cell-project" :title="projectName || ''">
       <el-tag v-if="projectName" type="primary" size="small" effect="plain" class="project-tag">{{ projectName }}</el-tag>
       <span v-else class="cell-empty">—</span>
     </div>
+
     <!-- 名称 + 标签 -->
     <div class="row-name" :title="task.taskName">
       <span class="name-text">{{ task.taskName }}</span>
-      <el-tag v-if="isDaily" type="warning" size="small" effect="plain">日常</el-tag>
-      <el-tag v-if="task.taskType" size="small" effect="plain" type="info">{{ typeName }}</el-tag>
+      <el-tag v-if="isDaily" type="warning" size="small" effect="plain" class="row-tag">日常</el-tag>
+      <el-tag v-if="task.taskType" size="small" effect="plain" type="info" class="row-tag">{{ typeName }}</el-tag>
     </div>
 
     <!-- 责任人 -->
@@ -53,21 +60,21 @@
 
     <!-- 状态 -->
     <div class="row-cell cell-status">
-      <el-tag :style="statusStyle" size="small" effect="light">{{ statusLabel }}</el-tag>
+      <span class="status-tag" :style="statusStyle">{{ statusLabel }}</span>
     </div>
 
     <!-- 审核 -->
     <div class="row-cell cell-review">
-      <el-tag v-if="reviewBadge" :type="reviewBadge.type" size="small" effect="plain">{{ reviewBadge.label }}</el-tag>
+      <el-tag v-if="reviewBadge" :type="reviewBadge.type" size="small" effect="plain" class="row-tag">{{ reviewBadge.label }}</el-tag>
       <span v-else class="cell-empty">—</span>
     </div>
 
-    <!-- 进度 -->
+    <!-- 进度：纯文字 + 进度条（统一基线 24px） -->
     <div class="row-cell cell-progress">
-      <el-progress :percentage="task.progress || 0" :stroke-width="6" :color="progressColor" />
+      <el-progress :percentage="task.progress || 0" :stroke-width="6" :color="progressColor" class="progress-bar" />
     </div>
 
-    <!-- 操作 -->
+    <!-- 操作按钮：绝对定位右上，不参与 grid（避免列数变化） -->
     <div v-if="canSubmitReview" class="row-action" @click.stop>
       <el-button size="small" type="success" @click="emit('submit-review', task)">提交审核</el-button>
     </div>
@@ -82,7 +89,7 @@ import { useUserNames } from '@/hooks/pms/useUserNames'
 
 // 【PMS】日常任务类型下拉统一走系统字典真源
 const dailyTaskTypeOptions = getDailyTaskTypeOptions()
-// 【PMS】项目任务类型同样走字典真源（修复：原本直接显示 design/review 英文值，看不懂）
+// 【PMS】项目任务类型同样走字典真源
 const projectTaskTypeOptions = getDynamicTaskTypeOptions()
 
 const props = defineProps<{
@@ -168,17 +175,48 @@ const canSubmitReview = computed(() => {
 </script>
 
 <style scoped>
+/*
+  【P0 修复：行内容对齐】
+  之前 flex + align-items: center 在多变高度子元素下不可靠，
+  改为 CSS Grid：每列固定宽，表头/数据严格按列对齐；
+  row-cell 高度统一 28px 与 el-tag small 一致，所有内容视觉同基线。
+*/
 .task-row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 16px 20px;
+  display: grid;
+  position: relative;
+  column-gap: 14px;
+  padding: 12px 20px;
   border: 1px solid #e5e6eb;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
-  min-height: 58px;
+  min-height: 56px;
+  /* 10 列：项目/任务名称/责任人/协助人/计划日期/完成日期/延期/状态/审核/进度 */
+  grid-template-columns:
+    120px                                    /* 项目 */
+    minmax(180px, 1fr)                       /* 任务名称 */
+    78px                                     /* 责任人 */
+    minmax(80px, 150px)                      /* 协助人 */
+    minmax(120px, 1fr)                       /* 计划日期 */
+    88px                                     /* 完成日期 */
+    100px                                    /* 延期 */
+    60px                                     /* 状态 */
+    56px                                     /* 审核 */
+    minmax(80px, 1fr);                       /* 进度 */
+}
+.task-row.hide-project {
+  /* 去掉项目列：9 列对齐 */
+  grid-template-columns:
+    minmax(180px, 1fr)
+    78px
+    minmax(80px, 150px)
+    minmax(120px, 1fr)
+    88px
+    100px
+    60px
+    56px
+    minmax(80px, 1fr);
 }
 .task-row:hover {
   background: #f7f8fa;
@@ -198,12 +236,11 @@ const canSubmitReview = computed(() => {
   color: #1d2129;
   font-size: 13px;
   font-weight: 600;
+  line-height: 28px;
+  display: inline-block;
 }
 /* 名称区：弹性宽度，充分利用可用空间 */
 .row-name {
-  flex: 2 1 220px;
-  min-width: 180px;
-  max-width: 380px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -211,6 +248,8 @@ const canSubmitReview = computed(() => {
   font-weight: 600;
   color: #1d2129;
   overflow: hidden;
+  min-height: 28px;
+  min-width: 0;
 }
 .name-text {
   flex: 1;
@@ -218,39 +257,86 @@ const canSubmitReview = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 28px;
 }
-/* 通用单元格 */
+/* 通用单元格：固定基线高 28px，所有内容视觉中心对齐 */
 .row-cell {
   display: flex;
   align-items: center;
   font-size: 12px;
   color: #4e5969;
   white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 28px;
+  line-height: 28px;
 }
+/* 空占位：与 el-tag 同高，避免基线偏移 */
 .cell-empty {
   color: #c9cdd4;
+  display: inline-block;
+  line-height: 28px;
+  vertical-align: middle;
 }
-.cell-project { width: 140px; flex-shrink: 0; justify-content: flex-start; }
-.cell-project .project-tag { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cell-owner { width: 88px; flex-shrink: 0; }
-.cell-helper { flex: 1 1 120px; min-width: 90px; max-width: 180px; }
+.cell-project .project-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .helper-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 28px;
 }
-.cell-date { flex: 1 1 145px; min-width: 130px; }
-.cell-complete { width: 96px; flex-shrink: 0; justify-content: flex-start; }
 .complete-late { color: #f53f3f; font-weight: 600; }
-.cell-delay { width: 108px; flex-shrink: 0; justify-content: flex-start; }
-.cell-status { width: 80px; flex-shrink: 0; justify-content: flex-start; }
-.cell-review { width: 70px; flex-shrink: 0; justify-content: flex-start; }
-.cell-progress { flex: 1 1 110px; min-width: 90px; }
-.row-action { flex-shrink: 0; margin-left: auto; }
+.cell-complete .cell-empty,
+.cell-delay .cell-empty,
+.cell-review .cell-empty { color: #d8dde6; }
+
+/* 状态：去掉 el-tag，改用行内 span + 背景色，高度与 cell-empty 一致 = 22px */
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+/* 看板卡内的标签（日常/任务类型/审核等） */
+.row-tag {
+  height: 22px;
+  padding: 0 8px;
+  line-height: 20px;
+  flex-shrink: 0;
+}
+
 .delay-tag {
   font-weight: 600;
+  height: 22px;
+  padding: 0 8px;
+  line-height: 20px;
   animation: pulse 1.8s ease-in-out infinite;
 }
+
+/* 进度：cell 内一行进度条 + 不强制对齐 */
+.progress-bar {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+/* 操作按钮：绝对定位右上，不参与 grid 列对齐 */
+.row-action {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.65; }
