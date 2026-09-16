@@ -70,5 +70,8 @@ public interface ErrorCodeConstants {
     // ========== 任务批量派发/批量导入 040-041 ==========
     ErrorCode TASK_BATCH_EMPTY = new ErrorCode(1_040_000_040, "批量操作的任务列表为空");
     ErrorCode TASK_IMPORT_PROJECT_INVALID = new ErrorCode(1_040_000_041, "目标项目不存在或为模板项目（模板请用模板导入功能）");
+    // 【输出物校验】
+    ErrorCode TASK_DELIVERABLE_REQUIRED = new ErrorCode(1_040_000_042, "该任务要求输出物，请先在任务文档中上传文件后再提交审核");
+    ErrorCode TASK_DELIVERABLE_TOGGLE_DENIED = new ErrorCode(1_040_000_043, "仅任务创建人、项目经理或管理员可修改「要求输出物」开关");
 }
 

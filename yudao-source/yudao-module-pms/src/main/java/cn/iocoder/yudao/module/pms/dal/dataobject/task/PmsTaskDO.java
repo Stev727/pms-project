@@ -109,6 +109,17 @@ public class PmsTaskDO extends TenantBaseDO {
     private String outputRequirement;
 
     /**
+     * 是否要求输出物（勾选后提交审核前必须已上传任务文档）
+     */
+    private Boolean requireDeliverable;
+
+    /**
+     * 输出物文档数（非表字段：列表展示「已交/未交」用，按 taskId 聚合填充）
+     */
+    @TableField(exist = false)
+    private Long deliverableDocCount;
+
+    /**
      * 完成标准
      */
     private String completionStandard;

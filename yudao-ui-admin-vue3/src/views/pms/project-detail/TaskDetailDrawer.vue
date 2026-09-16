@@ -113,6 +113,10 @@
                 <el-form-item label="任务描述">
                   <el-input v-model="editForm.description" type="textarea" :rows="3" />
                 </el-form-item>
+                <el-form-item label="要求输出物">
+                  <el-switch v-model="editForm.requireDeliverable" />
+                  <span style="margin-left: 8px; color: #86909c; font-size: 12px">开启后：提交审核前必须先上传任务文档</span>
+                </el-form-item>
                 <el-form-item label="输出物要求">
                   <el-input v-model="editForm.outputRequirement" type="textarea" :rows="2" />
                 </el-form-item>
@@ -158,6 +162,7 @@
               <el-descriptions-item label="工期">{{ task?.cycle || '-' }}天</el-descriptions-item>
               <el-descriptions-item label="描述" :span="2">{{ task?.description || '-' }}</el-descriptions-item>
               <el-descriptions-item label="输出物要求" :span="2">{{ task?.outputRequirement || '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="要求输出物">{{ task?.requireDeliverable ? '是' : '否' }}</el-descriptions-item>
               <el-descriptions-item label="完成标准" :span="2">{{ task?.completionStandard || '-' }}</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
@@ -981,6 +986,9 @@ const handleFileSelect = async (event: Event) => {
     } as any)
     await loadOutputList()
     message.success('文件上传成功')
+    // 通知外层刷新任务树：列表「是否需要」列的 deliverableDocCount 是打开页面时的聚合快照，
+    // 上传输出物后必须重载，否则列状态（未交/已交）不会变化
+    emit('refresh')
   } catch (e) {
     message.error('文件上传失败: ' + (e instanceof Error ? e.message : '网络错误'))
     console.error('Upload error:', e)

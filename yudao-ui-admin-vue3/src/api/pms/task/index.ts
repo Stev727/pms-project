@@ -40,6 +40,10 @@ export interface TaskVO {
   completionNote?: string  // 完成说明
   outputRequirement?: string
   completionStandard?: string
+  /** 是否要求输出物（提交审核前必须已上传任务文档） */
+  requireDeliverable?: boolean
+  /** 输出物文档数（tree 接口聚合填充，仅勾选任务返回） */
+  deliverableDocCount?: number | string
   mainOwnerId?: number
   helperIds?: string
   deptId?: number

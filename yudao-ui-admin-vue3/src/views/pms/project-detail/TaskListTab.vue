@@ -174,6 +174,41 @@
         </template>
       </el-table-column>
       <!-- #3 派发审核：审核状态列 -->
+      <el-table-column label="是否需要" width="180" align="center">
+        <template #default="{ row }">
+          <span v-if="row.isStageRow" style="color: #c9cdd4">—</span>
+          <div v-else class="deliverable-cell">
+            <el-select
+              :model-value="row.requireDeliverable ? 'Y' : 'N'"
+              size="small"
+              class="deliverable-select"
+              @change="(val) => handleToggleDeliverable(row, val)"
+            >
+              <el-option label="是" value="Y" />
+              <el-option label="否" value="N" />
+            </el-select>
+            <el-tag
+              v-if="row.requireDeliverable"
+              size="small"
+              effect="plain"
+              :type="Number(row.deliverableDocCount) > 0 ? 'success' : 'danger'"
+            >
+              {{ Number(row.deliverableDocCount) > 0 ? '已交' : '未交' }}
+            </el-tag>
+            <el-button
+              v-if="row.requireDeliverable"
+              link
+              type="primary"
+              size="small"
+              class="deliverable-upload-btn"
+              title="上传输出物"
+              @click.stop="handleDeliverableUploadClick(row)"
+            >
+              <Icon icon="ep:upload" />
+            </el-button>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column label="审核" width="100">
         <template #default="{ row }">
           <template v-if="!row.isStageRow">
@@ -238,6 +273,14 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- 输出物行内上传：隐藏文件选择器（复用抽屉同款上传链路） -->
+    <input
+      ref="deliverableFileInput"
+      type="file"
+      style="display: none"
+      @change="handleDeliverableFileSelect"
+    />
 
     <!-- 提交完成确认弹窗（输出物校验） -->
     <el-dialog v-model="submitConfirmVisible" title="提交完成确认" width="480px">
@@ -390,7 +433,8 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { TaskVO } from '@/api/pms/task'
 import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress, exportTask, batchDispatchTask, getTaskImportTemplate, importTaskExcel } from '@/api/pms/task'
 import download from '@/utils/download'
-import { getDocumentList } from '@/api/pms/document'
+import { getDocumentList, createDocument } from '@/api/pms/document'
+import { getAccessToken, getTenantId } from '@/utils/auth'
 import { StageVO, createStage, updateStage, deleteStage } from '@/api/pms/stage'
 import { taskStatusMap, formatDate, calcDelayDays, getReviewStatusLabel, getReviewStatusStyle } from '../pms-utils'
 import { checkPermi } from '@/utils/permission'
@@ -849,6 +893,95 @@ function canTransition(row: TreeRow, action: string): boolean {
   return rule.from.includes(row.completeStatus || '')
 }
 
+// 输出物行内上传（复用 TaskDetailDrawer 同款链路：infra/file/upload → pms/document/create）
+const deliverableFileInput = ref<HTMLInputElement | null>(null)
+const deliverableUploadRow = ref<TreeRow | null>(null)
+
+function handleDeliverableUploadClick(row: TreeRow) {
+  deliverableUploadRow.value = row
+  deliverableFileInput.value?.click()
+}
+
+async function handleDeliverableFileSelect(event: Event) {
+  const target = event.target as HTMLInputElement
+  const row = deliverableUploadRow.value
+  if (!target.files || !target.files.length || !row) return
+  const file = target.files[0]
+  if (file.size > 50 * 1024 * 1024) {
+    ElMessage.error('文件不能超过 50MB')
+    target.value = ''
+    return
+  }
+  ElMessage.info('正在上传...')
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const res = await fetch('/admin-api/infra/file/upload', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + getAccessToken(), 'tenant-id': String(getTenantId() || '') },
+      body: formData
+    })
+    if (!res.ok) {
+      ElMessage.error(`上传失败: HTTP ${res.status}`)
+      return
+    }
+    const text = await res.text()
+    let fileUrl = ''
+    try {
+      const data = JSON.parse(text)
+      if (data.code === 0) {
+        fileUrl = data.data
+      } else {
+        ElMessage.error('上传失败: ' + (data.msg || '未知错误'))
+        return
+      }
+    } catch {
+      if (text && text.startsWith('http')) {
+        fileUrl = text
+      } else {
+        ElMessage.error('上传失败: 服务端返回格式异常')
+        return
+      }
+    }
+    const fileName = file.name
+    const docs = ((await getDocumentList()) as any[]) || []
+    const sameName = docs.filter(d => String(d.taskId) === String(row.taskId) && d.fileName === fileName)
+    const nextVersion = String(Math.max(0, ...sameName.map(d => Number(d.versionNo) || 0)) + 1)
+    await createDocument({
+      projectId: String(row.projectId || ''),
+      taskId: String(row.taskId),
+      fileName,
+      fileType: fileName.split('.').pop()?.toLowerCase() || 'unknown',
+      category: 'deliverable',
+      storagePath: fileUrl,
+      fileSize: file.size,
+      versionNo: nextVersion
+    } as any)
+    row.deliverableDocCount = Number(row.deliverableDocCount || 0) + 1
+    ElMessage.success('输出物上传成功')
+    // 通知外层重载任务树，「是否需要」列计数与提交审核校验同步
+    emit('refresh')
+  } catch (e: any) {
+    ElMessage.error('文件上传失败: ' + (e?.message || '网络错误'))
+  } finally {
+    target.value = ''
+    deliverableUploadRow.value = null
+  }
+}
+
+// 输出物下拉切换（列表内直改；仅任务创建人/项目经理/超管可改，后端强校验）
+async function handleToggleDeliverable(row: TreeRow, val: string) {  const next = val === 'Y'
+  if (next === !!row.requireDeliverable) return
+  try {
+    await updateTask({ taskId: row.taskId, requireDeliverable: next } as any)
+    row.requireDeliverable = next
+    if (!next) row.deliverableDocCount = 0
+    ElMessage.success(next ? '已要求输出物：提交审核前须上传任务文档' : '已取消输出物要求')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '修改失败：仅任务创建人、项目经理或管理员可修改')
+  }
+}
+
 async function handleTransition(row: TreeRow, action: string) {
   const rule = transitionRules[action]
   if (!rule) return
@@ -1225,6 +1358,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 输出物列：下拉 + 已交/未交标签 横向居中 */
+.deliverable-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 24px;
+}
+.deliverable-select {
+  width: 76px;
+}
+:deep(.deliverable-select .el-select__wrapper) {
+  min-height: 24px;
+}
+
 /* 工具栏拆双层：上层（筛选+导出）普通布局；操作行（选中后）独立 sticky */
 .task-toolbar { margin-bottom: 8px; }
 

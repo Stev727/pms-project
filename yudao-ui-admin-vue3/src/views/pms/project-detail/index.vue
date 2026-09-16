@@ -299,6 +299,10 @@
         <el-form-item label="完成标准">
           <el-input v-model="taskForm.completionStandard" type="textarea" :rows="2" placeholder="请输入任务完成标准" />
         </el-form-item>
+        <el-form-item label="要求输出物">
+          <el-switch v-model="taskForm.requireDeliverable" />
+          <span style="margin-left: 8px; color: #86909c; font-size: 12px">开启后：提交审核前必须先在任务文档中上传文件</span>
+        </el-form-item>
         <el-form-item label="输出物要求">
           <el-input v-model="taskForm.outputRequirement" type="textarea" :rows="2" placeholder="请输入输出物要求" />
         </el-form-item>
@@ -417,6 +421,7 @@ const taskForm = reactive({
   description: '',
   outputRequirement: '',
   completionStandard: '',
+  requireDeliverable: false,
   estimatedHours: undefined as number | undefined
 })
 
@@ -679,7 +684,7 @@ const openCreateTaskDialog = async (parentTask?: TaskVO) => {
     priority: 'normal', cycle: 5, planStartDate: project.value?.planStartDate || '',
     planEndDate: '', mainOwnerId: undefined, helperIds: [], isMilestone: false,
     completionStandard: '', estimatedHours: undefined,
-    description: '', outputRequirement: ''
+    description: '', outputRequirement: '', requireDeliverable: false
   })
   // #1 子任务层级：由列表/抽屉的「添加子任务」进入时预填父任务，继承父任务所在阶段
   if (parentTask?.taskId) {

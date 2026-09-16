@@ -7,6 +7,7 @@ import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.dal.dataobject.project.PmsProjectDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
 import cn.iocoder.yudao.module.pms.dal.dataobject.tasklog.PmsTaskLogDO;
+import cn.iocoder.yudao.module.pms.dal.dataobject.document.PmsDocumentDO;
 import org.springframework.jdbc.core.JdbcTemplate;
 import cn.iocoder.yudao.module.pms.dal.mysql.project.ProjectMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
@@ -166,6 +167,8 @@ public class TaskServiceImpl implements TaskService {
 
     @Resource
     private TaskLogMapper taskLogMapper;
+    @Resource
+    private cn.iocoder.yudao.module.pms.dal.mysql.document.DocumentMapper documentMapper;
 
     @Resource
     private SecurityFrameworkService securityFrameworkService;
@@ -460,6 +463,21 @@ public class TaskServiceImpl implements TaskService {
         }
         PmsTaskDO old = requireTask(entity.getTaskId());
 
+        // 【输出物开关权限】仅任务创建人 / 项目经理 / 超管可修改 requireDeliverable，防止责任人自行取消规避校验
+        if (entity.getRequireDeliverable() != null
+                && !Objects.equals(entity.getRequireDeliverable(), old.getRequireDeliverable())) {
+            Long toggleUserId = SecurityFrameworkUtils.getLoginUserId();
+            PmsProjectDO toggleProject = entity.getProjectId() == null
+                    ? null : projectMapper.selectById(entity.getProjectId());
+            boolean toggleAllowed = securityFrameworkService.hasAnyRoles("super_admin")
+                    || (toggleProject != null && Objects.equals(toggleProject.getProjectManagerId(), toggleUserId))
+                    || (old.getCreator() != null && toggleUserId != null
+                        && old.getCreator().equals(String.valueOf(toggleUserId)));
+            if (!toggleAllowed) {
+                throw new ServiceException(ErrorCodeConstants.TASK_DELIVERABLE_TOGGLE_DENIED);
+            }
+        }
+
         // #1：父任务变更（挂到别的任务下 / 从顶层变子任务）需要重新校验层级
         boolean parentChanged = entity.getParentTaskId() != null
                 && !Objects.equals(entity.getParentTaskId(), old.getParentTaskId());
@@ -541,10 +559,12 @@ public class TaskServiceImpl implements TaskService {
 
         // 管理员或模板查询：不过滤用户
         if (isAdmin || "standard_template".equals(projectType)) {
-            return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+            List<PmsTaskDO> tasks = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
                 .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
                 .eqIfPresent(PmsTaskDO::getProjectId, projectId)
                 .orderByAsc(PmsTaskDO::getSortOrder));
+            fillDeliverableDocCount(tasks);
+            return tasks;
         }
 
         // 指定项目查询：判断是否为项目经理
@@ -553,17 +573,21 @@ public class TaskServiceImpl implements TaskService {
             if (project != null) {
                 // 模板项目不过滤
                 if ("standard_template".equals(project.getProjectType())) {
-                    return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    List<PmsTaskDO> tasks = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
                         .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
                         .eqIfPresent(PmsTaskDO::getProjectId, projectId)
                         .orderByAsc(PmsTaskDO::getSortOrder));
+                    fillDeliverableDocCount(tasks);
+                    return tasks;
                 }
                 // 项目经理看全部任务
                 if (project.getProjectManagerId() != null && project.getProjectManagerId().equals(userId)) {
-                    return taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
+                    List<PmsTaskDO> tasks = taskMapper.selectList(new LambdaQueryWrapperX<PmsTaskDO>()
                         .eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId)
                         .eqIfPresent(PmsTaskDO::getProjectId, projectId)
                         .orderByAsc(PmsTaskDO::getSortOrder));
+                    fillDeliverableDocCount(tasks);
+                    return tasks;
                 }
             }
             // 非项目经理：只返回当前用户负责/协助/待审核的任务
@@ -572,7 +596,9 @@ public class TaskServiceImpl implements TaskService {
             wrapper.orderByAsc(PmsTaskDO::getSortOrder);
             appendMyTaskCondition(wrapper, userId);
             // #1：补齐祖先任务，避免子任务在树里断层显示
-            return supplementAncestors(taskMapper.selectList(wrapper));
+            List<PmsTaskDO> tasks = supplementAncestors(taskMapper.selectList(wrapper));
+            fillDeliverableDocCount(tasks);
+            return tasks;
         }
 
         // 全局查询（projectId == null）：项目经理看自己负责项目的全部任务 + 其他项目自己负责/协助的任务
@@ -600,6 +626,7 @@ public class TaskServiceImpl implements TaskService {
             wrapper2.orderByAsc(PmsTaskDO::getSortOrder);
             appendMyTaskCondition(wrapper2, userId);
             result.addAll(taskMapper.selectList(wrapper2));
+            fillDeliverableDocCount(result);
             return result;
         }
 
@@ -608,7 +635,9 @@ public class TaskServiceImpl implements TaskService {
         wrapper.eqIfPresent(PmsTaskDO::getMainOwnerId, mainOwnerId);
         wrapper.orderByAsc(PmsTaskDO::getSortOrder);
         appendMyTaskCondition(wrapper, userId);
-        return taskMapper.selectList(wrapper);
+        List<PmsTaskDO> tasks = taskMapper.selectList(wrapper);
+        fillDeliverableDocCount(tasks);
+        return tasks;
     }
 
     // ==================================================================
@@ -628,7 +657,41 @@ public class TaskServiceImpl implements TaskService {
         if (projectId == null) {
             return new ArrayList<>();
         }
-        return taskMapper.selectListByProjectId(projectId);
+        List<PmsTaskDO> tasks = taskMapper.selectListByProjectId(projectId);
+        fillDeliverableDocCount(tasks);
+        return tasks;
+    }
+
+    /**
+     * 【输出物】为勾选了 requireDeliverable 的任务聚合填充文档数（deleted=0），
+     * 供列表「已交/未交」展示；未勾选的任务不参与查询。
+     */
+    private void fillDeliverableDocCount(List<PmsTaskDO> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return;
+        }
+        List<Long> needIds = new ArrayList<>();
+        for (PmsTaskDO t : tasks) {
+            if (Boolean.TRUE.equals(t.getRequireDeliverable())) {
+                needIds.add(t.getTaskId());
+            }
+        }
+        if (needIds.isEmpty()) {
+            return;
+        }
+        List<PmsDocumentDO> docs = documentMapper.selectList(
+                new LambdaQueryWrapperX<PmsDocumentDO>()
+                        .in(PmsDocumentDO::getTaskId, needIds)
+                        .select(PmsDocumentDO::getTaskId));
+        Map<Long, Long> countMap = new HashMap<>();
+        for (PmsDocumentDO d : docs) {
+            countMap.merge(d.getTaskId(), 1L, Long::sum);
+        }
+        for (PmsTaskDO t : tasks) {
+            if (Boolean.TRUE.equals(t.getRequireDeliverable())) {
+                t.setDeliverableDocCount(countMap.getOrDefault(t.getTaskId(), 0L));
+            }
+        }
     }
 
     @Override
@@ -885,6 +948,14 @@ public class TaskServiceImpl implements TaskService {
         }
         if (!PmsTaskReviewStatusEnum.canSubmit(task.getReviewStatus())) {
             throw new ServiceException(ErrorCodeConstants.TASK_REVIEW_STATUS_INVALID);
+        }
+        // 【输出物校验】勾选「要求输出物」的任务，提交审核前必须已上传任务文档（实时判定，不留脏状态）
+        if (Boolean.TRUE.equals(task.getRequireDeliverable())) {
+            Long docCount = documentMapper.selectCount(
+                    new LambdaQueryWrapperX<PmsDocumentDO>().eq(PmsDocumentDO::getTaskId, taskId));
+            if (docCount == null || docCount == 0) {
+                throw new ServiceException(ErrorCodeConstants.TASK_DELIVERABLE_REQUIRED);
+            }
         }
         PmsProjectDO project = projectMapper.selectById(task.getProjectId());
         String policy = resolveReviewPolicy(task, project);
