@@ -108,22 +108,25 @@
         </div>
       </el-card>
 
-      <!-- C 上周延期 -->
+      <!-- C 历史延期 -->
       <el-card class="section" shadow="never">
         <template #header>
           <div class="section-header">
-            <span class="section-title">⏰ 上周延期</span>
+            <span class="section-title">⏰ 历史延期</span>
             <el-tag type="danger" effect="plain">{{ report.lastWeekDelayed.length }}</el-tag>
-            <span class="section-hint">已启动/流转过但未完成，且计划结束日期早于上周末（{{ report.lastWeekEnd }}）</span>
+            <span class="section-hint">应完成而未完成的全部任务（含未启动），计划结束日期早于上周末（{{ report.lastWeekEnd }}）</span>
           </div>
         </template>
-        <el-empty v-if="report.lastWeekDelayed.length === 0" description="上周无延期任务" :image-size="60" />
+        <el-empty v-if="report.lastWeekDelayed.length === 0" description="无历史延期任务" :image-size="60" />
         <div v-else class="delay-list">
-          <div v-for="d in report.lastWeekDelayed" :key="d.task.taskId" class="delay-row">
+          <div v-for="d in historyDelayedShown" :key="d.task.taskId" class="delay-row">
             <task-board-card :task="d.task" :project-name="d.task.projectName" :current-user-id="currentUserId" @detail="openDetail" />
             <el-tag type="danger" effect="dark" class="delay-badge">
-              逾期 {{ d.overdueDays }} 天（截至 {{ report.lastWeekEnd }}）
+              逾期 {{ d.overdueDays }} 天
             </el-tag>
+          </div>
+          <div v-if="report.lastWeekDelayed.length > 50" class="delay-more">
+            共 {{ report.lastWeekDelayed.length }} 条，当前展示逾期最久的前 50 条
           </div>
         </div>
       </el-card>
@@ -218,6 +221,9 @@ const report = reactive<WeeklyReportVO>({
   lastWeekChanges: []
 })
 
+const historyDelayedShown = computed(
+  () => (report.lastWeekDelayed || []).slice(0, 50)
+)
 const lastWeekDueCompletedCount = computed(
   () => (report.lastWeekDue || []).filter((t: any) => t.completeStatus === 'completed').length
 )
@@ -306,6 +312,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.delay-more {
+  margin-top: 8px;
+  text-align: center;
+  color: #909399;
+  font-size: 12px;
 }
 .delay-row {
   position: relative;

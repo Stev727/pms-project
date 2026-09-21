@@ -2213,11 +2213,11 @@ public class TaskServiceImpl implements TaskService {
                 .orderByAsc(PmsTaskDO::getPlanStartDate));
         vo.setFuturePlans(future);
 
-        // C 上周延期（已启动/流转过但未完成且逾期到上周末）
-        List<String> started = List.of("pending_accept", "in_progress", "completion_pending_review",
-                "pending_review", "delayed", "paused", "rejected");
+        // C 历史延期（应完成而未完成的全部任务，含未启动；截至上周末）
+        List<String> overdueStatuses = List.of("not_started", "pending_accept", "in_progress",
+                "completion_pending_review", "pending_review", "delayed", "rejected", "paused");
         List<PmsTaskDO> delayed = queryOwned(owners, isAll, w -> w
-                .in(PmsTaskDO::getCompleteStatus, started)
+                .in(PmsTaskDO::getCompleteStatus, overdueStatuses)
                 .le(PmsTaskDO::getPlanEndDate, lastWeekEnd));
         List<TaskWeeklyReportVO.DelayedTaskVO> delayedVO = new ArrayList<>();
         for (PmsTaskDO t : delayed) {
@@ -2227,6 +2227,7 @@ public class TaskServiceImpl implements TaskService {
             dv.setOverdueDays(od);
             delayedVO.add(dv);
         }
+        delayedVO.sort((a, b) -> Long.compare(b.getOverdueDays(), a.getOverdueDays()));
         vo.setLastWeekDelayed(delayedVO);
 
         // D 上周动态（方案2：状态/进度变更日志，精确前后值）
