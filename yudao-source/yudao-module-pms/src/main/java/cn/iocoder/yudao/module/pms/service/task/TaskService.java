@@ -216,5 +216,11 @@ public interface TaskService {
      * 任一行校验失败 → 整批不落库，返回失败行明细供生成错误 Excel。
      */
     cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportRespVO importTask(Long projectId, List<cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskImportExcel> rows);
+
+    /**
+     * 批量设置任务输出物开关（模板管理/任务列表批量操作）。
+     * 权限与单条开关一致：超管 / 项目经理 / 任务创建人；任一无权即整批失败。
+     */
+    void batchUpdateDeliverable(List<Long> taskIds, Boolean requireDeliverable);
 }
 

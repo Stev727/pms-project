@@ -57,6 +57,13 @@
             </el-table-column>
             <el-table-column prop="taskName" label="任务名称" min-width="200" />
             <el-table-column prop="roleName" label="负责角色" width="120" />
+            <el-table-column label="输出物" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.requireDeliverable ? 'success' : 'info'" size="small">
+                  {{ row.requireDeliverable ? '必须' : '非必须' }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="cycle" label="工期(天)" width="90" align="center" />
           </el-table>
         </div>
@@ -299,6 +306,13 @@
               </span>
             </template>
           </el-table-column>
+          <el-table-column label="输出物" width="90" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="!row.isStage" :type="row.requireDeliverable ? 'success' : 'info'" size="small">
+                {{ row.requireDeliverable ? '必须' : '非必须' }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="操作" width="120" align="center">
             <template #default="{ row, $index }">
               <template v-if="!row.isStage">
@@ -387,6 +401,9 @@
             </el-form-item>
             <el-form-item label="输出物要求">
               <el-input v-model="taskForm.outputRequirement" type="textarea" :rows="2" />
+            </el-form-item>
+            <el-form-item label="输出物必须">
+              <el-switch v-model="taskForm.requireDeliverable" active-text="必须" inactive-text="非必须" />
             </el-form-item>
           </el-form>
           <template #footer>
@@ -687,6 +704,7 @@ const taskForm = reactive({
   helperIds: [] as number[],
   description: '',
   outputRequirement: '',
+  requireDeliverable: false,
   roleName: ''
 })
 
@@ -916,7 +934,7 @@ function openAddTask() {
     taskName: '', stageId: undefined, stageName: '', taskType: 'design', cycle: 5,
     planStartDate: '', planEndDate: '',
     priority: 'normal', isMilestone: false, mainOwnerId: undefined, helperIds: [],
-    description: '', outputRequirement: '', roleName: ''
+    description: '', outputRequirement: '', requireDeliverable: false, roleName: ''
   })
   showAddTask.value = true
 }
@@ -940,7 +958,8 @@ function editTask(row: any, _index: number) {
     mainOwnerId: taskData.mainOwnerId || undefined,
     helperIds: taskData.helperIds || [],
     description: taskData.description || '',
-    outputRequirement: taskData.outputRequirement || ''
+    outputRequirement: taskData.outputRequirement || '',
+    requireDeliverable: !!taskData.requireDeliverable
   })
   showAddTask.value = true
 }
@@ -977,6 +996,7 @@ function confirmAddTask() {
       helperIds: [...(taskForm.helperIds || [])],
       description: taskForm.description,
       outputRequirement: taskForm.outputRequirement,
+      requireDeliverable: taskForm.requireDeliverable,
       roleName: taskForm.roleName
     })
     // 根据责任人自动带出角色
@@ -1001,6 +1021,7 @@ function confirmAddTask() {
       helperIds: [...(taskForm.helperIds || [])],
       description: taskForm.description,
       outputRequirement: taskForm.outputRequirement,
+      requireDeliverable: taskForm.requireDeliverable,
       roleName: taskForm.roleName
     }
     // 根据责任人自动带出角色
@@ -1015,7 +1036,7 @@ function confirmAddTask() {
     taskName: '', stageId: undefined, stageName: '', taskType: 'design', cycle: 5,
     planStartDate: '', planEndDate: '',
     priority: 'normal', isMilestone: false, mainOwnerId: undefined, helperIds: [],
-    description: '', outputRequirement: ''
+    description: '', outputRequirement: '', requireDeliverable: false
   })
 }
 

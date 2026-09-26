@@ -273,6 +273,9 @@ public class ProjectServiceImpl implements ProjectService {
         task.setSortOrder(template.getSortOrder());
         task.setCompleteStatus("not_started");
         task.setProgress(0);
+        // 模板任务属性随复制带入：输出物开关 + 输出物要求文本
+        task.setRequireDeliverable(template.getRequireDeliverable());
+        task.setOutputRequirement(template.getOutputRequirement());
         return task;
     }
 

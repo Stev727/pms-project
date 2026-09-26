@@ -696,6 +696,32 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void batchUpdateDeliverable(List<Long> taskIds, Boolean requireDeliverable) {
+        if (taskIds == null || taskIds.isEmpty() || requireDeliverable == null) {
+            throw new ServiceException(ErrorCodeConstants.TASK_NOT_EXISTS);
+        }
+        Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
+        boolean isSuperAdmin = securityFrameworkService.hasAnyRoles("super_admin");
+        for (Long taskId : taskIds) {
+            PmsTaskDO old = requireTask(taskId);
+            // 与单条开关一致：仅超管 / 项目经理 / 任务创建人可改
+            PmsProjectDO project = old.getProjectId() == null ? null : projectMapper.selectById(old.getProjectId());
+            boolean allowed = isSuperAdmin
+                    || (project != null && Objects.equals(project.getProjectManagerId(), loginUserId))
+                    || (old.getCreator() != null && loginUserId != null
+                        && old.getCreator().equals(String.valueOf(loginUserId)));
+            if (!allowed) {
+                throw new ServiceException(ErrorCodeConstants.TASK_DELIVERABLE_TOGGLE_DENIED);
+            }
+            PmsTaskDO upd = new PmsTaskDO();
+            upd.setTaskId(taskId);
+            upd.setRequireDeliverable(requireDeliverable);
+            taskMapper.updateById(upd);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateTaskProgress(Long taskId, Integer progress) {
         PmsTaskDO task = requireTask(taskId);
         String oldStatus = task.getCompleteStatus();

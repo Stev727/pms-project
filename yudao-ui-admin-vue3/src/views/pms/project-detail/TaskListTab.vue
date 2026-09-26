@@ -83,6 +83,9 @@
         <el-button v-if="checkPermi(['pms:task:update'])" size="small" type="warning" @click="batchOwnerVisible = true">
           <Icon icon="ep:user" class="mr-4px" />设负责人
         </el-button>
+        <el-button v-if="checkPermi(['pms:task:update'])" size="small" type="success" plain @click="openBatchDeliverable">
+          <Icon icon="ep:set-up" class="mr-4px" />设输出物
+        </el-button>
         <el-button v-if="checkPermi(['pms:task:delete'])" size="small" type="danger" :loading="batchDeleting" @click="handleBatchDelete">
           <Icon icon="ep:delete" class="mr-4px" />删除
         </el-button>
@@ -348,6 +351,21 @@
       </template>
     </el-dialog>
 
+    <!-- 批量设置输出物弹窗 -->
+    <el-dialog v-model="batchDeliverableVisible" title="批量设置输出物" width="420px" :close-on-click-modal="false">
+      <div style="margin-bottom: 12px; font-size: 13px; color: #4e5969">
+        已选 {{ checkedTasks.length }} 个任务，设置「是否需要输出物」：
+      </div>
+      <el-radio-group v-model="batchDeliverableValue">
+        <el-radio value="Y">是（提交审核前必须上传输出物）</el-radio>
+        <el-radio value="N">否</el-radio>
+      </el-radio-group>
+      <template #footer>
+        <el-button @click="batchDeliverableVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchDeliverableSaving" @click="handleBatchSetDeliverable">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 批量派发弹窗 -->
     <el-dialog v-model="batchDispatchVisible" title="批量派发任务" width="720px" :close-on-click-modal="false">
       <template v-if="!batchDispatchResult">
@@ -431,7 +449,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { TaskVO } from '@/api/pms/task'
-import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress, exportTask, batchDispatchTask, getTaskImportTemplate, importTaskExcel } from '@/api/pms/task'
+import { updateTask, dispatchTask, submitTaskCompletion, deleteTask, updateTaskProgress, exportTask, batchDispatchTask, getTaskImportTemplate, importTaskExcel, batchUpdateTaskDeliverable } from '@/api/pms/task'
 import download from '@/utils/download'
 import { getDocumentList, createDocument } from '@/api/pms/document'
 import { getAccessToken, getTenantId } from '@/utils/auth'
@@ -1190,6 +1208,33 @@ const handleBatchSetOwner = async () => {
     : ElMessage.success(`已为 ${okCount} 个任务设置负责人`)
   clearCheck()
   emit('refresh')
+}
+
+// ---------- 批量设置输出物（复用 batch-update-deliverable 端点，一次请求整批落库） ----------
+const batchDeliverableVisible = ref(false)
+const batchDeliverableValue = ref<'Y' | 'N'>('Y')
+const batchDeliverableSaving = ref(false)
+const openBatchDeliverable = () => {
+  batchDeliverableValue.value = 'Y'
+  batchDeliverableVisible.value = true
+}
+const handleBatchSetDeliverable = async () => {
+  if (!checkedTasks.value.length) return
+  batchDeliverableSaving.value = true
+  try {
+    await batchUpdateTaskDeliverable(
+      checkedTasks.value.map((t: any) => t.taskId),
+      batchDeliverableValue.value === 'Y'
+    )
+    ElMessage.success(`已将 ${checkedTasks.value.length} 个任务的输出物设为「${batchDeliverableValue.value === 'Y' ? '必须' : '非必须'}」`)
+    batchDeliverableVisible.value = false
+    clearCheck()
+    emit('refresh')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '批量设置输出物失败')
+  } finally {
+    batchDeliverableSaving.value = false
+  }
 }
 
 // ---------- 批量派发 ----------

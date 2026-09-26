@@ -204,6 +204,13 @@
               <span v-else>-</span>
             </template>
           </el-table-column>
+          <el-table-column label="输出物" width="80" align="center">
+            <template #default="{ row }">
+              <span v-if="row.isStage">-</span>
+              <el-tag v-else-if="row.requireDeliverable" type="success" size="small" effect="plain">是</el-tag>
+              <el-tag v-else type="info" size="small" effect="plain">否</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column label="输出要求" prop="outputRequirement" min-width="200" show-overflow-tooltip />
         </el-table>
       </div>
@@ -269,16 +276,24 @@
                     <Icon icon="ep:plus" /> 添加任务
                   </el-button>
                 </el-tooltip>
+                <el-button type="danger" size="small" plain :disabled="editSelection.length === 0" @click="openBatchDeliverable" v-hasPermi="['pms:template:query']">
+                  <Icon icon="ep:set-up" /> 批量设置输出物
+                </el-button>
+                <span class="text-12px text-gray-400" style="margin-left: 8px">勾选任务行后可批量设置（阶段行不参与）</span>
               </div>
             </div>
             <el-table
+              ref="editTaskTableRef"
               :data="editStageTreeData"
               row-key="taskId"
               :tree-props="{ children: 'children' }"
               border
               default-expand-all
               style="width: 100%"
+              :cell-class-name="editCellClassName"
+              @selection-change="onEditSelectionChange"
             >
+              <el-table-column type="selection" width="42" :selectable="editRowSelectable" />
               <el-table-column label="序号" width="60" align="center">
                 <template #default="{ row }">
                   <span v-if="row.isStage">{{ row.sortOrder ?? '' }}</span>
@@ -297,6 +312,13 @@
                 <template #default="{ row }">
                   <el-tag v-if="row.isCriticalPath" type="danger" size="small">是</el-tag>
                   <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="输出物" width="80" align="center">
+                <template #default="{ row }">
+                  <span v-if="row.isStage">-</span>
+                  <el-tag v-else-if="row.requireDeliverable" type="success" size="small" effect="plain">是</el-tag>
+                  <el-tag v-else type="info" size="small" effect="plain">否</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="230" align="center">
@@ -342,6 +364,19 @@
       </template>
     </Dialog>
 
+    <!-- 批量设置输出物弹窗 -->
+    <Dialog v-model="batchDeliverableVisible" title="批量设置输出物" width="380px">
+      <div class="text-14px">已选 {{ editSelection.length }} 个任务，设置输出物是否必须：</div>
+      <el-radio-group v-model="batchDeliverableValue" class="mt-12px">
+        <el-radio value="Y">是（提交审核前必须上传输出物）</el-radio>
+        <el-radio value="N">否</el-radio>
+      </el-radio-group>
+      <template #footer>
+        <el-button @click="batchDeliverableVisible = false">取消</el-button>
+        <el-button type="primary" @click="applyBatchDeliverable">应用</el-button>
+      </template>
+    </Dialog>
+
     <!-- 编辑任务/阶段弹窗 -->
     <Dialog v-model="taskEditVisible" :title="taskEditForm.isStage ? '编辑阶段' : '编辑任务'" width="560px">
       <el-form :model="taskEditForm" label-width="90px">
@@ -358,6 +393,9 @@
         </el-form-item>
         <el-form-item v-if="!taskEditForm.isStage" label="输出要求">
           <el-input v-model="taskEditForm.outputRequirement" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item v-if="!taskEditForm.isStage" label="输出物">
+          <el-switch v-model="taskEditForm.requireDeliverable" active-text="必须" inactive-text="不要求" inline-prompt />
         </el-form-item>
         <el-form-item v-if="!taskEditForm.isStage" label="里程碑">
           <el-switch v-model="taskEditForm.isMilestone" />
@@ -392,7 +430,7 @@
 
 <script setup lang="ts">
 import { getProjectList, updateProject, createProject, deleteProject, getTemplateUsageCount, ProjectVO } from '@/api/pms/project'
-import { getTaskList, updateTask, createTask, deleteTask, TaskVO } from '@/api/pms/task'
+import { getTaskList, updateTask, createTask, deleteTask, batchUpdateTaskDeliverable, TaskVO } from '@/api/pms/task'
 import { getStageList, createStage, updateStage, deleteStage, StageVO } from '@/api/pms/stage'
 import { dateFormatter } from '@/utils/formatTime'
 import { getSimpleDeptList } from '@/api/system/dept'
@@ -445,6 +483,48 @@ const editTaskList = ref<TaskVO[]>([])
 const editStageList = ref<StageVO[]>([])
 const editDeletedTaskIds = ref<(string | number)[]>([])
 const editDeletedStageIds = ref<(string | number)[]>([])
+
+// 批量设置输出物（本地修改，点「保存」后随 saveEdit 统一落库）
+const editTaskTableRef = ref<any>()
+const editSelection = ref<any[]>([])
+const editRowSelectable = (row: any) => !row.isStage
+// 阶段行不显示勾选框（输出物是任务级属性，仅任务行可勾选），避免「灰色勾不上」造成误解
+const editCellClassName = ({ row, column }: any) => {
+  if (row.isStage && column.type === 'selection') return 'stage-sel-cell'
+  return ''
+}
+const onEditSelectionChange = (rows: any[]) => { editSelection.value = rows }
+const batchDeliverableVisible = ref(false)
+const batchDeliverableValue = ref<'Y' | 'N'>('Y')
+const openBatchDeliverable = () => {
+  batchDeliverableValue.value = 'Y'
+  batchDeliverableVisible.value = true
+}
+const applyBatchDeliverable = async () => {
+  const target = batchDeliverableValue.value === 'Y'
+  // 真实任务走批量端点即时落库；本弹窗新建（未保存）的任务只能本地应用，随「保存」落库
+  const realIds = editSelection.value
+    .filter(r => r.taskId && !String(r.taskId).startsWith('new_'))
+    .map(r => String(r.taskId))
+  const newCount = editSelection.value.length - realIds.length
+  try {
+    if (realIds.length > 0) {
+      await batchUpdateTaskDeliverable(realIds, target)
+    }
+    let n = 0
+    for (const row of editSelection.value) {
+      const t = editTaskList.value.find(x => String(x.taskId) === String(row.taskId))
+      if (t) {
+        t.requireDeliverable = target
+        n++
+      }
+    }
+    batchDeliverableVisible.value = false
+    message.success(`已设置 ${n} 个任务${newCount > 0 ? `（含 ${newCount} 个未保存新任务，点击「保存」后生效）` : ''}`)
+  } catch (e: any) {
+    message.error(e?.msg || '批量设置失败，请重试')
+  }
+}
 
 // 新增模板相关
 const createVisible = ref(false)
@@ -514,6 +594,7 @@ const taskEditForm = reactive<any>({
   taskType: 'design',
   cycle: 5,
   outputRequirement: '',
+  requireDeliverable: false,
   isMilestone: false,
   isCriticalPath: false,
   isStage: false,
@@ -985,6 +1066,7 @@ const openEditTask = (row: any) => {
     taskType: row.taskType || 'design',
     cycle: row.cycle || 5,
     outputRequirement: row.outputRequirement || '',
+    requireDeliverable: !!row.requireDeliverable,
     isMilestone: row.isMilestone || false,
     isCriticalPath: row.isCriticalPath || false,
     isStage: false,
@@ -1015,6 +1097,7 @@ const openAddTask = () => {
     taskType: 'design',
     cycle: 5,
     outputRequirement: '',
+    requireDeliverable: false,
     isMilestone: false,
     isCriticalPath: false,
     isStage: false,
@@ -1052,6 +1135,7 @@ const saveTaskEdit = () => {
       taskType: taskEditForm.taskType,
       cycle: taskEditForm.cycle,
       outputRequirement: taskEditForm.outputRequirement,
+      requireDeliverable: taskEditForm.requireDeliverable,
       isMilestone: taskEditForm.isMilestone,
       isCriticalPath: taskEditForm.isCriticalPath,
       sortOrder: editTaskList.value.length + 1
@@ -1065,6 +1149,7 @@ const saveTaskEdit = () => {
         taskType: taskEditForm.taskType,
         cycle: taskEditForm.cycle,
         outputRequirement: taskEditForm.outputRequirement,
+        requireDeliverable: taskEditForm.requireDeliverable,
         isMilestone: taskEditForm.isMilestone,
         isCriticalPath: taskEditForm.isCriticalPath
       })
@@ -1185,6 +1270,11 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
+// 阶段行勾选框隐藏（el-table 内部 DOM 需 :deep 穿透 scoped）
+:deep(.el-table .stage-sel-cell .el-checkbox) {
+  visibility: hidden;
+}
+
 .pms-template {
   .template-name-link {
     color: var(--el-color-primary);

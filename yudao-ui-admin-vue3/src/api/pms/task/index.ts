@@ -80,6 +80,10 @@ export const updateTask = (data: TaskVO) => {
   return request.put({ url: '/pms/task/update', data })
 }
 
+export const batchUpdateTaskDeliverable = (taskIds: (string | number)[], requireDeliverable: boolean) => {
+  return request.put({ url: '/pms/task/batch-update-deliverable', data: { taskIds, requireDeliverable } })
+}
+
 export const dispatchTask = (taskId: string | number) => {
   return request.post({ url: '/pms/task/dispatch', params: { taskId } })
 }

@@ -8,6 +8,7 @@ import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBoardScopeVO;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskExportExcel;
 import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskWeeklyReportVO;
+import cn.iocoder.yudao.module.pms.controller.admin.task.vo.TaskBatchDeliverableReqVO;
 import cn.iocoder.yudao.module.pms.service.task.TaskService;
 import cn.iocoder.yudao.module.pms.enums.PmsPermKeyEnum;
 import cn.iocoder.yudao.module.pms.service.projectpermission.ProjectPermissionService;
@@ -190,6 +191,14 @@ public class TaskController {
     public CommonResult<Boolean> update(@RequestBody PmsTaskDO entity) {
         requireProjectPerm(entity.getProjectId(), PmsPermKeyEnum.TASK_EDIT.getKey());
         taskService.updateTask(entity);
+        return success(true);
+    }
+
+    @PutMapping("/batch-update-deliverable")
+    @Operation(summary = "批量设置任务输出物开关（模板管理/任务列表批量操作）")
+    @PreAuthorize("@ss.hasPermission('pms:task:update') or @ss.hasPermission('pms:template:query')")
+    public CommonResult<Boolean> batchUpdateDeliverable(@RequestBody TaskBatchDeliverableReqVO reqVO) {
+        taskService.batchUpdateDeliverable(reqVO.getTaskIds(), reqVO.getRequireDeliverable());
         return success(true);
     }
 

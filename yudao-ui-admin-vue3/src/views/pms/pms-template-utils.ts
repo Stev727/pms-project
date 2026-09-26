@@ -2,7 +2,8 @@ type TemplateTask = Record<string, any>
 type TemplateStage = { stageId?: string | number; stageName?: string }
 
 /**
- * 新项目只继承模板的阶段归属和任务名称；执行数据必须由新项目重新填写。
+ * 新项目继承模板的阶段归属、任务名称与输出物要求（outputRequirement / requireDeliverable）；
+ * 执行数据（日期、负责人、进度等）必须由新项目重新填写。
  */
 export function buildTasksFromTemplate(
   templateTasks: TemplateTask[],
@@ -27,7 +28,8 @@ export function buildTasksFromTemplate(
       progress: 0,
       completeStatus: 'not_started',
       description: '',
-      outputRequirement: '',
+      outputRequirement: task.outputRequirement || '',
+      requireDeliverable: !!task.requireDeliverable,
       roleName: ''
     }
   })
@@ -48,6 +50,7 @@ export function buildTaskCreatePayload(task: TemplateTask) {
       : null,
     description: task.description || '',
     outputRequirement: task.outputRequirement || '',
+    requireDeliverable: !!task.requireDeliverable,
     planStartDate: task.planStartDate || undefined,
     planEndDate: task.planEndDate || undefined,
     progress: 0,
