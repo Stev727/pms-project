@@ -195,7 +195,12 @@ const onQuery = async () => {
   pageNo.value = 1
   try {
     await ensureUsersLoaded()
-    const params: { date: string; deptId?: number | string; userId?: number | string } = { date: baseDate.value }
+    const params: { date: string; deptId?: number | string; userId?: number | string; pageNo?: number; pageSize?: number } = {
+      date: baseDate.value,
+      pageNo: 1,
+      pageSize: 500
+      // 拉全量（后端上限 500）本地分页——避免「区块顺序+小分页」导致首页只见第一个分类
+    }
     if (selectedDept.value) {
       params.deptId = Number(selectedDept.value)
     } else if (selectedUser.value) {
