@@ -102,11 +102,6 @@
             <el-tag v-if="row.overdueDays" type="danger" effect="dark" size="small">{{ row.overdueDays }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="operationTypeLabel" label="操作" width="100" />
-        <el-table-column prop="beforeValue" label="变更前" width="120" show-overflow-tooltip />
-        <el-table-column prop="afterValue" label="变更后" width="120" show-overflow-tooltip />
-        <el-table-column prop="operationTime" label="操作时间" width="140" />
-        <el-table-column prop="operatorName" label="操作人" width="100" />
       </el-table>
 
       <div class="flex justify-end mt-12px">

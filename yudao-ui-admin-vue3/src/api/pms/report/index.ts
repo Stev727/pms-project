@@ -8,7 +8,7 @@ import request from '@/config/axios'
  * 与现有「周报看板」完全独立，不复用 weekly-report API。
  */
 
-/** 周报报表行 VO（前端表格 + Excel 通用结构） */
+/** 周报报表行 VO（前端表格 + Excel 通用结构，4 分类任务行） */
 export interface WeeklyReportRowVO {
   category?: string
   projectName?: string
@@ -21,12 +21,6 @@ export interface WeeklyReportRowVO {
   completeStatusLabel?: string
   progress?: number
   overdueDays?: number
-  operationType?: string
-  operationTypeLabel?: string
-  beforeValue?: string
-  afterValue?: string
-  operationTime?: string
-  operatorName?: string
   taskId?: number
 }
 

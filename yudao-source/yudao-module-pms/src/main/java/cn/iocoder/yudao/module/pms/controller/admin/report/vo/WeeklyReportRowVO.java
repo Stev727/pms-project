@@ -6,13 +6,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 /**
  * 周报报表行 VO（前端表格 + Excel 通用）
  *
- * 5 区块合并到一行 + 一列「分类」区分。
- * 不适用的字段留空。
+ * 4 分类任务行 + 一列「分类」区分（时间段口径）。
  */
 @Data
 @Builder
@@ -20,7 +18,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 public class WeeklyReportRowVO {
 
-    /** 分类：📌上周应完成 / 📋本周计划 / 🗓️未来计划 / ⏰历史延期 / 🔄上周动态 */
+    /** 分类：📌时间段内应完成 / 📋进行中 / 🗓️后续计划 / ⏰已延期 */
     private String category;
 
     /** 项目名 */
@@ -50,26 +48,8 @@ public class WeeklyReportRowVO {
     /** 进度 0-100 */
     private Integer progress;
 
-    /** 逾期天数（仅历史延期分类） */
+    /** 逾期天数（仅已延期分类） */
     private Long overdueDays;
-
-    /** 操作类型（仅上周动态分类）：status_change / progress_update */
-    private String operationType;
-
-    /** 操作类型中文标签 */
-    private String operationTypeLabel;
-
-    /** 变更前值 */
-    private String beforeValue;
-
-    /** 变更后值 */
-    private String afterValue;
-
-    /** 操作时间 */
-    private LocalDateTime operationTime;
-
-    /** 操作人 */
-    private String operatorName;
 
     /** 任务ID（前端点击行打开详情用） */
     private Long taskId;

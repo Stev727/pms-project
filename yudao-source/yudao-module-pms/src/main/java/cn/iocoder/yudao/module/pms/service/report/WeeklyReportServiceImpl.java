@@ -4,9 +4,7 @@ import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
 import cn.iocoder.yudao.module.pms.controller.admin.report.vo.*;
 import cn.iocoder.yudao.module.pms.dal.dataobject.task.PmsTaskDO;
-import cn.iocoder.yudao.module.pms.dal.dataobject.tasklog.PmsTaskLogDO;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
-import cn.iocoder.yudao.module.pms.dal.mysql.tasklog.TaskLogMapper;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
 import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
 import cn.iocoder.yudao.module.system.api.user.AdminUserApi;
@@ -21,7 +19,6 @@ import org.springframework.stereotype.Service;
 import javax.annotation.Resource;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -40,8 +37,6 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     @Resource
     private TaskMapper taskMapper;
     @Resource
-    private TaskLogMapper taskLogMapper;
-    @Resource
     private DeptApi deptApi;
     @Resource
     private AdminUserApi adminUserApi;
@@ -49,9 +44,6 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     private PmsDataScopeService pmsDataScopeService;
     @Autowired(required = false)
     private JdbcTemplate jdbcTemplate;
-
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     /** 完成状态 → 中文标签 */
     private static final Map<String, String> COMPLETE_STATUS_LABEL = new HashMap<>();
@@ -67,19 +59,13 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         COMPLETE_STATUS_LABEL.put("paused", "已暂停");
     }
 
-    /** 操作类型 → 中文标签 */
-    private static final Map<String, String> CHANGE_OP_LABEL = new HashMap<>();
-    static {
-        CHANGE_OP_LABEL.put("status_change", "状态变更");
-        CHANGE_OP_LABEL.put("progress_update", "进度更新");
-    }
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     /** 区块分类常量（时间段口径 [S=startDate, E=endDate]） */
     private static final String CAT_DUE = "📌时间段内应完成";
     private static final String CAT_IN_PROGRESS = "📋进行中";
     private static final String CAT_UPCOMING = "🗓️后续计划";
     private static final String CAT_OVERDUE = "⏰已延期";
-    private static final String CAT_CHANGES = "🔄时间段内动态";
 
     // ==================== 公共接口 ====================
 
@@ -225,11 +211,6 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
                     .completeStatusLabel(r.getCompleteStatusLabel())
                     .progress(r.getProgress())
                     .overdueDays(r.getOverdueDays())
-                    .operationTypeLabel(r.getOperationTypeLabel())
-                    .beforeValue(r.getBeforeValue())
-                    .afterValue(r.getAfterValue())
-                    .operationTime(r.getOperationTime() == null ? "" : r.getOperationTime().format(DT_FMT))
-                    .operatorName(r.getOperatorName())
                     .build());
         }
 
@@ -299,17 +280,11 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         }
         delayedPairs.sort((a, b) -> Long.compare(b.overdueDays, a.overdueDays));
 
-        // E 时间段内动态：变更操作时间在 [S 00:00, E 23:59:59]
-        List<ChangeTriple> changes = buildChangeLogRows(owners, isAll, startDate, endDate);
-
         // 注入项目名
         fillProjectName(due);
         fillProjectName(plan);
         fillProjectName(future);
         delayedPairs.forEach(p -> fillProjectName(Collections.singletonList(p.task)));
-        changes.forEach(c -> {
-            if (c.taskProjectId != null) c.taskProjectName = resolveProjectName(c.taskProjectId);
-        });
 
         // 收集 ownerId 用于昵称解析
         Set<Long> ownerIds = new HashSet<>();
@@ -337,9 +312,6 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         }
         for (DelayedPair p : delayedPairs) {
             rows.add(toTaskRow(CAT_OVERDUE, p.task, p.overdueDays, userMap));
-        }
-        for (ChangeTriple c : changes) {
-            rows.add(toChangeRow(c));
         }
         return rows;
     }
@@ -406,74 +378,7 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
                 .build();
     }
 
-    private WeeklyReportRowVO toChangeRow(ChangeTriple c) {
-        return WeeklyReportRowVO.builder()
-                .category(CAT_CHANGES)
-                .projectName(c.taskProjectName)
-                .taskName(c.taskName)
-                .operationType(c.operationType)
-                .operationTypeLabel(labelOf(CHANGE_OP_LABEL, c.operationType))
-                .beforeValue(c.beforeValue)
-                .afterValue(c.afterValue)
-                .operationTime(c.operationTime)
-                .operatorName(c.operatorName)
-                .taskId(c.taskId)
-                .build();
-    }
-
-    // ==================== 时间段内动态构建 ====================
-
-    private List<ChangeTriple> buildChangeLogRows(List<Long> owners, boolean isAll,
-                                                  LocalDate startDate, LocalDate endDate) {
-        LambdaQueryWrapperX<PmsTaskDO> tw = new LambdaQueryWrapperX<>();
-        tw.select(PmsTaskDO::getTaskId, PmsTaskDO::getTaskName, PmsTaskDO::getProjectId,
-                PmsTaskDO::getMainOwnerId, PmsTaskDO::getPlanEndDate);
-        if (!isAll && owners != null) {
-            tw.in(PmsTaskDO::getMainOwnerId, owners);
-        }
-        List<PmsTaskDO> ownedTasks = taskMapper.selectList(tw);
-        if (ownedTasks.isEmpty()) {
-            return new ArrayList<>();
-        }
-        Map<Long, PmsTaskDO> taskMap = ownedTasks.stream()
-                .collect(Collectors.toMap(PmsTaskDO::getTaskId, t -> t, (a, b) -> a));
-        List<Long> taskIds = new ArrayList<>(taskMap.keySet());
-
-        List<PmsTaskLogDO> logs = taskLogMapper.selectList(new LambdaQueryWrapperX<PmsTaskLogDO>()
-                .in(PmsTaskLogDO::getTaskId, taskIds)
-                .in(PmsTaskLogDO::getOperationType, List.of("status_change", "progress_update"))
-                .between(PmsTaskLogDO::getOperationTime, startDate.atStartOfDay(), endDate.atTime(23, 59, 59))
-                .orderByAsc(PmsTaskLogDO::getOperationTime));
-
-        List<ChangeTriple> result = new ArrayList<>();
-        for (PmsTaskLogDO lg : logs) {
-            PmsTaskDO t = taskMap.get(lg.getTaskId());
-            if (t == null) continue;
-            ChangeTriple ct = new ChangeTriple();
-            ct.taskId = t.getTaskId();
-            ct.taskName = t.getTaskName();
-            ct.taskProjectId = t.getProjectId();
-            ct.operationType = lg.getOperationType();
-            ct.beforeValue = lg.getBeforeValue();
-            ct.afterValue = lg.getAfterValue();
-            ct.operationTime = lg.getOperationTime();
-            ct.operatorName = lg.getOperatorName();
-            result.add(ct);
-        }
-        return result;
-    }
-
-    private static class ChangeTriple {
-        Long taskId;
-        String taskName;
-        Long taskProjectId;
-        String taskProjectName;
-        String operationType;
-        String beforeValue;
-        String afterValue;
-        LocalDateTime operationTime;
-        String operatorName;
-    }
+    // ==================== 内部结构 ====================
 
     private static class DelayedPair {
         PmsTaskDO task;

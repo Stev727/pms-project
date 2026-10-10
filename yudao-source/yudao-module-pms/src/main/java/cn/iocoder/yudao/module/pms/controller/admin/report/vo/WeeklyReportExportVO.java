@@ -9,8 +9,7 @@ import lombok.NoArgsConstructor;
 /**
  * 周报报表导出 Excel VO
  *
- * 单 Sheet：所有任务 + 周报动态合并到一张表，用「分类」列区分。
- * 不适用的列留空，避免阅读时跨多个 Sheet 切换。
+ * 单 Sheet：4 分类任务行合并到一张表，用「分类」列区分。
  */
 @Data
 @Builder
@@ -47,19 +46,4 @@ public class WeeklyReportExportVO {
 
     @ExcelProperty("逾期天数")
     private Long overdueDays;
-
-    @ExcelProperty("操作类型")
-    private String operationTypeLabel;
-
-    @ExcelProperty("变更前")
-    private String beforeValue;
-
-    @ExcelProperty("变更后")
-    private String afterValue;
-
-    @ExcelProperty("操作时间")
-    private String operationTime;
-
-    @ExcelProperty("操作人")
-    private String operatorName;
 }
