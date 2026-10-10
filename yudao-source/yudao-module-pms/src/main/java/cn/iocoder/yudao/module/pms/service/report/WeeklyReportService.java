@@ -26,14 +26,16 @@ public interface WeeklyReportService {
     List<WeeklyReportRowVO> getWeeklyReportPage(WeeklyReportPageReqVO req);
 
     /**
-     * 导出周报报表 Excel（5 区块扁平化为 List<ExportVO>，单 Sheet）
+     * 导出周报报表 Excel（5 区块扁平化为 List<ExportVO>，单 Sheet，统计时间段口径）
      *
-     * @param date   基准日期（为空=今天）
-     * @param deptId 部门ID（包含下级）；为空时按 userId 走
-     * @param userId 人员ID（0=全部仅管理员；空=本人）
+     * @param startDate 时间段开始（为空=本周一）
+     * @param endDate   时间段结束（为空=今天）
+     * @param deptId    部门ID（包含下级）；为空时按 userId 走
+     * @param userId    人员ID（0=全部仅管理员；空=本人）
      * @return 导出结果（含文件名 + 数据）
      */
-    WeeklyReportExportResult exportWeeklyReport(java.time.LocalDate date, Long deptId, Long userId);
+    WeeklyReportExportResult exportWeeklyReport(java.time.LocalDate startDate, java.time.LocalDate endDate,
+                                                Long deptId, Long userId);
 
     /**
      * 获取当前用户可见部门列表 + 登录人所在部门（前端筛选器用）。

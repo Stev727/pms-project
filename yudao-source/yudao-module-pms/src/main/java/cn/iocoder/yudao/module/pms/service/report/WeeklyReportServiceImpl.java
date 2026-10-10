@@ -74,19 +74,29 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         CHANGE_OP_LABEL.put("progress_update", "进度更新");
     }
 
-    /** 区块分类常量 */
-    private static final String CAT_LAST_WEEK_DUE = "📌上周应完成";
-    private static final String CAT_THIS_WEEK_PLAN = "📋本周计划";
-    private static final String CAT_FUTURE_PLAN = "🗓️未来计划";
-    private static final String CAT_DELAYED = "⏰历史延期";
-    private static final String CAT_CHANGES = "🔄上周动态";
+    /** 区块分类常量（时间段口径 [S=startDate, E=endDate]） */
+    private static final String CAT_DUE = "📌时间段内应完成";
+    private static final String CAT_IN_PROGRESS = "📋进行中";
+    private static final String CAT_UPCOMING = "🗓️后续计划";
+    private static final String CAT_OVERDUE = "⏰已延期";
+    private static final String CAT_CHANGES = "🔄时间段内动态";
 
     // ==================== 公共接口 ====================
 
     @Override
     public List<WeeklyReportRowVO> getWeeklyReportPage(WeeklyReportPageReqVO req) {
-        LocalDate d = (req.getDate() == null) ? LocalDate.now() : req.getDate();
-        List<WeeklyReportRowVO> all = buildAllRows(d, req.getDeptId(), req.getUserId());
+        LocalDate startDate = req.getStartDate();
+        LocalDate endDate = req.getEndDate();
+        if (startDate == null) {
+            startDate = LocalDate.now().with(DayOfWeek.MONDAY);
+        }
+        if (endDate == null) {
+            endDate = LocalDate.now();
+        }
+        if (endDate.isBefore(startDate)) {
+            endDate = startDate;
+        }
+        List<WeeklyReportRowVO> all = buildAllRows(startDate, endDate, req.getDeptId(), req.getUserId());
 
         // 内存分页（数据量较小；如有需要可改为 SQL 分页）
         int pageNo = Math.max(1, req.getPageNo() == null ? 1 : req.getPageNo());
@@ -190,9 +200,17 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
     }
 
     @Override
-    public WeeklyReportExportResult exportWeeklyReport(LocalDate date, Long deptId, Long userId) {
-        LocalDate d = (date == null) ? LocalDate.now() : date;
-        List<WeeklyReportRowVO> all = buildAllRows(d, deptId, userId);
+    public WeeklyReportExportResult exportWeeklyReport(LocalDate startDate, LocalDate endDate, Long deptId, Long userId) {
+        if (startDate == null) {
+            startDate = LocalDate.now().with(DayOfWeek.MONDAY);
+        }
+        if (endDate == null) {
+            endDate = LocalDate.now();
+        }
+        if (endDate.isBefore(startDate)) {
+            endDate = startDate;
+        }
+        List<WeeklyReportRowVO> all = buildAllRows(startDate, endDate, deptId, userId);
 
         List<WeeklyReportExportVO> rows = new ArrayList<>();
         for (WeeklyReportRowVO r : all) {
@@ -216,7 +234,8 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         }
 
         String deptLabel = resolveDeptLabel(deptId);
-        String fileName = "周报报表_" + deptLabel + "_" + d.format(DATE_FMT) + ".xlsx";
+        String fileName = "周报报表_" + deptLabel + "_"
+                + startDate.format(DATE_FMT) + "_" + endDate.format(DATE_FMT) + ".xlsx";
 
         return WeeklyReportExportResult.builder()
                 .fileName(fileName)
@@ -226,23 +245,19 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
 
     // ==================== 核心：构建所有行 ====================
 
-    private List<WeeklyReportRowVO> buildAllRows(LocalDate d, Long deptId, Long userId) {
+    private List<WeeklyReportRowVO> buildAllRows(LocalDate startDate, LocalDate endDate, Long deptId, Long userId) {
         Long loginUserId = SecurityFrameworkUtils.getLoginUserId();
         BoardScope scope = resolveBoardScope(loginUserId);
         List<Long> owners = resolveOwners(userId, deptId, scope);
         boolean isAll = (owners == null);
 
-        LocalDate weekStart = d.with(DayOfWeek.MONDAY);
-        LocalDate weekEnd = weekStart.plusDays(6);
-        LocalDate lastWeekStart = weekStart.minusDays(7);
-        LocalDate lastWeekEnd = weekStart.minusDays(1);
         LocalDate today = LocalDate.now();
 
-        // 5 区块原始数据
-        // A 上周应完成
+        // 5 区块原始数据（时间段口径 [startDate, endDate]，方案A：应完成=计划结束日期落在时间段内）
+        // A 时间段内应完成：plan_end 在 [S, E]
         List<PmsTaskDO> due = queryOwned(owners, isAll, w -> w
                 .isNotNull(PmsTaskDO::getPlanEndDate)
-                .between(PmsTaskDO::getPlanEndDate, lastWeekStart, lastWeekEnd));
+                .between(PmsTaskDO::getPlanEndDate, startDate, endDate));
         due.sort((a, b) -> {
             boolean ca = "completed".equals(a.getCompleteStatus());
             boolean cb = "completed".equals(b.getCompleteStatus());
@@ -257,26 +272,26 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
             return pa.compareTo(pb);
         });
 
-        // B 本周计划
+        // B 进行中：未完成 + 计划窗口与 [S, E] 重叠
         List<String> notCompleted = List.of("not_started", "pending_accept", "in_progress",
                 "completion_pending_review", "pending_review", "delayed", "rejected", "paused");
         List<PmsTaskDO> plan = queryOwned(owners, isAll, w -> w
                 .in(PmsTaskDO::getCompleteStatus, notCompleted)
                 .isNotNull(PmsTaskDO::getPlanStartDate)
-                .le(PmsTaskDO::getPlanStartDate, weekEnd)
-                .and(ww -> ww.isNull(PmsTaskDO::getPlanEndDate).or().ge(PmsTaskDO::getPlanEndDate, weekStart)));
+                .le(PmsTaskDO::getPlanStartDate, endDate)
+                .and(ww -> ww.isNull(PmsTaskDO::getPlanEndDate).or().ge(PmsTaskDO::getPlanEndDate, startDate)));
 
-        // E 未来计划
+        // C 后续计划：未完成 + plan_start > E
         List<PmsTaskDO> future = queryOwned(owners, isAll, w -> w
                 .in(PmsTaskDO::getCompleteStatus, notCompleted)
                 .isNotNull(PmsTaskDO::getPlanStartDate)
-                .gt(PmsTaskDO::getPlanStartDate, weekEnd)
+                .gt(PmsTaskDO::getPlanStartDate, endDate)
                 .orderByAsc(PmsTaskDO::getPlanStartDate));
 
-        // C 历史延期
+        // D 已延期：未完成 + plan_end < S
         List<PmsTaskDO> delayed = queryOwned(owners, isAll, w -> w
                 .in(PmsTaskDO::getCompleteStatus, notCompleted)
-                .le(PmsTaskDO::getPlanEndDate, lastWeekEnd));
+                .lt(PmsTaskDO::getPlanEndDate, startDate));
         List<DelayedPair> delayedPairs = new ArrayList<>();
         for (PmsTaskDO t : delayed) {
             long od = t.getPlanEndDate() == null ? 0 : ChronoUnit.DAYS.between(t.getPlanEndDate(), today);
@@ -284,8 +299,8 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         }
         delayedPairs.sort((a, b) -> Long.compare(b.overdueDays, a.overdueDays));
 
-        // D 上周动态
-        List<ChangeTriple> changes = buildChangeLogRows(owners, isAll, lastWeekStart, lastWeekEnd);
+        // E 时间段内动态：变更操作时间在 [S 00:00, E 23:59:59]
+        List<ChangeTriple> changes = buildChangeLogRows(owners, isAll, startDate, endDate);
 
         // 注入项目名
         fillProjectName(due);
@@ -312,16 +327,16 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         // 扁平化为行 VO
         List<WeeklyReportRowVO> rows = new ArrayList<>();
         for (PmsTaskDO t : due) {
-            rows.add(toTaskRow(CAT_LAST_WEEK_DUE, t, null, userMap));
+            rows.add(toTaskRow(CAT_DUE, t, null, userMap));
         }
         for (PmsTaskDO t : plan) {
-            rows.add(toTaskRow(CAT_THIS_WEEK_PLAN, t, null, userMap));
+            rows.add(toTaskRow(CAT_IN_PROGRESS, t, null, userMap));
         }
         for (PmsTaskDO t : future) {
-            rows.add(toTaskRow(CAT_FUTURE_PLAN, t, null, userMap));
+            rows.add(toTaskRow(CAT_UPCOMING, t, null, userMap));
         }
         for (DelayedPair p : delayedPairs) {
-            rows.add(toTaskRow(CAT_DELAYED, p.task, p.overdueDays, userMap));
+            rows.add(toTaskRow(CAT_OVERDUE, p.task, p.overdueDays, userMap));
         }
         for (ChangeTriple c : changes) {
             rows.add(toChangeRow(c));
@@ -406,10 +421,10 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
                 .build();
     }
 
-    // ==================== 上周动态构建 ====================
+    // ==================== 时间段内动态构建 ====================
 
     private List<ChangeTriple> buildChangeLogRows(List<Long> owners, boolean isAll,
-                                                  LocalDate lastWeekStart, LocalDate lastWeekEnd) {
+                                                  LocalDate startDate, LocalDate endDate) {
         LambdaQueryWrapperX<PmsTaskDO> tw = new LambdaQueryWrapperX<>();
         tw.select(PmsTaskDO::getTaskId, PmsTaskDO::getTaskName, PmsTaskDO::getProjectId,
                 PmsTaskDO::getMainOwnerId, PmsTaskDO::getPlanEndDate);
@@ -427,7 +442,7 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
         List<PmsTaskLogDO> logs = taskLogMapper.selectList(new LambdaQueryWrapperX<PmsTaskLogDO>()
                 .in(PmsTaskLogDO::getTaskId, taskIds)
                 .in(PmsTaskLogDO::getOperationType, List.of("status_change", "progress_update"))
-                .between(PmsTaskLogDO::getOperationTime, lastWeekStart.atStartOfDay(), lastWeekEnd.atTime(23, 59, 59))
+                .between(PmsTaskLogDO::getOperationTime, startDate.atStartOfDay(), endDate.atTime(23, 59, 59))
                 .orderByAsc(PmsTaskLogDO::getOperationTime));
 
         List<ChangeTriple> result = new ArrayList<>();

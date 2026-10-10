@@ -2,12 +2,14 @@
   <div class="p-20px">
     <ContentWrap title="周报报表">
       <el-form :inline="true" class="mb-4">
-        <el-form-item label="基准日期" required>
+        <el-form-item label="统计时间段" required>
           <el-date-picker
-            v-model="baseDate"
-            type="date"
+            v-model="dateRange"
+            type="daterange"
             value-format="YYYY-MM-DD"
-            placeholder="默认今天"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
             :clearable="false"
           />
         </el-form-item>
@@ -136,7 +138,15 @@ const { userList, ensureLoaded: ensureUsersLoaded } = useUserNames()
 
 const loading = ref(false)
 const exporting = ref(false)
-const baseDate = ref<string>(formatDate(new Date(), 'YYYY-MM-DD'))
+
+// 默认时间段：本周一 ~ 今天
+const defaultRange = () => {
+  const today = new Date()
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7))
+  return [formatDate(monday, 'YYYY-MM-DD'), formatDate(today, 'YYYY-MM-DD')]
+}
+const dateRange = ref<[string, string]>(defaultRange())
 
 const deptList = ref<PmsDeptVO[]>([])
 const deptLoading = ref(false)
@@ -186,8 +196,8 @@ const loadDepts = async () => {
 }
 
 const onQuery = async () => {
-  if (!baseDate.value) {
-    ElMessage.warning('请选择基准日期')
+  if (!dateRange.value || !dateRange.value[0] || !dateRange.value[1]) {
+    ElMessage.warning('请选择统计时间段')
     return
   }
   loading.value = true
@@ -195,8 +205,9 @@ const onQuery = async () => {
   pageNo.value = 1
   try {
     await ensureUsersLoaded()
-    const params: { date: string; deptId?: number | string; userId?: number | string; pageNo?: number; pageSize?: number } = {
-      date: baseDate.value,
+    const params: { startDate: string; endDate: string; deptId?: number | string; userId?: number | string; pageNo?: number; pageSize?: number } = {
+      startDate: dateRange.value[0],
+      endDate: dateRange.value[1],
       pageNo: 1,
       pageSize: 500
       // 拉全量（后端上限 500）本地分页——避免「区块顺序+小分页」导致首页只见第一个分类
@@ -220,13 +231,16 @@ const onQuery = async () => {
 }
 
 const onExport = async () => {
-  if (!baseDate.value) {
-    ElMessage.warning('请选择基准日期')
+  if (!dateRange.value || !dateRange.value[0] || !dateRange.value[1]) {
+    ElMessage.warning('请选择统计时间段')
     return
   }
   exporting.value = true
   try {
-    const params: { date: string; deptId?: number | string; userId?: number | string } = { date: baseDate.value }
+    const params: { startDate: string; endDate: string; deptId?: number | string; userId?: number | string } = {
+      startDate: dateRange.value[0],
+      endDate: dateRange.value[1]
+    }
     if (selectedDept.value) {
       params.deptId = Number(selectedDept.value)
     } else if (selectedUser.value) {
@@ -235,13 +249,13 @@ const onExport = async () => {
     const res: any = await exportWeeklyReportXls(params)
     // request.download 返回 axios Response，文件本体在 res.data(Blob)——同 TaskListTab 导出写法
     const blob = res && res.data ? res.data : res
-    // 文件名与后端规则一致：周报报表_{部门名}_{基准日期}.xlsx
+    // 文件名与后端规则一致：周报报表_{部门名}_{开始日期}_{结束日期}.xlsx
     let deptLabel = '个人'
     if (selectedDept.value) {
       const d = deptList.value.find((x: any) => Number(x.id) === Number(selectedDept.value))
       if (d && d.name) deptLabel = d.name
     }
-    download.excel(blob as Blob, `周报报表_${deptLabel}_${baseDate.value}.xlsx`)
+    download.excel(blob as Blob, `周报报表_${deptLabel}_${dateRange.value[0]}_${dateRange.value[1]}.xlsx`)
     ElMessage.success('导出成功，文件已开始下载')
   } catch (e) {
     console.error('[PMS-WeeklyReport] 导出失败', e)

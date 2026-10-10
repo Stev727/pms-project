@@ -30,9 +30,10 @@ export interface WeeklyReportRowVO {
   taskId?: number
 }
 
-/** 周报报表分页入参 */
+/** 周报报表分页入参（统计时间段口径，用户主动筛选） */
 export interface WeeklyReportPageReq {
-  date?: string
+  startDate?: string
+  endDate?: string
   deptId?: number | string
   userId?: number | string
   pageNo?: number
@@ -40,16 +41,16 @@ export interface WeeklyReportPageReq {
 }
 
 /**
- * 周报报表分页查询（5 区块扁平化为单页表格）
+ * 周报报表分页查询（5 区块扁平化为单页表格，统计时间段口径）
  */
 export const getWeeklyReportPage = (params: WeeklyReportPageReq) => {
   return request.get({ url: '/pms/report/weekly/page', params })
 }
 
 /**
- * 周报报表导出（按当前筛选条件，单 Sheet 分类列）
+ * 周报报表导出（按当前筛选条件，单 Sheet 分类列，统计时间段口径）
  */
-export const exportWeeklyReportXls = (params: { date?: string; deptId?: number | string; userId?: number | string }) => {
+export const exportWeeklyReportXls = (params: { startDate?: string; endDate?: string; deptId?: number | string; userId?: number | string }) => {
   return request.download({ url: '/pms/report/weekly/export', params })
 }
 

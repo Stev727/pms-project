@@ -43,21 +43,24 @@ public class WeeklyReportController {
     }
 
     @GetMapping("/page")
-    @Operation(summary = "周报报表分页查询（5 区块扁平化，单页表格）")
-    @Parameter(name = "date", description = "基准日期 yyyy-MM-dd，默认今天")
+    @Operation(summary = "周报报表分页查询（5 区块扁平化，单页表格，统计时间段口径）")
+    @Parameter(name = "startDate", description = "时间段开始 yyyy-MM-dd，默认本周一")
+    @Parameter(name = "endDate", description = "时间段结束 yyyy-MM-dd，默认今天")
     @Parameter(name = "deptId", description = "部门ID（含下级部门所有人员）；优先级高于 userId")
     @Parameter(name = "userId", description = "目标人员ID；为空=本人；0=全部（仅管理员）")
     @Parameter(name = "pageNo", description = "页码，默认 1")
     @Parameter(name = "pageSize", description = "每页大小，默认 20")
     @PreAuthorize("@ss.hasPermission('pms:task:query')")
     public CommonResult<List<WeeklyReportRowVO>> page(
-            @RequestParam(value = "date", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+            @RequestParam(value = "startDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
+            @RequestParam(value = "endDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate,
             @RequestParam(value = "deptId", required = false) Long deptId,
             @RequestParam(value = "userId", required = false) Long userId,
             @RequestParam(value = "pageNo", required = false, defaultValue = "1") Integer pageNo,
             @RequestParam(value = "pageSize", required = false, defaultValue = "20") Integer pageSize) {
         WeeklyReportPageReqVO req = new WeeklyReportPageReqVO();
-        req.setDate(date);
+        req.setStartDate(startDate);
+        req.setEndDate(endDate);
         req.setDeptId(deptId);
         req.setUserId(userId);
         req.setPageNo(pageNo);
@@ -66,16 +69,18 @@ public class WeeklyReportController {
     }
 
     @GetMapping("/export")
-    @Operation(summary = "导出周报报表（按当前筛选条件，单 Sheet 分类列）")
-    @Parameter(name = "date", description = "基准日期 yyyy-MM-dd，默认今天")
+    @Operation(summary = "导出周报报表（按当前筛选条件，单 Sheet 分类列，统计时间段口径）")
+    @Parameter(name = "startDate", description = "时间段开始 yyyy-MM-dd，默认本周一")
+    @Parameter(name = "endDate", description = "时间段结束 yyyy-MM-dd，默认今天")
     @Parameter(name = "deptId", description = "部门ID（含下级部门所有人员），优先级高于 userId")
     @Parameter(name = "userId", description = "目标人员ID；为空=本人；0=全部（仅管理员）")
     @PreAuthorize("@ss.hasPermission('pms:task:query')")
     public void export(HttpServletResponse response,
-                       @RequestParam(value = "date", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date,
+                       @RequestParam(value = "startDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
+                       @RequestParam(value = "endDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate,
                        @RequestParam(value = "deptId", required = false) Long deptId,
                        @RequestParam(value = "userId", required = false) Long userId) throws IOException {
-        WeeklyReportExportResult pkg = weeklyReportService.exportWeeklyReport(date, deptId, userId);
+        WeeklyReportExportResult pkg = weeklyReportService.exportWeeklyReport(startDate, endDate, deptId, userId);
         ExcelUtils.write(response, pkg.getFileName(), "周报报表", WeeklyReportExportVO.class, pkg.getData());
     }
 
