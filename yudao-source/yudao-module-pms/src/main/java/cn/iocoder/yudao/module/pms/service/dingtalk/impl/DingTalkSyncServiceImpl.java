@@ -19,6 +19,11 @@ import org.springframework.stereotype.Service;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 钉钉组织架构同步服务实现
@@ -276,155 +281,173 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
 
     @Override
     public Map<String, Object> syncUsers() {
-        log.info("[DingTalkSync] 开始同步用户...");
+        log.info("[DingTalkSync] 开始同步用户(4线程并行)...");
 
-        int newCount = 0;
-        int updateCount = 0;
-        int totalUsers = 0;
-        int bindCount = 0;
-        int deptLinkedCount = 0;
+        // 并行安全：计数器改 AtomicInteger，去重集合改并发 Set
+        AtomicInteger newCount = new AtomicInteger(0);
+        AtomicInteger updateCount = new AtomicInteger(0);
+        AtomicInteger totalUsers = new AtomicInteger(0);
+        AtomicInteger bindCount = new AtomicInteger(0);
+        AtomicInteger deptLinkedCount = new AtomicInteger(0);
 
         // 获取所有已同步的部门（dept_id > 0 的才有效）
         List<PmsDingTalkDeptDO> deptMappings = dingTalkDeptMapper.selectList(null);
-        Set<String> processedDingUserIds = new HashSet<>();
+        Set<String> processedDingUserIds = ConcurrentHashMap.newKeySet();
 
-        for (PmsDingTalkDeptDO deptMapping : deptMappings) {
-            // 跳过无效的部门映射（dept_id=0 表示部门未成功创建）
-            if (deptMapping.getDeptId() == null || deptMapping.getDeptId() <= 0) {
-                continue;
-            }
-
-            Long systemDeptId = deptMapping.getDeptId();
-            List<Map<String, Object>> users = dingTalkApiService.getUserListByDept(deptMapping.getDingtalkDeptId());
-
-            for (Map<String, Object> dingUser : users) {
-                String dingUserId = (String) dingUser.get("userid");
-                if (StrUtil.isBlank(dingUserId) || processedDingUserIds.contains(dingUserId)) {
+        // 按部门并行处理（钉钉接口有流控，固定 4 线程）
+        ExecutorService pool = Executors.newFixedThreadPool(4);
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        try {
+            for (PmsDingTalkDeptDO deptMapping : deptMappings) {
+                // 跳过无效的部门映射（dept_id=0 表示部门未成功创建）
+                if (deptMapping.getDeptId() == null || deptMapping.getDeptId() <= 0) {
                     continue;
                 }
-                processedDingUserIds.add(dingUserId);
-                totalUsers++;
-
-                String name = (String) dingUser.get("name");
-                String mobile = (String) dingUser.get("mobile");
-                String email = (String) dingUser.get("email");
-                String unionId = (String) dingUser.get("unionid");
-                String avatar = (String) dingUser.get("avatar");
-                String jobNumber = (String) dingUser.get("job_number");
-                String title = (String) dingUser.get("title");
-                String workPlace = (String) dingUser.get("work_place");
-
-                // 查找现有映射
-                PmsDingTalkUserDO existing = dingTalkUserMapper.selectByDingTalkUserId(dingUserId);
-
-                if (existing != null) {
-                    // 更新映射信息
-                    existing.setName(name);
-                    existing.setAvatar(avatar);
-                    existing.setMobile(mobile);
-                    existing.setEmail(email);
-                    existing.setJobNumber(jobNumber);
-                    existing.setTitle(title);
-                    existing.setWorkPlace(workPlace);
-                    existing.setDingtalkUnionId(unionId);
-                    existing.setLastSyncTime(new Date());
-                    dingTalkUserMapper.updateById(existing);
-
-                    // 更新 system_users 基本信息 + 部门关联
-                    if (existing.getUserId() != null && existing.getUserId() > 0) {
-                        try {
-                            jdbcTemplate.update(
-                                    "UPDATE system_users SET nickname = ?, email = ?, mobile = ?, avatar = ?, dept_id = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ?",
-                                    name, email, mobile, avatar, systemDeptId, jobNumber, dingUserId, existing.getUserId());
-                            deptLinkedCount++;
-                        } catch (Exception e) {
-                            log.warn("[DingTalkSync] 更新用户信息失败: userId={}, error={}",
-                                    existing.getUserId(), e.getMessage());
-                        }
-                    }
-                    updateCount++;
-                } else {
-                    // 尝试通过手机号匹配已有用户
-                    Long systemUserId = null;
-                    if (StrUtil.isNotBlank(mobile)) {
-                        try {
-                            systemUserId = jdbcTemplate.queryForObject(
-                                    "SELECT id FROM system_users WHERE mobile = ? AND deleted = 0 LIMIT 1",
-                                    Long.class, mobile);
-                        } catch (Exception e) {
-                            // 未找到匹配用户
-                        }
-                    }
-
-                    // 如果没匹配到，创建新用户
-                    if (systemUserId == null) {
-                        String username = StrUtil.isNotBlank(mobile) ? mobile : "ding_" + dingUserId;
-                        try {
-                            KeyHolder keyHolder = new GeneratedKeyHolder();
-                            jdbcTemplate.update(connection -> {
-                                PreparedStatement ps = connection.prepareStatement(
-                                        "INSERT INTO system_users (username, nickname, email, mobile, avatar, dept_id, status, " +
-                                                "employee_no, dingtalk_user_id, creator, create_time, updater, update_time, deleted, tenant_id) " +
-                                                "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'dingtalk_sync', NOW(), 'dingtalk_sync', NOW(), 0, 1)",
-                                        Statement.RETURN_GENERATED_KEYS);
-                                ps.setString(1, username);
-                                ps.setString(2, name);
-                                ps.setString(3, email);
-                                ps.setString(4, mobile);
-                                ps.setString(5, avatar);
-                                ps.setLong(6, systemDeptId);
-                                ps.setString(7, jobNumber);
-                                ps.setString(8, dingUserId);
-                                return ps;
-                            }, keyHolder);
-
-                            Number key = keyHolder.getKey();
-                            if (key != null) {
-                                systemUserId = key.longValue();
+                Long systemDeptId = deptMapping.getDeptId();
+                Long dingDeptId = deptMapping.getDingtalkDeptId();
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        List<Map<String, Object>> users = dingTalkApiService.getUserListByDept(dingDeptId);
+                        for (Map<String, Object> dingUser : users) {
+                            String dingUserId = (String) dingUser.get("userid");
+                            if (StrUtil.isBlank(dingUserId)) {
+                                continue;
                             }
-                            bindCount++;
-                            deptLinkedCount++;
-                        } catch (Exception e) {
-                            log.error("[DingTalkSync] 创建用户失败: name={}, mobile={}, error={}",
-                                    name, mobile, e.getMessage(), e);
-                            continue;
-                        }
-                    } else {
-                        // 已有用户，更新部门关联 + 工号 + 钉钉ID
-                        try {
-                            jdbcTemplate.update(
-                                    "UPDATE system_users SET dept_id = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ?",
-                                    systemDeptId, jobNumber, dingUserId, systemUserId);
-                        } catch (Exception e) {
-                            log.warn("[DingTalkSync] 更新用户部门失败: userId={}", systemUserId);
-                        }
-                    }
+                            // add 返回 false 表示已被其他线程处理过（原子去重）
+                            if (!processedDingUserIds.add(dingUserId)) {
+                                continue;
+                            }
+                            totalUsers.incrementAndGet();
 
-                    // 创建映射记录
-                    PmsDingTalkUserDO mapping = new PmsDingTalkUserDO();
-                    mapping.setUserId(systemUserId);
-                    mapping.setDingtalkUserId(dingUserId);
-                    mapping.setDingtalkUnionId(unionId);
-                    mapping.setName(name);
-                    mapping.setAvatar(avatar);
-                    mapping.setMobile(mobile);
-                    mapping.setEmail(email);
-                    mapping.setJobNumber(jobNumber);
-                    mapping.setTitle(title);
-                    mapping.setWorkPlace(workPlace);
-                    mapping.setLastSyncTime(new Date());
-                    dingTalkUserMapper.insert(mapping);
-                    newCount++;
-                }
+                            String name = (String) dingUser.get("name");
+                            String mobile = (String) dingUser.get("mobile");
+                            String email = (String) dingUser.get("email");
+                            String unionId = (String) dingUser.get("unionid");
+                            String avatar = (String) dingUser.get("avatar");
+                            String jobNumber = (String) dingUser.get("job_number");
+                            String title = (String) dingUser.get("title");
+                            String workPlace = (String) dingUser.get("work_place");
+
+                            // 查找现有映射
+                            PmsDingTalkUserDO existing = dingTalkUserMapper.selectByDingTalkUserId(dingUserId);
+
+                            if (existing != null) {
+                                // 更新映射信息
+                                existing.setName(name);
+                                existing.setAvatar(avatar);
+                                existing.setMobile(mobile);
+                                existing.setEmail(email);
+                                existing.setJobNumber(jobNumber);
+                                existing.setTitle(title);
+                                existing.setWorkPlace(workPlace);
+                                existing.setDingtalkUnionId(unionId);
+                                existing.setLastSyncTime(new Date());
+                                dingTalkUserMapper.updateById(existing);
+
+                                // 更新 system_users 基本信息 + 部门关联
+                                if (existing.getUserId() != null && existing.getUserId() > 0) {
+                                    try {
+                                        jdbcTemplate.update(
+                                                "UPDATE system_users SET nickname = ?, email = ?, mobile = ?, avatar = ?, dept_id = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ?",
+                                                name, email, mobile, avatar, systemDeptId, jobNumber, dingUserId, existing.getUserId());
+                                        deptLinkedCount.incrementAndGet();
+                                    } catch (Exception e) {
+                                        log.warn("[DingTalkSync] 更新用户信息失败: userId={}, error={}",
+                                                existing.getUserId(), e.getMessage());
+                                    }
+                                }
+                                updateCount.incrementAndGet();
+                            } else {
+                                // 尝试通过手机号匹配已有用户
+                                Long systemUserId = null;
+                                if (StrUtil.isNotBlank(mobile)) {
+                                    try {
+                                        systemUserId = jdbcTemplate.queryForObject(
+                                                "SELECT id FROM system_users WHERE mobile = ? AND deleted = 0 LIMIT 1",
+                                                Long.class, mobile);
+                                    } catch (Exception e) {
+                                        // 未找到匹配用户
+                                    }
+                                }
+
+                                // 如果没匹配到，创建新用户
+                                if (systemUserId == null) {
+                                    String username = StrUtil.isNotBlank(mobile) ? mobile : "ding_" + dingUserId;
+                                    try {
+                                        KeyHolder keyHolder = new GeneratedKeyHolder();
+                                        jdbcTemplate.update(connection -> {
+                                            PreparedStatement ps = connection.prepareStatement(
+                                                    "INSERT INTO system_users (username, nickname, email, mobile, avatar, dept_id, status, " +
+                                                            "employee_no, dingtalk_user_id, creator, create_time, updater, update_time, deleted, tenant_id) " +
+                                                            "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'dingtalk_sync', NOW(), 'dingtalk_sync', NOW(), 0, 1)",
+                                                    Statement.RETURN_GENERATED_KEYS);
+                                            ps.setString(1, username);
+                                            ps.setString(2, name);
+                                            ps.setString(3, email);
+                                            ps.setString(4, mobile);
+                                            ps.setString(5, avatar);
+                                            ps.setLong(6, systemDeptId);
+                                            ps.setString(7, jobNumber);
+                                            ps.setString(8, dingUserId);
+                                            return ps;
+                                        }, keyHolder);
+
+                                        Number key = keyHolder.getKey();
+                                        if (key != null) {
+                                            systemUserId = key.longValue();
+                                        }
+                                        bindCount.incrementAndGet();
+                                        deptLinkedCount.incrementAndGet();
+                                    } catch (Exception e) {
+                                        log.error("[DingTalkSync] 创建用户失败: name={}, mobile={}, error={}",
+                                                name, mobile, e.getMessage(), e);
+                                        continue;
+                                    }
+                                } else {
+                                    // 已有用户，更新部门关联 + 工号 + 钉钉ID
+                                    try {
+                                        jdbcTemplate.update(
+                                                "UPDATE system_users SET dept_id = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ?",
+                                                systemDeptId, jobNumber, dingUserId, systemUserId);
+                                    } catch (Exception e) {
+                                        log.warn("[DingTalkSync] 更新用户部门失败: userId={}", systemUserId);
+                                    }
+                                }
+
+                                // 创建映射记录
+                                PmsDingTalkUserDO mapping = new PmsDingTalkUserDO();
+                                mapping.setUserId(systemUserId);
+                                mapping.setDingtalkUserId(dingUserId);
+                                mapping.setDingtalkUnionId(unionId);
+                                mapping.setName(name);
+                                mapping.setAvatar(avatar);
+                                mapping.setMobile(mobile);
+                                mapping.setEmail(email);
+                                mapping.setJobNumber(jobNumber);
+                                mapping.setTitle(title);
+                                mapping.setWorkPlace(workPlace);
+                                mapping.setLastSyncTime(new Date());
+                                dingTalkUserMapper.insert(mapping);
+                                newCount.incrementAndGet();
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("[DingTalkSync] 部门用户同步失败: dingDeptId={}, error={}", dingDeptId, e.getMessage(), e);
+                    }
+                }, pool));
             }
+            // 等待所有部门处理完成
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        } finally {
+            pool.shutdown();
         }
 
         Map<String, Object> result = new HashMap<>();
-        result.put("total", totalUsers);
-        result.put("new", newCount);
-        result.put("updated", updateCount);
-        result.put("autoBind", bindCount);
-        result.put("deptLinked", deptLinkedCount);
+        result.put("total", totalUsers.get());
+        result.put("new", newCount.get());
+        result.put("updated", updateCount.get());
+        result.put("autoBind", bindCount.get());
+        result.put("deptLinked", deptLinkedCount.get());
         result.put("mobileCount", countUsersWithMobile());
         log.info("[DingTalkSync] 用户同步完成: {}", result);
         return result;

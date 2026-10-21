@@ -86,7 +86,8 @@ public class WeeklyReportServiceImpl implements WeeklyReportService {
 
         // 内存分页（数据量较小；如有需要可改为 SQL 分页）
         int pageNo = Math.max(1, req.getPageNo() == null ? 1 : req.getPageNo());
-        int pageSize = Math.max(1, Math.min(500, req.getPageSize() == null ? 20 : req.getPageSize()));
+        // 上限放开到 5000：旧上限 500 在部门数据增长后会静默截断（P1 修复）
+        int pageSize = Math.max(1, Math.min(5000, req.getPageSize() == null ? 20 : req.getPageSize()));
         int from = Math.min((pageNo - 1) * pageSize, all.size());
         int to = Math.min(from + pageSize, all.size());
         return all.subList(from, to);

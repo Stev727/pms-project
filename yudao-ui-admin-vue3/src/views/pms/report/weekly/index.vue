@@ -204,8 +204,8 @@ const onQuery = async () => {
       startDate: dateRange.value[0],
       endDate: dateRange.value[1],
       pageNo: 1,
-      pageSize: 500
-      // 拉全量（后端上限 500）本地分页——避免「区块顺序+小分页」导致首页只见第一个分类
+      pageSize: 2000
+      // 拉全量（后端上限已放开到 5000）本地分页——避免「区块顺序+小分页」导致首页只见第一个分类
     }
     if (selectedDept.value) {
       params.deptId = Number(selectedDept.value)
@@ -214,7 +214,10 @@ const onQuery = async () => {
     }
     const data: any = await getWeeklyReportPage(params)
     allRows.value = Array.isArray(data) ? data : (data?.data || [])
-    if (allRows.value.length === 0) {
+    // 截断哨兵：返回条数达到 pageSize 上限时提示用户可能未拉全（防止静默丢数据）
+    if (allRows.value.length >= 2000) {
+      ElMessage.warning(`返回 ${allRows.value.length} 条已达单页上限，数据可能不完整，请缩小时间段或部门范围`)
+    } else if (allRows.value.length === 0) {
       ElMessage.info('当前筛选条件下无数据')
     }
   } catch (e) {

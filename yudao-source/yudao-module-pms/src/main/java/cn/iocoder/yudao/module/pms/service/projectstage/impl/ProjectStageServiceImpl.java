@@ -32,13 +32,34 @@ public class ProjectStageServiceImpl implements ProjectStageService {
     public Long createProjectStage(PmsProjectStageDO entity) {
         requireProjectManager(entity.getProjectId());
         projectStageMapper.insert(entity);
+        // 兜底：项目尚未记录当前阶段时（current_stage 为空），以新阶段为当前阶段
+        PmsProjectDO project = projectMapper.selectById(entity.getProjectId());
+        if (project != null
+                && (project.getCurrentStage() == null || project.getCurrentStage().isEmpty())) {
+            PmsProjectDO upd = new PmsProjectDO();
+            upd.setProjectId(entity.getProjectId());
+            upd.setCurrentStage(entity.getStageName());
+            projectMapper.updateById(upd);
+        }
         return entity.getStageId();
     }
 
     @Override
     public void updateProjectStage(PmsProjectStageDO entity) {
         requireProjectManager(entity.getProjectId());
+        PmsProjectStageDO old = projectStageMapper.selectById(entity.getStageId());
         projectStageMapper.updateById(entity);
+        // 阶段改名时联动更新项目 current_stage，防止列表残留旧阶段名
+        if (old != null && entity.getStageName() != null
+                && !entity.getStageName().equals(old.getStageName())) {
+            PmsProjectDO project = projectMapper.selectById(entity.getProjectId());
+            if (project != null && old.getStageName().equals(project.getCurrentStage())) {
+                PmsProjectDO upd = new PmsProjectDO();
+                upd.setProjectId(entity.getProjectId());
+                upd.setCurrentStage(entity.getStageName());
+                projectMapper.updateById(upd);
+            }
+        }
     }
 
     @Override
@@ -54,6 +75,20 @@ public class ProjectStageServiceImpl implements ProjectStageService {
             taskMapper.deleteById(task.getTaskId());
         }
         projectStageMapper.deleteById(id);
+        // 删除的是当前阶段时，重置为剩余阶段中 sort_order 最小的一个（无剩余则清空）
+        PmsProjectDO project = projectMapper.selectById(stage.getProjectId());
+        if (project != null && stage.getStageName().equals(project.getCurrentStage())) {
+            List<PmsProjectStageDO> rest = projectStageMapper.selectList(
+                Wrappers.<PmsProjectStageDO>lambdaQuery()
+                    .eq(PmsProjectStageDO::getProjectId, stage.getProjectId())
+                    .orderByAsc(PmsProjectStageDO::getSortOrder)
+                    .orderByAsc(PmsProjectStageDO::getStageId));
+            // 注意：updateById 默认不写 null，须用 lambdaUpdate 显式 set（清空场景才生效）
+            projectMapper.update(null, Wrappers.<PmsProjectDO>lambdaUpdate()
+                    .eq(PmsProjectDO::getProjectId, stage.getProjectId())
+                    .set(PmsProjectDO::getCurrentStage,
+                            rest.isEmpty() ? null : rest.get(0).getStageName()));
+        }
     }
 
     @Override
