@@ -217,6 +217,12 @@
                       >
                         <Icon icon="ep:circle-check" />分配角色
                       </el-dropdown-item>
+                      <el-dropdown-item
+                        command="handleSyncDingTalk"
+                        v-if="checkPermi(['pms:dingtalk:sync'])"
+                      >
+                        <Icon icon="ep:refresh" />同步钉钉
+                      </el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -249,7 +255,7 @@ import download from '@/utils/download'
 import { CommonStatusEnum } from '@/utils/constants'
 import { ElMessage } from 'element-plus'
 import * as UserApi from '@/api/system/user'
-import { syncAll as syncDingTalkAll } from '@/api/dingtalk'
+import { syncAll as syncDingTalkAll, syncSingleUser } from '@/api/dingtalk'
 import UserForm from './UserForm.vue'
 import UserImportForm from './UserImportForm.vue'
 import UserAssignRoleForm from './UserAssignRoleForm.vue'
@@ -386,6 +392,9 @@ const handleCommand = (command: string, row: UserApi.UserVO) => {
     case 'handleRole':
       handleRole(row)
       break
+    case 'handleSyncDingTalk':
+      handleSyncDingTalk(row)
+      break
     default:
       break
   }
@@ -442,6 +451,21 @@ const handleResetPwd = async (row: UserApi.UserVO) => {
 const assignRoleFormRef = ref()
 const handleRole = (row: UserApi.UserVO) => {
   assignRoleFormRef.value.open(row)
+}
+
+/** 单人同步钉钉资料（秒级；只更新该用户，不动部门结构） */
+const handleSyncDingTalk = async (row: UserApi.UserVO) => {
+  await message.confirm(`确认从钉钉同步「${row.nickname}」的最新资料？`)
+  const res: any = await syncSingleUser(row.id)
+  const data = res?.data || res || {}
+  if (data.status === 'success') {
+    message.success(data.message || '同步成功')
+  } else if (data.status === 'warn') {
+    message.warning(data.message || '未更新任何记录')
+  } else {
+    message.error(data.message || '同步失败')
+  }
+  getList()
 }
 
 /** 初始化 */

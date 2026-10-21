@@ -113,4 +113,9 @@ public class AdminUserDO extends TenantBaseDO {
      */
     private java.time.LocalDate entryDate;
 
+    /**
+     * 直属领导用户 ID（用户级；为空时回退部门负责人）
+     */
+    private Long leaderUserId;
+
 }

@@ -49,3 +49,8 @@ export const getSyncStatus = () => {
 export const syncEmployeeNo = () => {
   return request.post({ url: '/pms/dingtalk/sync/employee-no' })
 }
+
+// 单人同步钉钉资料（秒级；部门结构变化仍需全量同步）
+export const syncSingleUser = (userId: number) => {
+  return request.post({ url: '/pms/dingtalk/sync/user', params: { userId } })
+}

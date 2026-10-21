@@ -455,6 +455,117 @@ public class DingTalkSyncServiceImpl implements DingTalkSyncService {
         return result;
     }
 
+    @Override
+    public Map<String, Object> syncSingleUser(Long systemUserId) {
+        log.info("[DingTalkSync] 单人同步开始: systemUserId={}", systemUserId);
+        Map<String, Object> result = new HashMap<>();
+        long start = System.currentTimeMillis();
+
+        // 1. 定位该用户的钉钉 userid（优先 system_users.dingtalk_user_id，回退映射表）
+        String dingUserId = null;
+        try {
+            dingUserId = jdbcTemplate.queryForObject(
+                    "SELECT dingtalk_user_id FROM system_users WHERE id = ? AND deleted = 0",
+                    String.class, systemUserId);
+        } catch (Exception ignore) {
+        }
+        if (StrUtil.isBlank(dingUserId)) {
+            try {
+                dingUserId = jdbcTemplate.queryForObject(
+                        "SELECT dingtalk_user_id FROM pms_dingtalk_user WHERE user_id = ? AND deleted = 0 LIMIT 1",
+                        String.class, systemUserId);
+            } catch (Exception ignore) {
+            }
+        }
+        if (StrUtil.isBlank(dingUserId)) {
+            result.put("status", "error");
+            result.put("message", "该用户未绑定钉钉账号，无法单人同步；请先执行一次全量同步建立绑定");
+            return result;
+        }
+
+        // 2. 拉取钉钉用户详情
+        Map<String, Object> dingUser = dingTalkApiService.getUserDetailByUserId(dingUserId);
+        if (dingUser == null) {
+            result.put("status", "error");
+            result.put("message", "从钉钉获取用户详情失败（userid=" + dingUserId + "），请检查钉钉后台该用户是否存在");
+            return result;
+        }
+
+        String name = (String) dingUser.get("name");
+        String mobile = (String) dingUser.get("mobile");
+        String email = (String) dingUser.get("email");
+        String avatar = (String) dingUser.get("avatar");
+        String jobNumber = (String) dingUser.get("job_number");
+        String title = (String) dingUser.get("title");
+
+        // 3. 解析钉钉部门 → 系统部门（查映射表；查不到保持原部门并提示）
+        Long systemDeptId = null;
+        String deptNotice = null;
+        JSONArray deptIdList = (JSONArray) dingUser.get("dept_id_list");
+        if (deptIdList != null && !deptIdList.isEmpty()) {
+            Long dingDeptId = deptIdList.getLong(0);
+            try {
+                systemDeptId = jdbcTemplate.queryForObject(
+                        "SELECT dept_id FROM pms_dingtalk_dept WHERE dingtalk_dept_id = ? AND deleted = 0 LIMIT 1",
+                        Long.class, dingDeptId);
+            } catch (Exception ignore) {
+            }
+            if (systemDeptId == null) {
+                deptNotice = "用户在钉钉的当前部门（dingDeptId=" + dingDeptId + "）尚未同步到系统，本次保留原系统部门；如需更新请先执行全量同步";
+                log.warn("[DingTalkSync] {}", deptNotice);
+            }
+        }
+
+        // 4. 更新映射表（存在映射时）
+        PmsDingTalkUserDO existing = dingTalkUserMapper.selectByDingTalkUserId(dingUserId);
+        if (existing != null) {
+            existing.setName(name);
+            existing.setAvatar(avatar);
+            existing.setMobile(mobile);
+            existing.setEmail(email);
+            existing.setJobNumber(jobNumber);
+            existing.setTitle(title);
+            existing.setWorkPlace((String) dingUser.get("work_place"));
+            existing.setDingtalkUnionId((String) dingUser.get("unionid"));
+            existing.setLastSyncTime(new Date());
+            if (existing.getUserId() == null) {
+                existing.setUserId(systemUserId);
+            }
+            dingTalkUserMapper.updateById(existing);
+        } else {
+            log.warn("[DingTalkSync] 单人同步未找到映射记录（userid={}），跳过映射表更新", dingUserId);
+        }
+
+        // 5. 更新 system_users 基本信息（不动 leader_user_id / status / 密码等）
+        int updated;
+        if (systemDeptId != null) {
+            updated = jdbcTemplate.update(
+                    "UPDATE system_users SET nickname = ?, email = ?, mobile = ?, avatar = ?, dept_id = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ? AND deleted = 0",
+                    name, email, mobile, avatar, systemDeptId, jobNumber, dingUserId, systemUserId);
+        } else {
+            updated = jdbcTemplate.update(
+                    "UPDATE system_users SET nickname = ?, email = ?, mobile = ?, avatar = ?, employee_no = ?, dingtalk_user_id = ? WHERE id = ? AND deleted = 0",
+                    name, email, mobile, avatar, jobNumber, dingUserId, systemUserId);
+        }
+
+        long cost = System.currentTimeMillis() - start;
+        result.put("status", updated > 0 ? "success" : "warn");
+        result.put("message", updated > 0
+                ? ("同步成功：" + name + "（耗时 " + cost + "ms）")
+                : ("未更新任何记录：用户可能不存在或已被删除"));
+        result.put("dingUserId", dingUserId);
+        result.put("nickname", name);
+        result.put("title", title);
+        result.put("jobNumber", jobNumber);
+        result.put("deptUpdated", systemDeptId != null);
+        if (deptNotice != null) {
+            result.put("deptNotice", deptNotice);
+        }
+        log.info("[DingTalkSync] 单人同步完成: systemUserId={}, name={}, cost={}ms, deptUpdated={}",
+                systemUserId, name, cost, systemDeptId != null);
+        return result;
+    }
+
     private int countUsersWithMobile() {
         try {
             Integer count = jdbcTemplate.queryForObject(

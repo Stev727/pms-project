@@ -7,6 +7,7 @@ import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkApiService;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkNotifyService;
 import cn.iocoder.yudao.module.pms.service.dingtalk.DingTalkSyncService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import javax.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -117,5 +118,13 @@ public class DingTalkController {
     @PreAuthorize("@ss.hasPermission('pms:dingtalk:sync')")
     public CommonResult<Map<String, Object>> syncEmployeeNo() {
         return success(dingTalkSyncService.syncEmployeeNo());
+    }
+
+    @PostMapping("/sync/user")
+    @Operation(summary = "单人同步钉钉资料（秒级，用户量大时避免全量）")
+    @Parameter(name = "userId", description = "系统用户 ID", required = true, example = "2044")
+    @PreAuthorize("@ss.hasPermission('pms:dingtalk:sync')")
+    public CommonResult<Map<String, Object>> syncSingleUser(@RequestParam("userId") Long userId) {
+        return success(dingTalkSyncService.syncSingleUser(userId));
     }
 }

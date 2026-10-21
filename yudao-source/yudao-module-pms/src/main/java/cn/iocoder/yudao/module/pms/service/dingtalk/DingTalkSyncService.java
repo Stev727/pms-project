@@ -40,4 +40,13 @@ public interface DingTalkSyncService {
      * @return 同步结果
      */
     Map<String, Object> syncEmployeeNo();
+
+    /**
+     * 单人同步（秒级）：按系统用户 ID 拉取该用户的钉钉最新资料并更新
+     * 适用于局部资料变更；部门/人员结构变化仍需走全量同步
+     *
+     * @param systemUserId 系统用户 ID
+     * @return 同步结果（status/message/updated 等）
+     */
+    Map<String, Object> syncSingleUser(Long systemUserId);
 }

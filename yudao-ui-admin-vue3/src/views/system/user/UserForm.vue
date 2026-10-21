@@ -82,6 +82,26 @@
         </el-col>
       </el-row>
       <el-row>
+        <el-col :span="12">
+          <el-form-item label="直属领导">
+            <el-select
+              v-model="formData.leaderUserId"
+              filterable
+              clearable
+              placeholder="为空时显示部门负责人"
+            >
+              <el-option
+                v-for="item in leaderUserList"
+                :key="item.id"
+                :label="item.nickname"
+                :value="item.id!"
+                :disabled="item.id === formData.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+      <el-row>
         <el-col :span="24">
           <el-form-item label="备注">
             <el-input v-model="formData.remark" placeholder="请输入内容" type="textarea" />
@@ -125,7 +145,8 @@ const formData = ref({
   postIds: [],
   remark: '',
   status: CommonStatusEnum.ENABLE,
-  roleIds: []
+  roleIds: [],
+  leaderUserId: undefined
 })
 const formRules = reactive<FormRules>({
   username: [{ required: true, message: '用户名称不能为空', trigger: 'blur' }],
@@ -149,6 +170,7 @@ const formRules = reactive<FormRules>({
 const formRef = ref() // 表单 Ref
 const deptList = ref<Tree[]>([]) // 树形结构
 const postList = ref([] as PostApi.PostVO[]) // 岗位列表
+const leaderUserList = ref<any[]>([]) // 直属领导候选（全部启用用户，本地搜索）
 
 /** 打开弹窗 */
 const open = async (type: string, id?: number) => {
@@ -169,6 +191,12 @@ const open = async (type: string, id?: number) => {
   deptList.value = handleTree(await DeptApi.getSimpleDeptList())
   // 加载岗位列表
   postList.value = await PostApi.getSimplePostList()
+  // 加载直属领导候选（全部启用用户）
+  try {
+    leaderUserList.value = (await UserApi.getSimpleUserList()) || []
+  } catch (e) {
+    leaderUserList.value = []
+  }
 }
 defineExpose({ open }) // 提供 open 方法，用于打开弹窗
 
@@ -212,7 +240,8 @@ const resetForm = () => {
     postIds: [],
     remark: '',
     status: CommonStatusEnum.ENABLE,
-    roleIds: []
+    roleIds: [],
+    leaderUserId: undefined
   }
   formRef.value?.resetFields()
 }

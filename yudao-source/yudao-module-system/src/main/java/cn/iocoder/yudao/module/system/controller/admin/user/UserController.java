@@ -120,11 +120,13 @@ public class UserController {
     }
 
     /**
-     * 【PMS】根据用户所属部门的 leader_user_id 批量填充直属领导编号与昵称。
-     * 通过一次批量查询避免 N+1；无部门或无领导时对应字段置空。
+     * 【PMS】填充直属领导编号与昵称：用户级 leader_user_id 优先，为空回退部门负责人（dept.leader_user_id）。
+     * 通过一次批量查询避免 N+1；两者皆无时对应字段置空。
      */
     private void fillLeader(List<UserRespVO> voList, Map<Long, DeptDO> deptMap) {
+        // 用户级直属领导（convertList 已将 AdminUserDO.leaderUserId 复制到 VO）+ 部门负责人，合并查询
         Set<Long> leaderIds = convertSet(deptMap.values(), DeptDO::getLeaderUserId);
+        leaderIds.addAll(convertSet(voList, UserRespVO::getLeaderUserId));
         leaderIds.remove(null);
         if (CollUtil.isEmpty(leaderIds)) {
             return;
@@ -134,12 +136,18 @@ public class UserController {
             leaderMap.put(u.getId(), u);
         }
         for (UserRespVO vo : voList) {
-            DeptDO dept = deptMap.get(vo.getDeptId());
-            if (dept == null || dept.getLeaderUserId() == null) {
+            // 1. 用户级直属领导优先
+            Long leaderId = vo.getLeaderUserId();
+            // 2. 为空时回退部门负责人
+            if (leaderId == null) {
+                DeptDO dept = deptMap.get(vo.getDeptId());
+                leaderId = dept != null ? dept.getLeaderUserId() : null;
+            }
+            if (leaderId == null) {
                 continue;
             }
-            vo.setLeaderUserId(dept.getLeaderUserId());
-            AdminUserDO leader = leaderMap.get(dept.getLeaderUserId());
+            vo.setLeaderUserId(leaderId);
+            AdminUserDO leader = leaderMap.get(leaderId);
             vo.setLeaderNickname(leader != null ? leader.getNickname() : null);
         }
     }

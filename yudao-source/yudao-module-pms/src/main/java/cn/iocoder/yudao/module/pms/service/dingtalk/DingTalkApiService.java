@@ -101,6 +101,15 @@ public interface DingTalkApiService {
     List<Map<String, Object>> getUserListByDept(Long deptId);
 
     /**
+     * 根据钉钉 userid 获取单个用户详情（单人同步用）
+     * <p>API: /topapi/v2/user/get
+     *
+     * @param dingUserId 钉钉用户 userid
+     * @return 用户详情（name/mobile/email/avatar/job_number/title/dept_id_list 等），失败返回 null
+     */
+    Map<String, Object> getUserDetailByUserId(String dingUserId);
+
+    /**
      * 根据手机号获取钉钉用户 userid
      *
      * @param mobile 手机号

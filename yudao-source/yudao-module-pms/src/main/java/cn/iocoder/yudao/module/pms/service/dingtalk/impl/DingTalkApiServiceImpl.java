@@ -39,6 +39,7 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
     private static final String GET_DEPT_GET_URL = "/topapi/v2/department/get?access_token={}";
     private static final String GET_USER_LIST_URL = "/topapi/v2/user/list?access_token={}";
     private static final String GET_USERID_BY_MOBILE_URL = "/topapi/v2/user/getbymobile?access_token={}";
+    private static final String GET_USER_GET_URL = "/topapi/v2/user/get?access_token={}";
 
     @Resource
     private PmsDingTalkConfigMapper dingTalkConfigMapper;
@@ -487,6 +488,54 @@ public class DingTalkApiServiceImpl implements DingTalkApiService {
             }
         }
         return allUsers;
+    }
+
+    @Override
+    public Map<String, Object> getUserDetailByUserId(String dingUserId) {
+        if (StrUtil.isBlank(dingUserId)) {
+            return null;
+        }
+        String token = getAccessToken();
+        if (token == null) {
+            return null;
+        }
+        String url = properties.getBaseUrl() + StrUtil.format(GET_USER_GET_URL, token);
+        JSONObject body = new JSONObject();
+        body.set("userid", dingUserId);
+        // 显式声明需要下发的字段（默认不含 mobile/email 等敏感字段）
+        body.set("field_filter_list", JSONUtil.parseArray(
+                "[\"name\",\"mobile\",\"email\",\"avatar\",\"job_number\",\"title\",\"work_place\",\"unionid\",\"dept_id_list\",\"dept_order_list\"]"));
+        try {
+            HttpResponse response = HttpRequest.post(url)
+                    .body(body.toString())
+                    .timeout(10000)
+                    .execute();
+            JSONObject result = JSONUtil.parseObj(response.body());
+            if (result.getInt("errcode") == 0) {
+                JSONObject user = result.getJSONObject("result");
+                if (user == null) {
+                    return null;
+                }
+                Map<String, Object> map = new HashMap<>();
+                map.put("userid", dingUserId);
+                map.put("unionid", user.getStr("unionid"));
+                map.put("name", user.getStr("name"));
+                map.put("avatar", user.getStr("avatar"));
+                map.put("mobile", user.getStr("mobile"));
+                map.put("email", user.getStr("email"));
+                map.put("job_number", user.getStr("job_number"));
+                map.put("title", user.getStr("title"));
+                map.put("work_place", user.getStr("work_place"));
+                map.put("dept_id_list", user.getJSONArray("dept_id_list"));
+                return map;
+            } else {
+                log.error("[DingTalk] 获取用户详情失败: dingUserId={}, result={}", dingUserId, result);
+                return null;
+            }
+        } catch (Exception e) {
+            log.error("[DingTalk] 获取用户详情异常: dingUserId={}", dingUserId, e);
+            return null;
+        }
     }
 
     @Override
