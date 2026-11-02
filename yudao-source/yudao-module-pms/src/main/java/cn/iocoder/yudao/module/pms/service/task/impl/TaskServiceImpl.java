@@ -374,7 +374,8 @@ public class TaskServiceImpl implements TaskService {
         PmsProjectDO project727 = projectMapper.selectById(task.getProjectId());
         String projectName727 = project727 == null || project727.getProjectName() == null ? "" : project727.getProjectName();
         Long reviewerId727 = task.getReviewerId();
-        if (reviewerId727 != null) {
+        // 仅项目任务走通用审核通知；日常任务（projectId==null）由下方「您的下属」专属通知，避免双发+「项目「」」空项目名
+        if (reviewerId727 != null && task.getProjectId() != null) {
             String detailUrl727 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
             sendNotifyQuietly("【PMS】任务待您审核",
                     "项目「" + projectName727 + "」任务「" + task.getTaskName() + "」已提交完成，请及时审核。",
@@ -1031,10 +1032,25 @@ public class TaskServiceImpl implements TaskService {
 
         writeTaskLog(taskId, "submit_review", "提交审核，审核人[" + reviewerId + "]");
         logStatusChange(taskId, oldStatus, "completion_pending_review");
-        String detailUrl714 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
-        sendNotifyQuietly("【PMS】任务待您审核",
-                "项目「" + projectName + "」任务「" + task.getTaskName() + "」已提交完成，请及时审核。",
-                List.of(reviewerId), "task_review_submitted", taskId, detailUrl714);
+        // 日常任务（无项目）用「您的下属」文案，避免「项目「」」空项目名；项目任务维持通用文案
+        if (task.getProjectId() == null) {
+            String dailyOwnerName = "";
+            if (task.getMainOwnerId() != null) {
+                AdminUserDO dailyOwner = adminUserMapper.selectById(task.getMainOwnerId());
+                if (dailyOwner != null && dailyOwner.getNickname() != null) {
+                    dailyOwnerName = dailyOwner.getNickname();
+                }
+            }
+            String dailyUrl714 = frontendBaseUrl + "/pms/my-task-board?taskId=" + taskId;
+            sendNotifyQuietly("【PMS】日常任务待您审核",
+                    "您的下属「" + dailyOwnerName + "」的日常任务「" + task.getTaskName() + "」已提交完成，请审批（通过/驳回）。",
+                    List.of(reviewerId), "task_review_submitted", taskId, dailyUrl714);
+        } else {
+            String detailUrl714 = frontendBaseUrl + "/pms/project-detail/" + task.getProjectId() + "?taskId=" + taskId;
+            sendNotifyQuietly("【PMS】任务待您审核",
+                    "项目「" + projectName + "」任务「" + task.getTaskName() + "」已提交完成，请及时审核。",
+                    List.of(reviewerId), "task_review_submitted", taskId, detailUrl714);
+        }
     }
 
     @Override
