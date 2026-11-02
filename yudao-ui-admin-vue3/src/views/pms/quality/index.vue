@@ -274,16 +274,23 @@ const handleImportFile = async (event: Event) => {
   importing.value = true
   try {
     const response: any = await importQualityIssues(queryParams.projectId, file)
-    const blob = response.data as Blob
-    if ((response.headers?.['content-type'] || '').includes('application/json')) {
-      const result = JSON.parse(await blob.text())
-      if (result.code !== 0) throw new Error(result.msg || '导入失败')
-      message.success(`导入成功，共 ${result.data?.successCount || 0} 条`)
-      await fetchList()
-    } else {
-      download.excel(blob, '质量问题导入错误.xlsx')
-      message.warning('导入数据校验未通过，已下载错误明细')
+    // 拦截器对 blob 响应：JSON 回执→解析成纯对象返回；错误明细 Excel→Blob 原样返回。
+    // 兼容完整 axios 响应形态（headers 存在时取 data）
+    const payload: any = response?.headers !== undefined ? response.data : response
+    let result: any = payload
+    if (payload instanceof Blob) {
+      const text = await payload.text()
+      try {
+        result = JSON.parse(text)
+      } catch {
+        download.excel(payload, '质量问题导入错误.xlsx')
+        message.warning('导入数据校验未通过，已下载错误明细')
+        return
+      }
     }
+    if (result.code !== 0) throw new Error(result.msg || '导入失败')
+    message.success(`导入成功，共 ${result.data?.successCount || 0} 条`)
+    await fetchList()
   } catch (error: any) {
     message.error(error?.message || '导入失败')
   } finally {

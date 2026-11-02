@@ -919,7 +919,7 @@ const chooseImportFile = async () => {
   }
 }
 
-/** 处理导入文件：json 响应=成功，blob(Excel)=校验失败明细 */
+/** 处理导入文件：JSON=成功回执，非JSON Blob=校验失败错误Excel（触发下载） */
 const handleImportFile = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -928,16 +928,26 @@ const handleImportFile = async (event: Event) => {
   importing.value = true
   try {
     const response: any = await importStageTask(editForm.projectId, file)
-    const blob = response.data as Blob
-    if ((response.headers?.['content-type'] || '').includes('application/json')) {
-      const result = JSON.parse(await blob.text())
-      if (result.code !== 0) throw new Error(result.msg || '导入失败')
-      message.success(`导入成功：${result.data?.stageCount || 0} 个阶段 / ${result.data?.taskCount || 0} 个任务`)
-      await reloadEditStageTask()
-    } else {
-      download.excel(blob, '模板阶段任务导入错误.xlsx')
-      message.warning('导入数据校验未通过，已下载错误明细')
+    // axios 拦截器对 blob 响应的两种返回形态（与 MaterialTrackTab 一致）：
+    //   JSON 回执（成功/业务失败）→ 解析成纯对象返回（无 headers）
+    //   错误明细 Excel → Blob 原样返回
+    // 兼容完整 axios 响应形态（headers 存在时取 data）
+    const payload: any = response?.headers !== undefined ? response.data : response
+    let result: any = payload
+    if (payload instanceof Blob) {
+      const text = await payload.text()
+      try {
+        result = JSON.parse(text)
+      } catch {
+        // 非文本 JSON 的 Blob = 校验失败错误 Excel，下载明细
+        download.excel(payload, '模板阶段任务导入错误.xlsx')
+        message.warning('导入数据校验未通过，已下载错误明细')
+        return
+      }
     }
+    if (result.code !== 0) throw new Error(result.msg || '导入失败')
+    message.success(`导入成功：${result.data?.stageCount || 0} 个阶段 / ${result.data?.taskCount || 0} 个任务`)
+    await reloadEditStageTask()
   } catch (error: any) {
     message.error(error?.message || '导入失败')
   } finally {
