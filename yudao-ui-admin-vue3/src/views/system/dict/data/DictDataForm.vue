@@ -28,6 +28,7 @@
       </el-form-item>
       <el-form-item label="显示排序" prop="sort">
         <el-input-number v-model="formData.sort" :min="0" controls-position="right" />
+        <div v-if="formType === 'create'" class="form-tip">新增时自动接在最后，一般无需修改</div>
       </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-radio-group v-model="formData.status">
@@ -185,6 +186,21 @@ const open = async (type: string, id?: number, dictType?: string) => {
       formData.value = await DictDataApi.getDictData(id)
     } finally {
       formLoading.value = false
+    }
+  } else {
+    // 新增时：显示排序自动接在当前类型最后（同类型最大 sort + 10），无需手填
+    formData.value.sort = 10
+    if (formData.value.dictType) {
+      try {
+        const list = await DictDataApi.getDictDataByType(formData.value.dictType)
+        const maxSort = (list || []).reduce(
+          (max: number, d: any) => Math.max(max, d?.sort || 0),
+          0
+        )
+        formData.value.sort = maxSort + 10
+      } catch {
+        // 接口异常时用默认 10
+      }
     }
   }
 }
