@@ -65,8 +65,12 @@
         <el-form-item label="显示名称" required>
           <el-input v-model="form.label" placeholder="如：设计任务" />
         </el-form-item>
-        <el-form-item label="字典值" required>
-          <el-input v-model="form.value" placeholder="如：design" />
+        <el-form-item :required="!!editing" label="字典值">
+          <el-input
+            v-model="form.value"
+            :placeholder="editing ? '如：design' : '留空自动生成（名称拼音首字母）'"
+          />
+          <div v-if="!editing" class="form-tip">新增时留空即可，按显示名称自动生成（如「市场营销」→ scyx）；也可手动修改</div>
         </el-form-item>
         <el-form-item label="颜色标识">
           <el-color-picker v-model="form.color" />
@@ -87,8 +91,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { pinyin } from 'pinyin-pro'
 import {
   getDictDataByType,
   createDictData,
@@ -127,6 +132,38 @@ const form = reactive({
 })
 
 const currentGroupLabel = ref('')
+
+// ==================== 字典值自动生成 ====================
+// 由显示名称生成字典值：汉字取拼音首字母，英文/数字保留并转小写，其余字符跳过。
+// 例：「市场营销」→ scyx；「P2测试」→ p2cs
+function autoGenerateValue(label: string): string {
+  if (!label) return ''
+  const chars = Array.from(label)
+  const parts = pinyin(label, { pattern: 'first', toneType: 'none', type: 'array' })
+  let result = ''
+  chars.forEach((ch, i) => {
+    if (/[\u4e00-\u9fa5]/.test(ch)) {
+      result += (parts[i] || '').toLowerCase()
+    } else if (/[a-zA-Z0-9]/.test(ch)) {
+      result += ch.toLowerCase()
+    }
+  })
+  return result
+}
+
+// 上一次自动生成的值：用于判断用户是否手动改过（手动改过则不再联动覆盖）
+const lastAutoValue = ref('')
+watch(
+  () => form.label,
+  (label) => {
+    if (editing.value) return // 编辑模式不联动
+    const current = form.value || ''
+    if (current && current !== lastAutoValue.value) return
+    const gen = autoGenerateValue(label || '')
+    form.value = gen
+    lastAutoValue.value = gen
+  }
+)
 
 // 字典数据（真实来源：yudao 系统字典 system_dict_data，经后端 API 读写）
 const dictData = ref<Record<string, any[]>>({})
@@ -169,6 +206,7 @@ function handleAdd(key: string) {
   currentGroupLabel.value = dictGroups.find((g) => g.key === key)?.label || ''
   form.label = ''
   form.value = ''
+  lastAutoValue.value = ''
   form.color = ''
   form.sort = (getGroupItems(key).length + 1) * 10
   form.statusBool = true
@@ -189,6 +227,11 @@ function handleEdit(key: string, row: any) {
 
 async function saveItem() {
   if (!form.label) { ElMessage.warning('请输入显示名称'); return }
+  // 新增时字典值留空 → 按名称自动生成兜底；编辑时保持必填（改值有引用断链风险）
+  if (!form.value && !editing.value) {
+    form.value = autoGenerateValue(form.label)
+    lastAutoValue.value = form.value
+  }
   if (!form.value) { ElMessage.warning('请输入字典值'); return }
 
   const payload: any = {
@@ -303,4 +346,5 @@ onUnmounted(() => {
 }
 .toolbar-title { font-size: 14px; font-weight: 600; color: #1D2129; }
 .color-dot { display: inline-block; width: 16px; height: 16px; border-radius: 4px; border: 1px solid #E5E6EB; }
+.form-tip { font-size: 12px; color: var(--el-text-color-secondary); line-height: 1.4; margin-top: 2px; }
 </style>

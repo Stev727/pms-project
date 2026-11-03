@@ -89,6 +89,15 @@ public class DictDataController {
         return success(BeanUtils.toBean(pageResult, DictDataRespVO.class));
     }
 
+    @GetMapping("/type")
+    @Operation(summary = "获得指定字典类型的全部字典数据")
+    @Parameter(name = "type", description = "字典类型", required = true, example = "pms_member_role")
+    @PreAuthorize("@ss.hasPermission('system:dict:query')")
+    public CommonResult<List<DictDataRespVO>> getDictDataByType(@RequestParam("type") String type) {
+        List<DictDataDO> list = dictDataService.getDictDataListByDictType(type);
+        return success(BeanUtils.toBean(list, DictDataRespVO.class));
+    }
+
     @GetMapping(value = "/get")
     @Operation(summary = "/查询字典数据详细")
     @Parameter(name = "id", description = "编号", required = true, example = "1024")

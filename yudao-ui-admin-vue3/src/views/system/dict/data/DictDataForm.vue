@@ -18,7 +18,13 @@
         <el-input v-model="formData.label" placeholder="请输入数据标签" />
       </el-form-item>
       <el-form-item label="数据键值" prop="value">
-        <el-input v-model="formData.value" placeholder="请输入数据键值" />
+        <el-input
+          v-model="formData.value"
+          :placeholder="formType === 'create' ? '留空自动生成（标签拼音首字母）' : '请输入数据键值'"
+        />
+        <div v-if="formType === 'create'" class="form-tip">
+          新增时留空即可，将按数据标签自动生成（如「市场营销」→ scyx）；也可手动修改
+        </div>
       </el-form-item>
       <el-form-item label="显示排序" prop="sort">
         <el-input-number v-model="formData.sort" :min="0" controls-position="right" />
@@ -61,6 +67,7 @@
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import * as DictDataApi from '@/api/system/dict/dict.data'
 import { CommonStatusEnum } from '@/utils/constants'
+import { pinyin } from 'pinyin-pro'
 
 defineOptions({ name: 'SystemDictDataForm' })
 
@@ -84,10 +91,54 @@ const formData = ref<DictDataApi.DictDataVO>({
 })
 const formRules = reactive({
   label: [{ required: true, message: '数据标签不能为空', trigger: 'blur' }],
-  value: [{ required: true, message: '数据键值不能为空', trigger: 'blur' }],
+  value: [
+    {
+      // 新增时留空自动生成；编辑时保持必填（改键值有引用断链风险）
+      validator: (_rule: any, value: string, callback: any) => {
+        if (formType.value === 'update' && !value) {
+          callback(new Error('数据键值不能为空'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
   sort: [{ required: true, message: '数据顺序不能为空', trigger: 'blur' }],
   status: [{ required: true, message: '状态不能为空', trigger: 'change' }]
 })
+
+// ==================== 数据键值自动生成 ====================
+// 由数据标签生成键值：汉字取拼音首字母，英文/数字保留并转小写，其余字符跳过。
+// 例：「市场营销」→ scyx；「硬件工程师」→ yjgcs；「P2测试」→ p2cs
+function autoGenerateValue(label: string): string {
+  if (!label) return ''
+  const chars = Array.from(label)
+  const parts = pinyin(label, { pattern: 'first', toneType: 'none', type: 'array' })
+  let result = ''
+  chars.forEach((ch, i) => {
+    if (/[\u4e00-\u9fa5]/.test(ch)) {
+      result += (parts[i] || '').toLowerCase()
+    } else if (/[a-zA-Z0-9]/.test(ch)) {
+      result += ch.toLowerCase()
+    }
+  })
+  return result
+}
+
+// 上一次自动生成的值：用于判断用户是否手动改过键值（手动改过则不再联动覆盖）
+const lastAutoValue = ref('')
+watch(
+  () => formData.value.label,
+  (label) => {
+    if (formType.value !== 'create') return
+    const current = formData.value.value || ''
+    if (current && current !== lastAutoValue.value) return // 用户手动填写过，不覆盖
+    const gen = autoGenerateValue(label || '')
+    formData.value.value = gen
+    lastAutoValue.value = gen
+  }
+)
 const formRef = ref() // 表单 Ref
 
 // 数据标签回显样式
@@ -146,6 +197,15 @@ const submitForm = async () => {
   if (!formRef) return
   const valid = await formRef.value.validate()
   if (!valid) return
+  // 新增时键值留空 → 按标签自动生成兜底（watch 未触发的边缘场景）
+  if (formType.value === 'create' && !formData.value.value) {
+    formData.value.value = autoGenerateValue(formData.value.label || '')
+  }
+  // 生成后仍为空（标签无有效字符）则提示
+  if (!formData.value.value) {
+    message.error('无法自动生成数据键值，请手动填写')
+    return
+  }
   // 提交请求
   formLoading.value = true
   try {
@@ -178,6 +238,16 @@ const resetForm = () => {
     cssClass: '',
     remark: ''
   }
+  lastAutoValue.value = ''
   formRef.value?.resetFields()
 }
 </script>
+
+<style scoped>
+.form-tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+</style>
