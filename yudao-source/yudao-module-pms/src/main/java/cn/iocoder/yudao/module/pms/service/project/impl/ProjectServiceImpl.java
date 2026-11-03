@@ -22,6 +22,8 @@ import cn.iocoder.yudao.module.pms.dal.mysql.projectstage.ProjectStageMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.task.TaskMapper;
 import cn.iocoder.yudao.module.pms.dal.mysql.taskdependency.TaskDependencyMapper;
 import cn.iocoder.yudao.module.pms.service.project.ProjectService;
+import cn.iocoder.yudao.module.pms.service.projectpermission.ProjectPermissionService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class ProjectServiceImpl implements ProjectService {
 
@@ -39,6 +42,9 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private ProjectMemberMapper projectMemberMapper;
+
+    @Resource
+    private ProjectPermissionService projectPermissionService;
 
     @Resource
     private NotifyRuleMapper notifyRuleMapper;
@@ -71,6 +77,14 @@ public class ProjectServiceImpl implements ProjectService {
         // 基于模板复制阶段、任务、依赖
         if (entity.getTemplateId() != null) {
             copyTemplateTasks(entity, projectId);
+        }
+
+        // 初始化项目角色与权限矩阵（权限模板 11 标准角色 + 字典 pms_member_role 自定义角色）。
+        // 失败不阻断建项目主流程，可在「权限配置」页人工补初始化。
+        try {
+            projectPermissionService.initProjectPermission(projectId);
+        } catch (Exception e) {
+            log.warn("[createProject] 项目({})权限初始化失败（不阻断创建）：{}", projectId, e.getMessage());
         }
 
         return projectId;
