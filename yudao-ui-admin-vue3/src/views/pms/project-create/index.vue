@@ -465,6 +465,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Document, List, CircleCheckFilled, ArrowRight, ArrowLeft, Plus, Folder, Star, Check } from '@element-plus/icons-vue'
+import { useUserStore } from '@/store/modules/user'
 import { getProjectList, getProject, createProjectBundle, ProjectVO } from '@/api/pms/project'
 import { getStageList, StageVO } from '@/api/pms/stage'
 import { getTaskList, TaskVO } from '@/api/pms/task'
@@ -1222,6 +1223,17 @@ onMounted(async () => {
     }
   } catch (e) {
     console.error('加载模板统计失败', e)
+  }
+
+  // 自动带出当前用户所属部门（草稿恢复带值时不覆盖；后续选项目经理仍会按 PM 部门联动）
+  if (!projectForm.deptId) {
+    try {
+      const userStore = useUserStore()
+      const myDeptId = userStore.getUser?.deptId
+      if (myDeptId) projectForm.deptId = Number(myDeptId)
+    } catch (e) {
+      console.warn('带出默认部门失败', e)
+    }
   }
 })
 
