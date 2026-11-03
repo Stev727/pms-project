@@ -73,17 +73,7 @@
         </el-form-item>
         <el-form-item label="项目角色" required>
           <el-select filterable v-model="form.roleCode" class="w-full">
-            <el-option label="项目经理" value="pm" />
-            <el-option label="部门负责人" value="dept_head" />
-            <el-option label="主责任人" value="main_owner" />
-            <el-option label="协助人" value="helper" />
-            <el-option label="管理层" value="management" />
-            <el-option label="外部成员" value="external" />
-            <el-option label="系统管理员" value="admin" />
-            <el-option label="开发工程师" value="developer" />
-            <el-option label="硬件工程师" value="hw_engineer" />
-            <el-option label="软件工程师" value="sw_engineer" />
-            <el-option label="结构工程师" value="mechanical_engineer" />
+            <el-option v-for="opt in memberRoleOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="是否外部">
@@ -115,7 +105,7 @@ import { useCache } from '@/hooks/web/useCache'
 import { useUserStore } from '@/store/modules/user'
 import { useUserNames } from '@/hooks/pms/useUserNames'
 import { useProjectMembers } from '@/hooks/pms/useProjectMembers'
-import { getDictOptions } from '../pms-utils'
+import { getMemberRoleOptions, refreshPmsDicts } from '../pms-utils'
 
 defineOptions({ name: 'MembersTab' })
 
@@ -164,6 +154,9 @@ const form = reactive({
   status: 'active'
 })
 
+// 项目角色下拉选项：来自字典 pms_member_role（系统管理→字典管理 维护），降级为系统标准 11 角色
+const memberRoleOptions = ref(getMemberRoleOptions())
+
 // 项目角色映射（影响项目内数据权限）
 const projectRoleMap: Record<string, string> = {
   pm: '项目经理', main_owner: '主责任人',
@@ -175,10 +168,14 @@ const positionMap: Record<string, string> = {
   developer: '开发工程师', hw_engineer: '硬件工程师', sw_engineer: '软件工程师',
   mechanical_engineer: '结构工程师', project_manager: '项目经理'
 }
-// 合并映射用于展示（兼容旧数据）
-const roleLabelMap: Record<string, string> = { ...projectRoleMap, ...positionMap }
+// 合并映射用于展示：字典优先（与下拉一致），硬编码兜底（兼容字典未配置/历史数据）
+const roleLabelMap = computed<Record<string, string>>(() => {
+  const dictMap: Record<string, string> = {}
+  for (const o of memberRoleOptions.value) dictMap[o.value] = o.label
+  return { ...projectRoleMap, ...positionMap, ...dictMap }
+})
 
-function getRoleLabel(code: string): string { return roleLabelMap[code] || code || '-' }
+function getRoleLabel(code: string): string { return roleLabelMap.value[code] || code || '-' }
 function getRoleTagType(role: string): string {
   const map: Record<string, string> = { pm: 'danger', dept_head: 'warning', main_owner: 'primary', helper: 'info', management: 'success', external: 'info', admin: 'danger' }
   return map[role] || 'info'
@@ -234,7 +231,9 @@ async function handleAdd() {
   form.memberId = undefined
   form.userId = undefined
   form.userName = ''
-  form.roleCode = 'helper'
+  // 默认协助人；若字典中已删除该角色则取第一个选项
+  const codes = memberRoleOptions.value.map(o => o.value)
+  form.roleCode = codes.includes('helper') ? 'helper' : (codes[0] || 'helper')
   form.isExternal = false
   form.status = 'active'
   userSearchQuery.value = ''
@@ -335,6 +334,8 @@ async function loadMembers() {
 onMounted(() => {
   ensureUsersLoaded()
   loadMembers()
+  // 刷新字典缓存，保证字典管理新增的项目角色选项即时可见
+  refreshPmsDicts().then(() => { memberRoleOptions.value = getMemberRoleOptions() })
 })
 
 defineExpose({ refresh: loadMembers })

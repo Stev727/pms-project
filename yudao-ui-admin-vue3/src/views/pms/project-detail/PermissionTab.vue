@@ -157,26 +157,16 @@ import * as PermApi from '@/api/pms/permission'
 import * as MemberApi from '@/api/pms/member'
 import type { ProjectRoleVO, PermGroupVO } from '@/api/pms/permission'
 import { useProjectPerm } from '@/hooks/pms/useProjectPerm'
+import { getMemberRoleOptions, refreshPmsDicts } from '../pms-utils'
 
 // ==================== 标准角色选项（与成员管理 MembersTab 保持一致） ====================
 // label = 角色中文名（用于显示和 roleName），value = roleCode（用于权限匹配）
-const STANDARD_ROLE_OPTIONS: { label: string; value: string }[] = [
-  { label: '项目经理', value: 'pm' },
-  { label: '部门负责人', value: 'dept_head' },
-  { label: '主责任人', value: 'main_owner' },
-  { label: '协助人', value: 'helper' },
-  { label: '管理层', value: 'management' },
-  { label: '外部成员', value: 'external' },
-  { label: '系统管理员', value: 'admin' },
-  { label: '开发工程师', value: 'developer' },
-  { label: '硬件工程师', value: 'hw_engineer' },
-  { label: '软件工程师', value: 'sw_engineer' },
-  { label: '结构工程师', value: 'mechanical_engineer' }
-]
+// 来源：字典 pms_member_role（系统管理→字典管理 维护），降级为系统标准 11 角色
+const STANDARD_ROLE_OPTIONS = ref<{ label: string; value: string }[]>(getMemberRoleOptions())
 
 /** 根据 roleName 反查 roleCode */
 function getRoleCodeByName(name: string): string {
-  const found = STANDARD_ROLE_OPTIONS.find(o => o.label === name)
+  const found = STANDARD_ROLE_OPTIONS.value.find(o => o.label === name)
   return found?.value || ''
 }
 
@@ -201,7 +191,7 @@ const { clearPermCache } = useProjectPerm()
  */
 const availableRoleOptions = computed(() => {
   const existingCodes = new Set(roles.value.map(r => r.roleCode).filter(Boolean))
-  return STANDARD_ROLE_OPTIONS.map(opt => ({
+  return STANDARD_ROLE_OPTIONS.value.map(opt => ({
     ...opt,
     exists: existingCodes.has(opt.value)
   }))
@@ -308,7 +298,7 @@ async function handleInit() {
     const rolesToCreate: { roleName: string; roleCode: string }[] = []
     for (const code of usedRoleCodes) {
       if (existingCodes.has(code)) continue // 已存在则跳过
-      const opt = STANDARD_ROLE_OPTIONS.find(o => o.value === code)
+      const opt = STANDARD_ROLE_OPTIONS.value.find(o => o.value === code)
       if (opt) {
         rolesToCreate.push({ roleName: opt.label, roleCode: opt.value })
       }
@@ -441,6 +431,8 @@ async function handleDeleteRole(role: ProjectRoleVO) {
 
 onMounted(() => {
   loadMatrix()
+  // 刷新字典缓存，保证字典管理新增的项目角色选项即时可见
+  refreshPmsDicts().then(() => { STANDARD_ROLE_OPTIONS.value = getMemberRoleOptions() })
 })
 
 defineExpose({ loadMatrix })

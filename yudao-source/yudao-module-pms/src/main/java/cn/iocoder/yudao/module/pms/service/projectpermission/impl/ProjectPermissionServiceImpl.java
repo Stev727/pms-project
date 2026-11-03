@@ -1,5 +1,8 @@
 package cn.iocoder.yudao.module.pms.service.projectpermission.impl;
 
+import cn.iocoder.yudao.framework.common.biz.system.dict.DictDataCommonApi;
+import cn.iocoder.yudao.framework.common.biz.system.dict.dto.DictDataRespDTO;
+import cn.iocoder.yudao.framework.common.enums.CommonStatusEnum;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.framework.security.core.service.SecurityFrameworkService;
 import cn.iocoder.yudao.framework.security.core.util.SecurityFrameworkUtils;
@@ -46,6 +49,17 @@ public class ProjectPermissionServiceImpl implements ProjectPermissionService {
      */
     private static final String ROLE_PMO = "pmo";
 
+    /**
+     * 项目成员角色字典类型（系统管理→字典管理维护）。
+     * 新项目初始化时，字典中模板之外的自定义角色也会自动生成本项目角色。
+     */
+    private static final String DICT_TYPE_MEMBER_ROLE = "pms_member_role";
+
+    /**
+     * 自定义角色初始化时的默认权限基准：外部成员（最小权限集），后续可在「权限配置」页调整
+     */
+    private static final String ROLE_CODE_EXTERNAL = "external";
+
     @Resource
     private ProjectRoleMapper projectRoleMapper;
     @Resource
@@ -58,6 +72,8 @@ public class ProjectPermissionServiceImpl implements ProjectPermissionService {
     private ProjectMapper projectMapper;
     @Resource
     private SecurityFrameworkService securityFrameworkService;
+    @Resource
+    private DictDataCommonApi dictDataApi;
 
     // ==================== 权限判定 ====================
 
@@ -290,7 +306,65 @@ public class ProjectPermissionServiceImpl implements ProjectPermissionService {
             perm.setAllowed(true);
             projectPermissionMapper.insert(perm);
         }
-        log.info("[initProjectPermission] 项目({})初始化 {} 个角色", projectId, roleCodeToId.size());
+        // 3. 补充字典（pms_member_role）中维护的自定义角色：同样生成本项目角色，
+        //    权限默认与「外部成员」一致（最小权限集），后续可在「权限配置」页按需调整。
+        //    字典读取异常不影响建项目主流程。
+        int dictRolesCreated = createDictCustomRoles(projectId, templates, roleCodeToId, sort);
+        log.info("[initProjectPermission] 项目({})初始化 {} 个角色（含 {} 个字典自定义角色）",
+                projectId, roleCodeToId.size(), dictRolesCreated);
+    }
+
+    /**
+     * 按字典 pms_member_role 补建模板之外的自定义角色，权限默认与「外部成员」一致。
+     *
+     * @return 实际补建的角色数
+     */
+    private int createDictCustomRoles(Long projectId, List<PmsProjectPermissionTemplateDO> templates,
+                                      Map<String, Long> roleCodeToId, int startSort) {
+        try {
+            List<DictDataRespDTO> dictRoles =
+                    TenantUtils.executeIgnore(() -> dictDataApi.getDictDataList(DICT_TYPE_MEMBER_ROLE));
+            if (dictRoles == null || dictRoles.isEmpty()) {
+                return 0;
+            }
+            // 外部成员的模板权限集（自定义角色默认权限基准）
+            Set<String> defaultPermKeys = templates.stream()
+                    .filter(t -> ROLE_CODE_EXTERNAL.equals(t.getRoleCode()) && Boolean.TRUE.equals(t.getAllowed()))
+                    .map(PmsProjectPermissionTemplateDO::getPermKey)
+                    .collect(Collectors.toSet());
+            int sort = startSort;
+            int created = 0;
+            for (DictDataRespDTO dict : dictRoles) {
+                String code = dict.getValue();
+                // 跳过：空编码 / 模板已建 / 非启用状态的字典项
+                if (code == null || code.isEmpty() || roleCodeToId.containsKey(code)
+                        || !CommonStatusEnum.ENABLE.getStatus().equals(dict.getStatus())) {
+                    continue;
+                }
+                PmsProjectRoleDO role = new PmsProjectRoleDO();
+                role.setProjectId(projectId);
+                role.setRoleCode(code);
+                role.setRoleName(dict.getLabel() != null ? dict.getLabel() : code);
+                role.setIsSystem(false);
+                role.setSortOrder(sort++);
+                role.setRemark("由字典 pms_member_role 自动生成");
+                projectRoleMapper.insert(role);
+                for (String permKey : defaultPermKeys) {
+                    PmsProjectPermissionDO perm = new PmsProjectPermissionDO();
+                    perm.setProjectId(projectId);
+                    perm.setRoleId(role.getRoleId());
+                    perm.setPermKey(permKey);
+                    perm.setAllowed(true);
+                    projectPermissionMapper.insert(perm);
+                }
+                roleCodeToId.put(code, role.getRoleId());
+                created++;
+            }
+            return created;
+        } catch (Exception e) {
+            log.warn("[initProjectPermission] 字典自定义角色补建失败（不影响项目创建）：{}", e.getMessage());
+            return 0;
+        }
     }
 
     // ==================== 内部方法 ====================

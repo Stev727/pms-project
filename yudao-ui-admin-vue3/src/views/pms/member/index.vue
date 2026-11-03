@@ -45,7 +45,7 @@
     <el-dialog v-model="showAdd" :title="editing ? '编辑成员' : '添加成员'" width="480px">
       <el-form label-width="80px">
         <el-form-item label="成员"><el-input v-if="editing" :model-value="form.userName" disabled placeholder="-" class="w-full" /><el-select v-else v-model="form.userId" filterable placeholder="选择用户" class="w-full"><el-option v-for="u in userList" :key="u.id" :label="`${u.nickname}`" :value="u.id" /></el-select></el-form-item>
-        <el-form-item label="项目角色"><el-select filterable v-model="form.roleCode" class="w-full"><el-option label="项目经理" value="pm" /><el-option label="技术负责人" value="tech_lead" /><el-option label="硬件工程师" value="hw_engineer" /><el-option label="软件工程师" value="sw_engineer" /><el-option label="测试工程师" value="qa_engineer" /><el-option label="结构工程师" value="mech_engineer" /><el-option label="采购" value="procurement" /></el-select></el-form-item>
+        <el-form-item label="项目角色"><el-select filterable v-model="form.roleCode" class="w-full"><el-option v-for="opt in memberRoleOptions" :key="opt.value" :label="opt.label" :value="opt.value" /></el-select></el-form-item>
         <el-form-item label="是否外部"><el-switch v-model="form.isExternal" /></el-form-item>
         <el-form-item label="状态"><el-select filterable v-model="form.status" class="w-full"><el-option label="活跃" value="active" /><el-option label="停用" value="inactive" /></el-select></el-form-item>
       </el-form>
@@ -55,13 +55,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getProjectMemberList, createProjectMember, updateProjectMember, deleteProjectMember } from '@/api/pms/member'
 import { getSimpleUserList } from '@/api/system/user'
 import { checkPermi } from '@/utils/permission'
-import { formatDate } from '../pms-utils'
+import { formatDate, getMemberRoleOptions, refreshPmsDicts } from '../pms-utils'
 
 defineOptions({ name: 'PmsMember' })
 
@@ -85,18 +85,27 @@ const memberList = ref<any[]>([])
 const getUserName = (userId?: string | number) =>
   userList.value.find(u => String(u.id) === String(userId))?.nickname || '-'
 
-const roleLabelMap: Record<string, string> = {
-  pm: '项目经理',
-  tech_lead: '技术负责人',
-  hw_engineer: '硬件工程师',
-  sw_engineer: '软件工程师',
-  qa_engineer: '测试工程师',
-  mech_engineer: '结构工程师',
-  procurement: '采购'
-}
+// 项目角色下拉：字典 pms_member_role 优先，未配置时降级为系统标准 11 角色
+const memberRoleOptions = ref(getMemberRoleOptions())
+
+// 角色显示映射：字典优先，历史角色编码兜底（兼容旧数据 tech_lead 等）
+const roleLabelMap = computed<Record<string, string>>(() => {
+  const legacy: Record<string, string> = {
+    pm: '项目经理',
+    tech_lead: '技术负责人',
+    hw_engineer: '硬件工程师',
+    sw_engineer: '软件工程师',
+    qa_engineer: '测试工程师',
+    mech_engineer: '结构工程师',
+    procurement: '采购'
+  }
+  const dictMap: Record<string, string> = {}
+  for (const o of memberRoleOptions.value) dictMap[o.value] = o.label
+  return { ...legacy, ...dictMap }
+})
 
 function getRoleLabel(code: string): string {
-  return roleLabelMap[code] || code || '-'
+  return roleLabelMap.value[code] || code || '-'
 }
 
 function getRoleTag(role: string): string {
@@ -196,7 +205,11 @@ async function loadData() {
   await loadMembers()
 }
 
-onMounted(() => { loadData() })
+onMounted(() => {
+  loadData()
+  // 刷新字典缓存，保证字典管理新增的项目角色选项即时可见
+  refreshPmsDicts().then(() => { memberRoleOptions.value = getMemberRoleOptions() })
+})
 </script>
 
 <style scoped lang="scss">.pms-member { .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; } }</style>

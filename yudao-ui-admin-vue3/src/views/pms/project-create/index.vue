@@ -167,17 +167,7 @@
           <el-table-column label="项目角色" width="200">
             <template #default="{ row }">
               <el-select filterable v-model="row.roleCode" size="small" class="w-full" :disabled="row.roleCode === 'pm'">
-                <el-option label="项目经理" value="pm" />
-                <el-option label="部门负责人" value="dept_head" />
-                <el-option label="主责任人" value="main_owner" />
-                <el-option label="协助人" value="helper" />
-                <el-option label="管理层" value="management" />
-                <el-option label="外部成员" value="external" />
-                <el-option label="系统管理员" value="admin" />
-                <el-option label="开发工程师" value="developer" />
-                <el-option label="硬件工程师" value="hw_engineer" />
-                <el-option label="软件工程师" value="sw_engineer" />
-                <el-option label="结构工程师" value="mechanical_engineer" />
+                <el-option v-for="opt in memberRoleOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </template>
           </el-table-column>
@@ -200,17 +190,7 @@
             </el-form-item>
             <el-form-item label="项目角色" required>
               <el-select filterable v-model="memberForm.roleCode" class="w-full">
-                <el-option label="项目经理" value="pm" />
-                <el-option label="部门负责人" value="dept_head" />
-                <el-option label="主责任人" value="main_owner" />
-                <el-option label="协助人" value="helper" />
-                <el-option label="管理层" value="management" />
-                <el-option label="外部成员" value="external" />
-                <el-option label="系统管理员" value="admin" />
-                <el-option label="开发工程师" value="developer" />
-                <el-option label="硬件工程师" value="hw_engineer" />
-                <el-option label="软件工程师" value="sw_engineer" />
-                <el-option label="结构工程师" value="mechanical_engineer" />
+                <el-option v-for="opt in memberRoleOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
               </el-select>
             </el-form-item>
             <el-form-item label="是否外部">
@@ -493,7 +473,8 @@ import { getSimpleDeptList } from '@/api/system/dept'
 import { getNotifyModeList } from '@/api/pms/notify'
 import {
   phaseColorMap, priorityMap, calcDuration,
-  getDynamicProjectTypeOptions, getDynamicTaskTypeOptions, getDynamicPriorityOptions
+  getDynamicProjectTypeOptions, getDynamicTaskTypeOptions, getDynamicPriorityOptions,
+  getMemberRoleOptions, refreshPmsDicts
 } from '../pms-utils'
 import { buildTasksFromTemplate, buildTaskCreatePayload } from '../pms-template-utils'
 
@@ -503,6 +484,8 @@ defineOptions({ name: 'PmsProjectCreate' })
 const projectTypeOptions = getDynamicProjectTypeOptions()
 const taskTypeOptions = getDynamicTaskTypeOptions()
 const priorityOptions = getDynamicPriorityOptions()
+// 项目角色下拉：字典 pms_member_role 优先，未配置时降级为系统标准 11 角色
+const memberRoleOptions = ref(getMemberRoleOptions())
 
 const router = useRouter()
 const currentStep = ref(0)
@@ -1201,6 +1184,9 @@ onMounted(async () => {
   }
 
   startAutoSaveDraft()
+
+  // 刷新字典缓存，保证字典管理新增的项目角色选项即时可见
+  refreshPmsDicts().then(() => { memberRoleOptions.value = getMemberRoleOptions() })
 
   try {
     notifyModeList.value = ((await getNotifyModeList()) || []).filter((m: any) => m.status === "enabled")

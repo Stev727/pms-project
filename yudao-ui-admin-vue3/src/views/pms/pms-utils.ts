@@ -265,6 +265,28 @@ export function getDailyTaskTypeOptions() {
   return getDictOptions('pms_daily_task_type', dailyTaskTypeOptions)
 }
 
+// ==================== 项目成员角色（字典类型 pms_member_role） ====================
+// 「添加成员」「权限配置」「项目成员管理」的项目角色下拉统一来源：
+// 优先 yudao 系统字典（系统管理→字典管理 / PMS 字典页维护），未配置时降级为系统标准 11 角色。
+// 新项目创建时后端也会按该字典为新项目自动生成对应角色（见 initProjectPermission）。
+export const memberRoleFallbackOptions = [
+  { value: 'pm', label: '项目经理' },
+  { value: 'dept_head', label: '部门负责人' },
+  { value: 'main_owner', label: '主责任人' },
+  { value: 'helper', label: '协助人' },
+  { value: 'management', label: '管理层' },
+  { value: 'external', label: '外部成员' },
+  { value: 'admin', label: '系统管理员' },
+  { value: 'developer', label: '开发工程师' },
+  { value: 'hw_engineer', label: '硬件工程师' },
+  { value: 'sw_engineer', label: '软件工程师' },
+  { value: 'mechanical_engineer', label: '结构工程师' }
+]
+
+export function getMemberRoleOptions() {
+  return getDictOptions('pms_member_role', memberRoleFallbackOptions)
+}
+
 
 // ==================== 通知内容生成 ====================
 // 根据通知模板和任务/项目数据生成通知内容
