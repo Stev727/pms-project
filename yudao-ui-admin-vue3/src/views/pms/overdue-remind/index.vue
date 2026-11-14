@@ -20,16 +20,20 @@
         </div>
       </div>
 
-      <!-- 当前通知人 -->
+      <!-- 监控推送配置 -->
       <div class="receiver-bar">
         <span class="receiver-label">
-          <Icon icon="ep:bell" class="mr-4px" />当前通知人（监控人）：
+          <Icon icon="ep:bell" class="mr-4px" />监控推送：
         </span>
-        <template v-if="receiverNames.length">
-          <el-tag v-for="name in receiverNames" :key="name" size="small" class="mr-4px" type="warning" effect="plain">
-            {{ name }}
-          </el-tag>
-          <span class="form-tip">每日 09:00 汇总推送（钉钉 + 站内消息）</span>
+        <template v-if="monitorSummary.length">
+          <div class="receiver-lines">
+            <div v-for="(line, idx) in monitorSummary" :key="idx" class="receiver-line">
+              <el-tag size="small" type="warning" effect="dark" class="mr-4px">{{ line.notifyName }}</el-tag>
+              <span class="arrow">监控</span>
+              <el-tag v-for="o in line.ownerNames" :key="o" size="small" effect="plain" class="mr-4px">{{ o }}</el-tag>
+              <span class="form-tip">每日 09:00 推送其超期任务（钉钉+站内信）</span>
+            </div>
+          </div>
         </template>
         <template v-else>
           <span class="form-tip">未配置，暂不推送</span>
@@ -117,32 +121,42 @@
       </div>
     </ContentWrap>
 
-    <!-- 提醒设置弹窗 -->
-    <el-dialog v-model="receiverDialogVisible" title="提醒设置" width="560px">
+    <!-- 提醒设置弹窗（监控配置） -->
+    <el-dialog v-model="receiverDialogVisible" title="提醒设置（监控配置）" width="760px">
       <el-alert
-        title="任务超期后，每日 09:00 将超期清单汇总推送给以下人员（钉钉 + 站内消息）"
+        title="每日 09:00，系统按以下配置分别推送：每个通知人只会收到「其监控的责任人」的超期任务汇总（钉钉 + 站内消息）"
         type="info"
         :closable="false"
         show-icon
         class="mb-12px"
       />
-      <el-form label-width="100px">
-        <el-form-item label="监控人/通知人">
-          <el-select
-            v-model="receiverIds"
-            multiple
-            filterable
-            placeholder="选择需要接收超期提醒的人员"
-            class="w-full"
-          >
-            <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
-          </el-select>
-          <div class="form-tip">不选则不推送；接收人将收到全部超期任务的每日汇总</div>
-        </el-form-item>
-      </el-form>
+      <el-table :data="monitorConfigs" border>
+        <el-table-column label="通知人（接收推送）" width="200">
+          <template #default="{ row }">
+            <el-select v-model="row.notifyUserId" filterable placeholder="选择通知人" class="w-full">
+              <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="监控的责任人（超期了才推）">
+          <template #default="{ row }">
+            <el-select v-model="row.ownerIds" multiple filterable placeholder="选择被监控的责任人（可多选）" class="w-full">
+              <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="{ $index }">
+            <el-button link type="danger" @click="monitorConfigs.splice($index, 1)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-button class="mt-8px" @click="addMonitorRow">
+        <Icon icon="ep:plus" class="mr-4px" />添加一条监控配置
+      </el-button>
       <template #footer>
         <el-button @click="receiverDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveReceivers">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="saveMonitorConfigs">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -152,7 +166,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getOverdueTaskPage, getOverdueReceivers, updateOverdueReceivers } from '@/api/pms/overdueRemind'
+import { getOverdueTaskPage, getOverdueMonitorConfigs, updateOverdueMonitorConfigs, OverdueMonitorConfig } from '@/api/pms/overdueRemind'
 import { getProjectList, ProjectVO } from '@/api/pms/project'
 import { getSimpleDeptList } from '@/api/system/dept'
 import { getSimpleUserList } from '@/api/system/user'
@@ -176,19 +190,25 @@ const deptTree = ref<any[]>([])
 const userList = ref<any[]>([])
 const projectList = ref<ProjectVO[]>([])
 
-// 提醒设置
+// 提醒设置（监控配置：通知人 ↔ 被监控责任人）
 const receiverDialogVisible = ref(false)
-const receiverIds = ref<number[]>([])
-const currentReceivers = ref<number[]>([])
+const monitorConfigs = ref<OverdueMonitorConfig[]>([]) // 弹窗编辑副本
+const currentMonitorConfigs = ref<OverdueMonitorConfig[]>([]) // 主界面展示
 const saving = ref(false)
 const canUpdate = computed(() => checkPermi(['pms:overdue-remind:update']))
 
-// 当前通知人姓名（主界面展示）
-const receiverNames = computed(() =>
-  currentReceivers.value.map((id) => {
-    const u: any = userList.value.find((x: any) => x.id === id)
-    return u?.nickname || `用户${id}`
-  })
+// userId → 姓名
+function userName(id: number): string {
+  const u: any = userList.value.find((x: any) => x.id === id)
+  return u?.nickname || `用户${id}`
+}
+
+// 主界面监控配置摘要
+const monitorSummary = computed(() =>
+  currentMonitorConfigs.value.map((c: any) => ({
+    notifyName: c.notifyUserId ? userName(c.notifyUserId) : '-',
+    ownerNames: (c.ownerIds || []).map((id: number) => userName(id))
+  }))
 )
 
 // 收集部门及其全部子部门 id（树形联动用）
@@ -275,24 +295,41 @@ function gotoTask(row: any) {
   router.push(`/pms/project-detail/${row.projectId}?taskId=${row.taskId}`)
 }
 
-async function openReceiverDialog() {
-  try {
-    receiverIds.value = [...currentReceivers.value]
-  } catch {
-    receiverIds.value = []
-  }
+function openReceiverDialog() {
+  monitorConfigs.value = currentMonitorConfigs.value.map((c: any) => ({
+    notifyUserId: c.notifyUserId,
+    ownerIds: [...(c.ownerIds || [])]
+  }))
   receiverDialogVisible.value = true
 }
 
-async function saveReceivers() {
+function addMonitorRow() {
+  monitorConfigs.value.push({ notifyUserId: undefined, ownerIds: [] })
+}
+
+async function saveMonitorConfigs() {
+  const invalid = monitorConfigs.value.some(
+    (c: any) => !c.notifyUserId || !(c.ownerIds || []).length
+  )
+  if (invalid) {
+    ElMessage.warning('每条配置需选择通知人，且至少监控一个责任人')
+    return
+  }
   saving.value = true
   try {
-    await updateOverdueReceivers(receiverIds.value)
-    currentReceivers.value = [...receiverIds.value]
-    ElMessage.success(receiverIds.value.length ? `已保存，每日将推送至 ${receiverIds.value.length} 位接收人` : '已清空接收人，将不再推送')
+    await updateOverdueMonitorConfigs(monitorConfigs.value)
+    currentMonitorConfigs.value = monitorConfigs.value.map((c: any) => ({
+      notifyUserId: c.notifyUserId,
+      ownerIds: [...(c.ownerIds || [])]
+    }))
+    ElMessage.success(
+      monitorConfigs.value.length
+        ? `已保存 ${monitorConfigs.value.length} 条监控配置，每日 09:00 按配置定向推送`
+        : '已清空监控配置，将不再推送'
+    )
     receiverDialogVisible.value = false
   } catch (e) {
-    console.error('保存接收人失败', e)
+    console.error('保存监控配置失败', e)
     ElMessage.error('保存失败')
   } finally {
     saving.value = false
@@ -308,7 +345,7 @@ onMounted(async () => {
     userList.value = (await getSimpleUserList()) || []
   } catch (e) { console.error(e) }
   try {
-    currentReceivers.value = ((await getOverdueReceivers()) as number[]) || []
+    currentMonitorConfigs.value = ((await getOverdueMonitorConfigs()) as OverdueMonitorConfig[]) || []
   } catch (e) { console.error(e) }
   try {
     const projects = await getProjectList()
@@ -358,6 +395,25 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   margin-right: 4px;
+  white-space: nowrap;
+}
+.receiver-lines {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.receiver-line {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.receiver-line .arrow {
+  margin: 0 6px;
+  color: #b88230;
+  font-size: 12px;
+}
+.receiver-line .form-tip {
+  margin-left: 8px;
 }
 .w-full { width: 100%; }
 .w-160px { width: 160px; }

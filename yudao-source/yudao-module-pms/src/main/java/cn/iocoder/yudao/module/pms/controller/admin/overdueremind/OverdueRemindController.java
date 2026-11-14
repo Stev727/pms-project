@@ -39,18 +39,18 @@ public class OverdueRemindController {
         return success(overdueRemindService.getOverdueTaskPage(deptId, userId, projectId, pageNo, pageSize));
     }
 
-    @GetMapping("/receivers")
-    @Operation(summary = "获取超期提请的监控人/通知人列表")
+    @GetMapping("/monitor-configs")
+    @Operation(summary = "获取超期提请监控配置（通知人+被监控责任人）")
     @PreAuthorize("@ss.hasPermission('pms:overdue-remind:query')")
-    public CommonResult<List<Long>> getReceivers() {
-        return success(overdueRemindService.getReceivers());
+    public CommonResult<List<Map<String, Object>>> getMonitorConfigs() {
+        return success(overdueRemindService.getMonitorConfigs());
     }
 
-    @PutMapping("/receivers")
-    @Operation(summary = "保存超期提请的监控人/通知人列表")
+    @PutMapping("/monitor-configs")
+    @Operation(summary = "保存超期提请监控配置（全量替换，每条=通知人+被监控责任人）")
     @PreAuthorize("@ss.hasPermission('pms:overdue-remind:update')")
-    public CommonResult<Boolean> updateReceivers(@RequestBody List<Long> userIds) {
-        overdueRemindService.updateReceivers(userIds);
+    public CommonResult<Boolean> updateMonitorConfigs(@RequestBody List<Map<String, Object>> configs) {
+        overdueRemindService.updateMonitorConfigs(configs);
         return success(true);
     }
 }

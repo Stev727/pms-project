@@ -292,38 +292,21 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
 
     /**
      * 超期提请汇总推送（迭代14）：
-     * 触发事件 overdue_summary 的全局规则，notifyTarget 为监控人/通知人的 userId 逗号串。
-     * 每日一条汇总（钉钉+站内信），内容为全部超期任务清单（最多列 15 条）。
+     * 触发事件 overdue_summary 的规则，每条规则 = 一个监控配置：
+     * notifyTarget 为通知人 userId（单个），triggerCondition 为被监控责任人 userId 逗号串。
+     * 每日为每个通知人汇总「其监控的责任人」的超期任务清单（钉钉+站内信，最多列 15 条）。
      */
     private void processOverdueSummary(List<PmsNotifyRuleDO> rules, List<PmsTaskDO> tasks, LocalDate today) {
-        PmsNotifyRuleDO rule = rules.stream()
+        List<PmsNotifyRuleDO> summaryRules = rules.stream()
                 .filter(r -> "overdue_summary".equals(r.getTriggerEvent()))
-                .findFirst().orElse(null);
-        if (rule == null) {
-            return;
-        }
-        // 接收人：notifyTarget 逗号分隔的 userId
-        List<Long> receivers = new ArrayList<>();
-        String target = rule.getNotifyTarget();
-        if (StrUtil.isNotBlank(target)) {
-            for (String token : target.split(",")) {
-                String t = token.trim();
-                if (t.isEmpty()) continue;
-                try {
-                    receivers.add(Long.parseLong(t));
-                } catch (NumberFormatException ignored) {
-                }
-            }
-        }
-        receivers = receivers.stream().distinct().collect(Collectors.toList());
-        if (receivers.isEmpty()) {
-            log.info("[DingTalkNotify] 超期提请未配置接收人，跳过");
+                .collect(Collectors.toList());
+        if (summaryRules.isEmpty()) {
             return;
         }
 
-        // 超期任务：未完成 && 计划结束日期 < 今天；排除模板项目和已删除项目
+        // 全量超期任务：未完成 && 计划结束日期 < 今天；排除模板项目和已删除项目
         Map<Long, Optional<PmsProjectDO>> projectCache = new HashMap<>();
-        List<PmsTaskDO> overdue = tasks.stream()
+        List<PmsTaskDO> allOverdue = tasks.stream()
                 .filter(t -> t.getPlanEndDate() != null && t.getPlanEndDate().isBefore(today))
                 .filter(t -> {
                     if (t.getProjectId() == null) return true; // 日常任务无项目
@@ -338,14 +321,43 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
                     // 项目已删除（selectById 走逻辑删除返回 null）或模板项目 → 排除
                     return p != null && !"standard_template".equals(p.getProjectType());
                 })
-                .sorted(Comparator.comparing(PmsTaskDO::getPlanEndDate))
                 .collect(Collectors.toList());
-        if (overdue.isEmpty()) {
+        if (allOverdue.isEmpty()) {
             log.info("[DingTalkNotify] 超期提请：当前无超期任务，跳过");
             return;
         }
 
-        // 组装任务清单文本（最多 15 条，超出折叠）
+        String detailUrl = frontendBaseUrl + "/pms/overdue-remind";
+        // 每条监控配置（规则）独立推送：通知人只收到其监控责任人的超期任务
+        for (PmsNotifyRuleDO rule : summaryRules) {
+            Long notifyUserId = firstUserId(rule.getNotifyTarget());
+            Set<Long> ownerIds = parseUserIdSet(rule.getTriggerCondition());
+            if (notifyUserId == null || ownerIds.isEmpty()) {
+                log.info("[DingTalkNotify] 超期提请规则缺少通知人或监控责任人配置，跳过: ruleId={}", rule.getRuleId());
+                continue;
+            }
+            List<PmsTaskDO> overdue = allOverdue.stream()
+                    .filter(t -> t.getMainOwnerId() != null && ownerIds.contains(t.getMainOwnerId()))
+                    .sorted(Comparator.comparing(PmsTaskDO::getPlanEndDate))
+                    .collect(Collectors.toList());
+            if (overdue.isEmpty()) {
+                log.info("[DingTalkNotify] 超期提请：通知人 {} 监控的责任人当前无超期任务，跳过", notifyUserId);
+                continue;
+            }
+            Map<String, Object> vars = new HashMap<>();
+            vars.put("user_name", resolveUserName(notifyUserId));
+            vars.put("overdue_count", overdue.size());
+            vars.put("task_list", buildOverdueListText(overdue, projectCache, today));
+            sendNotifyByRule(rule.getRuleId(), vars, Collections.singletonList(notifyUserId),
+                    "overdue_summary", null, detailUrl);
+            log.info("[DingTalkNotify] 超期提请汇总已推送: 通知人={}, 监控责任人={} 个, 超期任务={} 个",
+                    notifyUserId, ownerIds.size(), overdue.size());
+        }
+    }
+
+    /** 组装超期任务清单文本（最多 15 条，超出折叠） */
+    private String buildOverdueListText(List<PmsTaskDO> overdue, Map<Long, Optional<PmsProjectDO>> projectCache,
+                                         LocalDate today) {
         int listMax = 15;
         StringBuilder sb = new StringBuilder();
         int shown = Math.min(overdue.size(), listMax);
@@ -355,8 +367,8 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
             String pname = "";
             if (t.getProjectId() != null) {
                 Optional<PmsProjectDO> cached = projectCache.get(t.getProjectId());
-                if (cached != null && cached.isPresent()) {
-                    pname = cached.get().getProjectName() != null ? cached.get().getProjectName() : "";
+                if (cached != null && cached.isPresent() && cached.get().getProjectName() != null) {
+                    pname = cached.get().getProjectName();
                 }
             }
             String pnameText = pname.isEmpty() ? "日常任务" : "项目「" + pname + "」";
@@ -370,18 +382,36 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
         if (overdue.size() > listMax) {
             sb.append("……等共 ").append(overdue.size()).append(" 个超期任务");
         }
+        return sb.toString().trim();
+    }
 
-        String detailUrl = frontendBaseUrl + "/pms/overdue-remind";
-        // 逐人发送（一个人缺钉钉映射不影响其他人）
-        for (Long uid : receivers) {
-            Map<String, Object> vars = new HashMap<>();
-            vars.put("user_name", resolveUserName(uid));
-            vars.put("overdue_count", overdue.size());
-            vars.put("task_list", sb.toString().trim());
-            sendNotifyByRule(rule.getRuleId(), vars, Collections.singletonList(uid),
-                    "overdue_summary", null, detailUrl);
+    /** 从逗号串中解析第一个 userId（通知人） */
+    private Long firstUserId(String target) {
+        if (StrUtil.isBlank(target)) {
+            return null;
         }
-        log.info("[DingTalkNotify] 超期提请汇总已推送: 超期任务={} 个, 接收人={}", overdue.size(), receivers);
+        for (String token : target.split(",")) {
+            try {
+                return Long.parseLong(token.trim());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return null;
+    }
+
+    /** 从逗号串中解析全部 userId（被监控责任人集合） */
+    private Set<Long> parseUserIdSet(String target) {
+        Set<Long> result = new HashSet<>();
+        if (StrUtil.isBlank(target)) {
+            return result;
+        }
+        for (String token : target.split(",")) {
+            try {
+                result.add(Long.parseLong(token.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return result;
     }
 
     /**

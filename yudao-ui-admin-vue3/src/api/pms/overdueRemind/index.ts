@@ -11,12 +11,18 @@ export const getOverdueTaskPage = (params: {
   return request.get({ url: '/pms/overdue-remind/page', params })
 }
 
-// 获取超期提请监控人/通知人列表
-export const getOverdueReceivers = () => {
-  return request.get({ url: '/pms/overdue-remind/receivers' })
+// 监控配置项：通知人 + 被监控责任人
+export interface OverdueMonitorConfig {
+  notifyUserId?: number
+  ownerIds?: number[]
 }
 
-// 保存超期提请监控人/通知人列表
-export const updateOverdueReceivers = (userIds: number[]) => {
-  return request.put({ url: '/pms/overdue-remind/receivers', data: userIds })
+// 获取监控配置列表（每条 = 通知人 + 其监控的责任人）
+export const getOverdueMonitorConfigs = () => {
+  return request.get({ url: '/pms/overdue-remind/monitor-configs' })
+}
+
+// 保存监控配置（全量替换）
+export const updateOverdueMonitorConfigs = (configs: OverdueMonitorConfig[]) => {
+  return request.put({ url: '/pms/overdue-remind/monitor-configs', data: configs })
 }

@@ -24,12 +24,17 @@ public interface OverdueRemindService {
     Map<String, Object> getOverdueTaskPage(Long deptId, Long userId, Long projectId, Integer pageNo, Integer pageSize);
 
     /**
-     * 获取超期提请的监控人/通知人 userId 列表（overdue_summary 全局规则的 notifyTarget）
+     * 获取超期提请监控配置列表。
+     * 每条配置 = 一个通知人 + 其监控的责任人（overdue_summary 规则：notifyTarget=通知人，triggerCondition=责任人逗号串）
+     *
+     * @return 列表项字段：notifyUserId（通知人）、ownerIds（被监控责任人 List<Long>）
      */
-    List<Long> getReceivers();
+    List<Map<String, Object>> getMonitorConfigs();
 
     /**
-     * 保存超期提请的监控人/通知人列表（写入 overdue_summary 全局规则的 notifyTarget）
+     * 保存超期提请监控配置（全量替换）。
+     * 每条配置 Map 需含：notifyUserId（通知人 userId）、ownerIds（被监控责任人 userId 列表）。
+     * 每条配置每日 09:00 独立推送：通知人只收到其监控责任人的超期任务汇总（钉钉+站内信）。
      */
-    void updateReceivers(List<Long> userIds);
+    void updateMonitorConfigs(List<Map<String, Object>> configs);
 }

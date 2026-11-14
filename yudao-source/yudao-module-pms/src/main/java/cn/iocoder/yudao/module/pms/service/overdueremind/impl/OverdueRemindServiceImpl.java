@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -104,50 +105,93 @@ public class OverdueRemindServiceImpl implements OverdueRemindService {
     }
 
     @Override
-    public List<Long> getReceivers() {
-        PmsNotifyRuleDO rule = findOrCreateSummaryRule();
-        return parseUserIds(rule.getNotifyTarget());
+    public List<Map<String, Object>> getMonitorConfigs() {
+        List<PmsNotifyRuleDO> rules = notifyRuleMapper.selectList(
+                PmsNotifyRuleDO::getTriggerEvent, TRIGGER_EVENT);
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (rules == null) {
+            return result;
+        }
+        for (PmsNotifyRuleDO rule : rules) {
+            List<Long> notifyUsers = parseUserIds(rule.getNotifyTarget());
+            List<Long> ownerIds = parseUserIds(rule.getTriggerCondition());
+            if (notifyUsers.isEmpty() || ownerIds.isEmpty()) {
+                continue; // 无效配置（含旧版全局规则）不展示
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("notifyUserId", notifyUsers.get(0));
+            item.put("ownerIds", ownerIds);
+            result.add(item);
+        }
+        return result;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateReceivers(List<Long> userIds) {
-        PmsNotifyRuleDO rule = findOrCreateSummaryRule();
-        String target = (userIds == null) ? "" : userIds.stream()
-                .distinct()
-                .map(String::valueOf)
-                .collect(Collectors.joining(","));
-        PmsNotifyRuleDO update = new PmsNotifyRuleDO();
-        update.setRuleId(rule.getRuleId());
-        update.setNotifyTarget(target);
-        notifyRuleMapper.updateById(update);
-        log.info("[OverdueRemind] 超期提请接收人已更新: ruleId={}, target={}", rule.getRuleId(), target);
+    public void updateMonitorConfigs(List<Map<String, Object>> configs) {
+        // 1. 全删旧 overdue_summary 规则（全量替换）
+        List<PmsNotifyRuleDO> oldRules = notifyRuleMapper.selectList(
+                PmsNotifyRuleDO::getTriggerEvent, TRIGGER_EVENT);
+        if (oldRules != null) {
+            for (PmsNotifyRuleDO old : oldRules) {
+                notifyRuleMapper.deleteById(old.getRuleId());
+            }
+        }
+        // 2. 插入新监控配置：每条配置一条规则（通知人单 + 责任人多）
+        if (configs == null) {
+            return;
+        }
+        for (Map<String, Object> config : configs) {
+            Long notifyUserId = toLong(config == null ? null : config.get("notifyUserId"));
+            List<Long> ownerIds = toLongList(config == null ? null : config.get("ownerIds"));
+            if (notifyUserId == null || ownerIds.isEmpty()) {
+                log.warn("[OverdueRemind] 跳过无效监控配置: notifyUserId={}, ownerIds={}", notifyUserId, ownerIds);
+                continue;
+            }
+            PmsNotifyRuleDO rule = new PmsNotifyRuleDO();
+            rule.setScopeType("global");
+            rule.setRuleName("超期监控-" + notifyUserId);
+            rule.setTriggerEvent(TRIGGER_EVENT);
+            rule.setTriggerCondition(ownerIds.stream().distinct()
+                    .map(String::valueOf).collect(Collectors.joining(",")));
+            rule.setNotifyTarget(String.valueOf(notifyUserId));
+            rule.setNotifyChannel("dingtalk,app");
+            rule.setTimeRule("daily_9");
+            rule.setTemplateTitle("【PMS】超期提醒");
+            rule.setTemplateContent("{user_name}，您好！您监控的责任人有 {overdue_count} 个任务已超期：\n{task_list}\n请督促责任人尽快完成。");
+            rule.setStatus("enabled");
+            notifyRuleMapper.insert(rule);
+        }
+        log.info("[OverdueRemind] 监控配置已更新: {} 条", configs.size());
     }
 
-    /**
-     * 查找超期提请汇总规则；不存在则创建（默认停用状态，配置接收人后由用户启用或保持 enabled）
-     */
-    private PmsNotifyRuleDO findOrCreateSummaryRule() {
-        List<PmsNotifyRuleDO> rules = notifyRuleMapper.selectList(
-                PmsNotifyRuleDO::getTriggerEvent, TRIGGER_EVENT);
-        if (rules != null && !rules.isEmpty()) {
-            return rules.get(0);
+    /** Object 安全转 Long（JSON 数字可能是 Integer/Long/Double） */
+    private Long toLong(Object value) {
+        if (value == null) {
+            return null;
         }
-        // 预置创建（enabled：每日 09:00 job 直接消费）
-        PmsNotifyRuleDO rule = new PmsNotifyRuleDO();
-        rule.setScopeType("global");
-        rule.setRuleName("超期提请");
-        rule.setTriggerEvent(TRIGGER_EVENT);
-        rule.setTriggerCondition("");
-        rule.setNotifyTarget("");
-        rule.setNotifyChannel("dingtalk,app");
-        rule.setTimeRule("daily_9");
-        rule.setTemplateTitle("【PMS】超期提醒");
-        rule.setTemplateContent("{user_name}，您好！您监控的任务有 {overdue_count} 个已超期：\n{task_list}\n请督促责任人尽快完成。");
-        rule.setStatus("enabled");
-        notifyRuleMapper.insert(rule);
-        log.info("[OverdueRemind] 已创建超期提请汇总规则: ruleId={}", rule.getRuleId());
-        return rule;
+        try {
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
+            }
+            return Long.parseLong(String.valueOf(value).trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** Object 安全转 List<Long>（ownerIds 数组） */
+    private List<Long> toLongList(Object value) {
+        List<Long> result = new ArrayList<>();
+        if (value instanceof Collection) {
+            for (Object item : (Collection<?>) value) {
+                Long id = toLong(item);
+                if (id != null) {
+                    result.add(id);
+                }
+            }
+        }
+        return result;
     }
 
     private List<Long> parseUserIds(String target) {
