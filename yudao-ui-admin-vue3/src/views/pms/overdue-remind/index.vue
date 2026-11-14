@@ -20,6 +20,22 @@
         </div>
       </div>
 
+      <!-- 当前通知人 -->
+      <div class="receiver-bar">
+        <span class="receiver-label">
+          <Icon icon="ep:bell" class="mr-4px" />当前通知人（监控人）：
+        </span>
+        <template v-if="receiverNames.length">
+          <el-tag v-for="name in receiverNames" :key="name" size="small" class="mr-4px" type="warning" effect="plain">
+            {{ name }}
+          </el-tag>
+          <span class="form-tip">每日 09:00 汇总推送（钉钉 + 站内消息）</span>
+        </template>
+        <template v-else>
+          <span class="form-tip">未配置，暂不推送</span>
+        </template>
+      </div>
+
       <!-- 筛选区 -->
       <el-form :inline="true" class="mt-8px">
         <el-form-item label="责任人部门">
@@ -36,7 +52,7 @@
         </el-form-item>
         <el-form-item label="责任人">
           <el-select v-model="queryUserId" filterable clearable placeholder="全部人员" class="w-160px">
-            <el-option v-for="u in userList" :key="u.id" :label="u.nickname" :value="u.id" />
+            <el-option v-for="u in filteredUserList" :key="u.id" :label="u.nickname" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="项目">
@@ -133,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getOverdueTaskPage, getOverdueReceivers, updateOverdueReceivers } from '@/api/pms/overdueRemind'
@@ -155,7 +171,7 @@ const stats = reactive({ total: 0, ownerCount: 0, projectCount: 0 })
 // 筛选
 const queryDeptId = ref<number | undefined>(undefined)
 const queryUserId = ref<number | undefined>(undefined)
-const queryProjectId = ref<number | undefined>(undefined)
+const queryProjectId = ref<string | undefined>(undefined)
 const deptTree = ref<any[]>([])
 const userList = ref<any[]>([])
 const projectList = ref<ProjectVO[]>([])
@@ -163,8 +179,50 @@ const projectList = ref<ProjectVO[]>([])
 // 提醒设置
 const receiverDialogVisible = ref(false)
 const receiverIds = ref<number[]>([])
+const currentReceivers = ref<number[]>([])
 const saving = ref(false)
 const canUpdate = computed(() => checkPermi(['pms:overdue-remind:update']))
+
+// 当前通知人姓名（主界面展示）
+const receiverNames = computed(() =>
+  currentReceivers.value.map((id) => {
+    const u: any = userList.value.find((x: any) => x.id === id)
+    return u?.nickname || `用户${id}`
+  })
+)
+
+// 收集部门及其全部子部门 id（树形联动用）
+function collectDeptIds(rootId: number, nodes: any[] = deptTree.value): Set<number> {
+  const result = new Set<number>()
+  const walk = (node: any) => {
+    result.add(node.id)
+    ;(node.children || []).forEach(walk)
+  }
+  const find = (list: any[]): boolean =>
+    list.some((n) => {
+      if (n.id === rootId) {
+        walk(n)
+        return true
+      }
+      return n.children?.length ? find(n.children) : false
+    })
+  find(nodes)
+  return result
+}
+
+// 责任人下拉：选了部门后只显示该部门（含子部门）人员
+const filteredUserList = computed(() => {
+  if (!queryDeptId.value) return userList.value
+  const deptIds = collectDeptIds(queryDeptId.value)
+  return userList.value.filter((u: any) => deptIds.has(u.deptId))
+})
+
+// 切换部门时，清掉不在该部门范围内的责任人选择
+watch(queryDeptId, () => {
+  if (queryUserId.value && !filteredUserList.value.some((u: any) => u.id === queryUserId.value)) {
+    queryUserId.value = undefined
+  }
+})
 
 function statusText(status: string): string {
   const map: Record<string, string> = {
@@ -219,7 +277,7 @@ function gotoTask(row: any) {
 
 async function openReceiverDialog() {
   try {
-    receiverIds.value = ((await getOverdueReceivers()) as number[]) || []
+    receiverIds.value = [...currentReceivers.value]
   } catch {
     receiverIds.value = []
   }
@@ -230,6 +288,7 @@ async function saveReceivers() {
   saving.value = true
   try {
     await updateOverdueReceivers(receiverIds.value)
+    currentReceivers.value = [...receiverIds.value]
     ElMessage.success(receiverIds.value.length ? `已保存，每日将推送至 ${receiverIds.value.length} 位接收人` : '已清空接收人，将不再推送')
     receiverDialogVisible.value = false
   } catch (e) {
@@ -247,6 +306,9 @@ onMounted(async () => {
   } catch (e) { console.error(e) }
   try {
     userList.value = (await getSimpleUserList()) || []
+  } catch (e) { console.error(e) }
+  try {
+    currentReceivers.value = ((await getOverdueReceivers()) as number[]) || []
   } catch (e) { console.error(e) }
   try {
     const projects = await getProjectList()
@@ -279,6 +341,24 @@ onMounted(async () => {
 .mt-12px { margin-top: 12px; }
 .ml-4px { margin-left: 4px; }
 .mb-12px { margin-bottom: 12px; }
+.receiver-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.receiver-label {
+  color: #b88230;
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
 .w-full { width: 100%; }
 .w-160px { width: 160px; }
 .w-180px { width: 180px; }
