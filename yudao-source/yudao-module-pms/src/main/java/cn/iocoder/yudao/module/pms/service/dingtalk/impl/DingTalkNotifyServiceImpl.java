@@ -668,7 +668,7 @@ public class DingTalkNotifyServiceImpl implements DingTalkNotifyService {
     private List<PmsTaskDO> getActiveTasks() {
         try {
             return jdbcTemplate.query(
-                    "SELECT * FROM pms_task WHERE deleted = 0 AND complete_status NOT IN ('done', 'cancelled', 'closed')",
+                    "SELECT * FROM pms_task WHERE deleted = 0 AND complete_status NOT IN ('done', 'cancelled', 'closed', 'completed', 'completion_pending_review')",
                     new BeanPropertyRowMapper<>(PmsTaskDO.class));
         } catch (Exception e) {
             log.error("[DingTalkNotify] 获取活跃任务失败", e);

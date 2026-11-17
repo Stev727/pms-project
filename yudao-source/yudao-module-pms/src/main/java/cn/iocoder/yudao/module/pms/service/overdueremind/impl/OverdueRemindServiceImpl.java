@@ -43,7 +43,8 @@ public class OverdueRemindServiceImpl implements OverdueRemindService {
 
         StringBuilder where = new StringBuilder(
                 " WHERE t.deleted = 0" +
-                " AND t.complete_status NOT IN ('done', 'cancelled', 'closed')" +
+                // 未完成：排除已完成/完成待审核（completed/completion_pending_review）；done/cancelled/closed 兜底
+                " AND t.complete_status NOT IN ('done', 'cancelled', 'closed', 'completed', 'completion_pending_review')" +
                 " AND t.plan_end_date IS NOT NULL" +
                 " AND t.plan_end_date < CURDATE()" +
                 // 项目行不存在（日常任务）保留；项目已软删或模板项目排除

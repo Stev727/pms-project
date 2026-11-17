@@ -94,7 +94,9 @@
         <el-table-column prop="deptName" label="责任部门" width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.deptName || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="planEndDate" label="计划结束日期" width="120" align="center" />
+        <el-table-column prop="planEndDate" label="计划结束日期" width="120" align="center">
+          <template #default="{ row }">{{ fmtDate(row.planEndDate) }}</template>
+        </el-table-column>
         <el-table-column label="已超期" width="90" align="center">
           <template #default="{ row }">
             <el-tag type="danger" effect="dark">{{ row.overdueDays }} 天</el-tag>
@@ -247,10 +249,27 @@ watch(queryDeptId, () => {
 function statusText(status: string): string {
   const map: Record<string, string> = {
     not_started: '未开始',
+    pending_accept: '待验收',
     in_progress: '进行中',
-    under_review: '审核中'
+    delayed: '已延期',
+    paused: '已暂停',
+    rejected: '已驳回',
+    under_review: '审核中',
+    completion_pending_review: '完成待审核',
+    completed: '已完成'
   }
   return map[status] || status || '-'
+}
+
+// 毫秒时间戳 → YYYY-MM-DD
+function fmtDate(ts: any): string {
+  if (!ts) return '-'
+  const d = new Date(Number(ts))
+  if (isNaN(d.getTime())) return String(ts)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 async function loadData() {
